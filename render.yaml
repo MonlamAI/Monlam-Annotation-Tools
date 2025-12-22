@@ -43,10 +43,11 @@ services:
   # ===========================================
   - type: pserv
     name: doccano-rabbitmq
-    env: docker
+    runtime: image
+    image:
+      url: docker.io/library/rabbitmq:3-alpine
     plan: starter
     region: singapore
-    dockerImage: rabbitmq:3-alpine
     envVars:
       - key: RABBITMQ_URL
         value: "amqp://guest:guest@doccano-rabbitmq:5672"
