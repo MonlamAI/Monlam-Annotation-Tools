@@ -20,6 +20,10 @@ COPY branding/i18n/bo /doccano/frontend/i18n/bo
 COPY branding/i18n/index.js /doccano/frontend/i18n/index.js
 COPY branding/static/logo.png /doccano/frontend/assets/icon.png
 COPY branding/static/favicon.png /doccano/backend/staticfiles/favicon.png
+COPY branding/static/favicon.png /doccano/backend/staticfiles/favicon.ico
+COPY branding/static/favicon.png /doccano/backend/client/dist/static/favicon.png
+COPY branding/static/favicon.png /doccano/backend/client/dist/static/favicon.ico
+COPY branding/static/favicon.png /doccano/backend/client/dist/favicon.ico
 COPY branding/fonts /doccano/backend/staticfiles/fonts
 COPY branding/static/logo.png /doccano/backend/staticfiles/_nuxt/img/icon.c360b38.png
 COPY branding/static/logo.png /doccano/backend/staticfiles/_nuxt/img/6737785.30d4036.png
