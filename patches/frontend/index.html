@@ -42,16 +42,72 @@
       .v-application .v-card,
       .v-application .v-list-item,
       .v-application .v-chip,
+      .v-application .v-menu__content,
+      .v-application .v-select__selection,
+      .v-application .v-text-field,
       .v-application input,
       .v-application textarea,
+      .v-application label,
+      .v-application span,
+      .v-application p,
+      .v-application h1, .v-application h2, .v-application h3,
+      .v-application h4, .v-application h5, .v-application h6,
       .v-application [class*="display-"],
       .v-application [class*="headline"],
       .v-application [class*="title"],
       .v-application [class*="subtitle"],
       .v-application [class*="body-"],
       .v-application [class*="caption"],
-      .v-application [class*="overline"] { 
+      .v-application [class*="overline"],
+      .v-toolbar__title,
+      .v-list-item__title,
+      .v-list-item__subtitle,
+      .v-tab,
+      .v-data-table { 
         font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; 
+      }
+      
+      /* Fix Tibetan vowel marks (ི ུ) being cut off - need extra line-height */
+      html body,
+      .v-application,
+      .v-application *,
+      .v-btn,
+      .v-list-item,
+      .v-menu__content,
+      .v-select__selection,
+      .v-toolbar__title,
+      .v-tab,
+      label,
+      span {
+        line-height: 1.8 !important;
+      }
+      
+      /* Extra padding for menu items and buttons */
+      .v-btn {
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+        min-height: 40px !important;
+      }
+      .v-list-item {
+        min-height: 48px !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+      }
+      .v-tab {
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+      }
+      .v-chip {
+        height: auto !important;
+        min-height: 32px !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+      }
+      .v-text-field input,
+      .v-text-field textarea {
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        line-height: 1.8 !important;
       }
     </style>
   </head>
