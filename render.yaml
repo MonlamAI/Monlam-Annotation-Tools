@@ -48,10 +48,15 @@ services:
 
 # ===========================================
 # PostgreSQL Database
+# Flexible plans: basic-256mb, basic-512mb, basic-1gb, basic-2gb, basic-4gb
+# Pro plans: pro-4gb, pro-8gb, pro-16gb, etc.
+# Storage: billed separately at $0.30/GB/month
 # ===========================================
 databases:
   - name: doccano-db
-    plan: free
+    plan: basic-1gb
     region: singapore
     databaseName: doccano
     user: doccano
+    postgresMajorVersion: "16"
+    diskSizeGB: 10
