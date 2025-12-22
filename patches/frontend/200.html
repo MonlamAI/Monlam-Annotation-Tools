@@ -180,18 +180,9 @@
         'doccano': 'Monlam Tools',
         'Doccano': 'Monlam Tools',
         
-        // Copyright - all variations
-        '© 2024': '© 2026 Monlam AI',
-        '© 2025': '© 2026 Monlam AI',
-        '2024 doccano': '2026 Monlam AI',
-        '2025 doccano': '2026 Monlam AI',
-        'Copyright 2024': '© 2026 Monlam AI',
-        'Copyright 2025': '© 2026 Monlam AI',
-        '© 2025 Monlam Tools': '© 2026 Monlam AI',
-        '© 2024 Monlam Tools': '© 2026 Monlam AI',
-        '2025 Monlam Tools': '2026 Monlam AI',
-        '2024 Monlam Tools': '2026 Monlam AI',
-        'Monlam Tools': 'Monlam AI'
+        // Copyright - fix year to 2026
+        '© 2025 Monlam Tools': '© 2026 Monlam Tools',
+      
       };
       
       document.addEventListener('DOMContentLoaded', function() {
@@ -305,19 +296,38 @@
         styleReviewButtons();
         
         // ========================================
-        // Font helper - Roboto deleted from build, so MonlamTBslim is used
-        // Just ensure line-height is set for Tibetan vowels
+        // FORCE MonlamTBslim font - override Vuetify's runtime Roboto injection
         // ========================================
-        function ensureTibetanStyling() {
-          // Ensure line-height for Tibetan text (vowel marks ི ུ)
-          document.querySelectorAll('h1, h2, h3, h4, h5, h6, .display-1, .headline, .title, .v-btn, .v-list-item, .v-toolbar__title').forEach(function(el) {
+        const MONLAM_FONT = "'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+        
+        function forceMonlamFont() {
+          // Override on html and body elements
+          document.documentElement.style.setProperty('font-family', MONLAM_FONT, 'important');
+          document.body.style.setProperty('font-family', MONLAM_FONT, 'important');
+          
+          // Override on v-application (Vuetify root)
+          document.querySelectorAll('.v-application').forEach(function(el) {
+            el.style.setProperty('font-family', MONLAM_FONT, 'important');
+          });
+          
+          // Override all elements that Vuetify typically styles
+          document.querySelectorAll('h1, h2, h3, h4, h5, h6, .display-1, .display-2, .headline, .title, .subtitle-1, .subtitle-2, .body-1, .body-2, .v-btn, .v-card, .v-list-item, .v-toolbar__title, .v-tab, span, p, div, label, input, textarea').forEach(function(el) {
+            el.style.setProperty('font-family', MONLAM_FONT, 'important');
             el.style.setProperty('line-height', '1.8', 'important');
           });
         }
         
-        // Run periodically to catch dynamic content
-        ensureTibetanStyling();
-        setInterval(ensureTibetanStyling, 1000);
+        // Run immediately and frequently to override Vuetify
+        forceMonlamFont();
+        setInterval(forceMonlamFont, 500);
+        
+        // Also run after page fully loads
+        window.addEventListener('load', function() {
+          forceMonlamFont();
+          setTimeout(forceMonlamFont, 100);
+          setTimeout(forceMonlamFont, 500);
+          setTimeout(forceMonlamFont, 1000);
+        });
       });
     </script>
   <script src="/static/_nuxt/08fba5f.js"></script><script src="/static/_nuxt/132fcbd.js"></script><script src="/static/_nuxt/50aa8ea.js"></script><script src="/static/_nuxt/bd0aa1f.js"></script></body>
