@@ -1,0 +1,2 @@
+{"filename": "https://example.com/audio1.wav", "text": "Sample transcript text", "label": "Sample transcript text", "meta": {"duration": 5.0}}
+{"filename": "https://example.com/audio2.wav", "text": "Another sample text", "label": "Another sample text", "meta": {"duration": 3.5}}

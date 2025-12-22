@@ -1,0 +1,17 @@
+export default {
+  members: 'ཚོགས་མི།',
+  role: 'ལས་འགན།',
+  updateRole: 'ལས་འགན་གསར་བཅོས།',
+  addMember: 'ཚོགས་མི་སྣོན་པ།',
+  userSearchAPIs: 'སྤྱོད་མཁན་བཙལ་ཞིབ།',
+  userSearchPrompt: 'བཙལ་ཞིབ་བྱེད་པར་ཡིག་འབྲི།',
+  removeMember: 'ཚོགས་མི་བསུབ་པ།',
+  removePrompt: 'ཚོགས་མི་འདི་དག་བསུབ་རྒྱུ་ཡིན་པ་གཏན་འཁེལ་ལམ།',
+  roles: {
+    projectAdmin: 'ལས་གཞི་དོ་དམ་པ།',
+    annotator: 'མཆན་འགོད་པ།',
+    annotationApprover: 'མཆན་འགོད་ཞིབ་བཤེར་བ།',
+    undefined: 'ལས་འགན་གཏན་འཁེལ་མེད།'
+  }
+}
+

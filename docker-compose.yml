@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: doccano-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-doccano}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-doccano}
+      POSTGRES_DB: ${POSTGRES_DB:-doccano}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-doccano}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: doccano-rabbitmq
+    restart: unless-stopped
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  doccano:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: monlam-doccano:latest
+    container_name: doccano
+    restart: unless-stopped
+    ports:
+      - "${DOCCANO_PORT:-8000}:8000"
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password}
+      DATABASE_URL: postgres://${POSTGRES_USER:-doccano}:${POSTGRES_PASSWORD:-doccano}@postgres:5432/${POSTGRES_DB:-doccano}?sslmode=disable
+      CELERY_BROKER_URL: amqp://rabbitmq
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-False}
+      DEBUG: "False"
+    volumes:
+      - doccano_data:/data
+      # Mount frontend patches for live updates (optional, remove for production)
+      # - ./patches/frontend/index.html:/doccano/backend/client/dist/index.html:ro
+      # - ./patches/frontend/200.html:/doccano/backend/client/dist/200.html:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  doccano_data:
+
