@@ -51,7 +51,7 @@ services:
 # ===========================================
 databases:
   - name: doccano-db
-    plan: starter
+    plan: basic
     region: singapore
     databaseName: doccano
     user: doccano
