@@ -69,6 +69,13 @@ COPY patches/frontend/index.html /doccano/backend/client/dist/index.html
 COPY patches/frontend/200.html /doccano/backend/client/dist/200.html
 
 # ============================================
+# DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
+# ============================================
+RUN rm -rf /doccano/backend/staticfiles/_nuxt/fonts/Roboto* && \
+    rm -rf /doccano/backend/client/dist/_nuxt/fonts/Roboto* && \
+    rm -rf /doccano/backend/client/dist/static/_nuxt/fonts/Roboto* || true
+
+# ============================================
 # SET OWNERSHIP
 # ============================================
 RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \

@@ -8,6 +8,7 @@
         --monlam-gold: #B8963E;
         --monlam-gold-dark: #9A7B32;
         --monlam-navy: #1a1a2e;
+        --monlam-font: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       .navbar.is-primary { background-color: var(--monlam-navy) !important; }
       .button.is-primary { background-color: var(--monlam-gold) !important; border-color: var(--monlam-gold) !important; }
@@ -20,97 +21,46 @@
       .pagination-link.is-current { background-color: var(--monlam-gold) !important; border-color: var(--monlam-gold) !important; }
       /* Hide GitHub button and link */
       a[href*="github.com"], a[href*="GITHUB"], button[class*="github"], .github-button { display: none !important; }
-      /* Tibetan font support - MonlamTBslim (hosted) */
+      
+      /* ========================================
+         MonlamTBslim FONT - Roboto deleted from build
+         ======================================== */
+      
+      /* Primary MonlamTBslim font-face */
       @font-face {
         font-family: 'MonlamTBslim';
         src: local('MonlamTBslim'),
              url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
              url('/static/fonts/MonlamTBslim.woff') format('woff'),
              url('/static/fonts/MonlamTBslim.ttf') format('truetype');
-        font-weight: normal;
+        font-weight: 100 900;
         font-style: normal;
         font-display: swap;
       }
-      /* Force MonlamTBslim font everywhere - maximum specificity */
-      html body.v-application,
-      html body.v-application *,
-      html body .v-application,
-      html body .v-application *,
-      .v-application.v-application,
-      .v-application.v-application *,
-      .v-application.theme--light,
-      .v-application.theme--light *,
-      .v-application.theme--dark,
-      .v-application.theme--dark *,
-      .v-application .display-1,
-      .v-application .display-2,
-      .v-application .display-3,
-      .v-application .display-4,
-      .v-application .headline,
-      .v-application .title,
-      .v-application .subtitle-1,
-      .v-application .subtitle-2,
-      .v-application .body-1,
-      .v-application .body-2,
-      .v-application .caption,
-      .v-application .overline,
-      .v-application h1,
-      .v-application h2,
-      .v-application h3,
-      .v-application h4,
-      .v-application h5,
-      .v-application h6,
-      .v-application h1.display-1,
-      .v-application h1.display-2,
-      .v-application h1.headline,
-      .v-application .v-btn,
-      .v-application .v-card,
-      .v-application .v-list-item,
-      .v-application .v-chip,
-      .v-application .v-menu__content,
-      .v-application .v-select__selection,
-      .v-application .v-text-field,
-      .v-application input,
-      .v-application textarea,
-      .v-application label,
-      .v-application span,
-      .v-application p,
-      .v-application div,
-      .v-toolbar__title,
-      .v-list-item__title,
-      .v-list-item__subtitle,
-      .v-tab,
-      .v-data-table,
-      .v-data-table * { 
-        font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; 
+      
+      /* Roboto fallback - when Roboto is requested, use MonlamTBslim */
+      @font-face {
+        font-family: 'Roboto';
+        src: local('MonlamTBslim'),
+             url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
+             url('/static/fonts/MonlamTBslim.woff') format('woff'),
+             url('/static/fonts/MonlamTBslim.ttf') format('truetype');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
       }
       
-      /* Nuclear option - override all Vuetify typography */
-      .v-application .display-1,
-      .v-application .display-2,
-      .v-application .display-3,
-      .v-application .display-4,
-      .v-application .headline,
-      .v-application .title,
-      .v-application .subtitle-1,
-      .v-application .subtitle-2,
-      .v-application .body-1,
-      .v-application .body-2 {
-        font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      /* Apply MonlamTBslim everywhere */
+      *, *::before, *::after {
+        font-family: var(--monlam-font) !important;
       }
       
       /* Fix Tibetan vowel marks (ི ུ) being cut off - need extra line-height */
-      html body,
-      .v-application,
-      .v-application *,
-      .v-btn,
-      .v-list-item,
-      .v-menu__content,
-      .v-select__selection,
-      .v-toolbar__title,
-      .v-tab,
-      label,
-      span {
+      html, html body, html body *,
+      .v-application, .v-application *,
+      .v-btn, .v-list-item, .v-menu__content,
+      .v-select__selection, .v-toolbar__title, .v-tab,
+      label, span, p, div, h1, h2, h3, h4, h5, h6 {
         line-height: 1.8 !important;
       }
       
@@ -230,16 +180,18 @@
         'doccano': 'Monlam Tools',
         'Doccano': 'Monlam Tools',
         
-        // Copyright
+        // Copyright - all variations
         '© 2024': '© 2026 Monlam AI',
         '© 2025': '© 2026 Monlam AI',
-        '© 2025 Monlam Tools': '© 2026 Monlam AI',
-        '© 2025 doccano': '© 2026 Monlam AI',
         '2024 doccano': '2026 Monlam AI',
         '2025 doccano': '2026 Monlam AI',
-        '2025 Monlam Tools': '2026 Monlam AI',
         'Copyright 2024': '© 2026 Monlam AI',
-        'Copyright 2025': '© 2026 Monlam AI'
+        'Copyright 2025': '© 2026 Monlam AI',
+        '© 2025 Monlam Tools': '© 2026 Monlam AI',
+        '© 2024 Monlam Tools': '© 2026 Monlam AI',
+        '2025 Monlam Tools': '2026 Monlam AI',
+        '2024 Monlam Tools': '2026 Monlam AI',
+        'Monlam Tools': 'Monlam AI'
       };
       
       document.addEventListener('DOMContentLoaded', function() {
@@ -353,34 +305,19 @@
         styleReviewButtons();
         
         // ========================================
-        // Force MonlamTBslim font via JavaScript
-        // This overrides Vuetify's !important rules
+        // Font helper - Roboto deleted from build, so MonlamTBslim is used
+        // Just ensure line-height is set for Tibetan vowels
         // ========================================
-        const TIBETAN_FONT = "'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-        
-        function forceFont() {
-          // Target all elements with Vuetify typography classes
-          const selectors = [
-            '.display-1', '.display-2', '.display-3', '.display-4',
-            '.headline', '.title', '.subtitle-1', '.subtitle-2',
-            '.body-1', '.body-2', '.caption', '.overline',
-            '.v-btn', '.v-card', '.v-list-item', '.v-chip',
-            '.v-toolbar__title', '.v-tab', '.v-menu__content',
-            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-            'label', 'input', 'textarea', 'span', 'p', 'div'
-          ];
-          
-          selectors.forEach(function(selector) {
-            document.querySelectorAll(selector).forEach(function(el) {
-              el.style.setProperty('font-family', TIBETAN_FONT, 'important');
-              el.style.setProperty('line-height', '1.8', 'important');
-            });
+        function ensureTibetanStyling() {
+          // Ensure line-height for Tibetan text (vowel marks ི ུ)
+          document.querySelectorAll('h1, h2, h3, h4, h5, h6, .display-1, .headline, .title, .v-btn, .v-list-item, .v-toolbar__title').forEach(function(el) {
+            el.style.setProperty('line-height', '1.8', 'important');
           });
         }
         
-        // Run immediately and periodically
-        forceFont();
-        setInterval(forceFont, 1000);
+        // Run periodically to catch dynamic content
+        ensureTibetanStyling();
+        setInterval(ensureTibetanStyling, 1000);
       });
     </script>
   <script src="/static/_nuxt/08fba5f.js"></script><script src="/static/_nuxt/132fcbd.js"></script><script src="/static/_nuxt/50aa8ea.js"></script><script src="/static/_nuxt/bd0aa1f.js"></script></body>
