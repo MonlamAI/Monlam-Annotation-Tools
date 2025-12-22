@@ -9,7 +9,7 @@ services:
     name: monlam-doccano
     env: docker
     plan: standard  # 2GB RAM - change to 'pro' for 4GB
-    region: oregon  # or singapore, frankfurt, ohio
+    region: singapore
     healthCheckPath: /
     envVars:
       # Admin credentials
