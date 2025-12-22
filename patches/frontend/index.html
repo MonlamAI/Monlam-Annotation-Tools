@@ -20,12 +20,16 @@
       .pagination-link.is-current { background-color: var(--monlam-gold) !important; border-color: var(--monlam-gold) !important; }
       /* Hide GitHub button and link */
       a[href*="github.com"], a[href*="GITHUB"], button[class*="github"], .github-button { display: none !important; }
-      /* Tibetan font support - MonlamTBslim */
+      /* Tibetan font support - MonlamTBslim (hosted) */
       @font-face {
         font-family: 'MonlamTBslim';
-        src: local('MonlamTBslim'), local('Monlam TB slim'), local('MonlamTB slim');
+        src: local('MonlamTBslim'),
+             url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
+             url('/static/fonts/MonlamTBslim.woff') format('woff'),
+             url('/static/fonts/MonlamTBslim.ttf') format('truetype');
         font-weight: normal;
         font-style: normal;
+        font-display: swap;
       }
       body { font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     </style>
