@@ -1,7 +1,7 @@
 <!doctype html>
 <html>
   <head>
-    <meta data-n-head="1" charset="utf-8"><meta data-n-head="1" name="viewport" content="width=device-width,initial-scale=1"><meta data-n-head="1" data-hid="description" name="description" content="Monlam Tools - མོན་ལམ་ annotation tools for Tibetan language AI"><title>Monlam Tools</title><link rel="icon" type="image/png" href="/static/favicon.png"><link rel="icon" type="image/x-icon" href="/static/favicon.ico"><link rel="shortcut icon" href="/static/favicon.ico"><link rel="apple-touch-icon" href="/static/favicon.png"><link rel="preload" href="/static/_nuxt/08fba5f.js" as="script"><link rel="preload" href="/static/_nuxt/132fcbd.js" as="script"><link rel="preload" href="/static/_nuxt/50aa8ea.js" as="script"><link rel="preload" href="/static/_nuxt/bd0aa1f.js" as="script">
+    <meta data-n-head="1" charset="utf-8"><meta data-n-head="1" name="viewport" content="width=device-width,initial-scale=1"><meta data-n-head="1" data-hid="description" name="description" content="Monlam Tools - མོན་ལམ་ annotation tools for Tibetan language AI"><title>Monlam Tools</title><link rel="icon" type="image/x-icon" href="/favicon.ico"><link rel="icon" type="image/x-icon" href="/static/favicon.ico"><link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png"><link rel="shortcut icon" type="image/x-icon" href="/favicon.ico"><link rel="apple-touch-icon" sizes="180x180" href="/static/favicon.png"><link rel="preload" href="/static/_nuxt/08fba5f.js" as="script"><link rel="preload" href="/static/_nuxt/132fcbd.js" as="script"><link rel="preload" href="/static/_nuxt/50aa8ea.js" as="script"><link rel="preload" href="/static/_nuxt/bd0aa1f.js" as="script">
     <style>
       /* Monlam Tools Custom Branding */
       :root {
@@ -210,6 +210,30 @@
       document.addEventListener('DOMContentLoaded', function() {
         // Update title
         document.title = 'Monlam Tools';
+        
+        // ========================================
+        // Force Monlam favicon (override any Nuxt.js defaults)
+        // ========================================
+        function setFavicon() {
+          // Remove existing favicons
+          document.querySelectorAll('link[rel*="icon"]').forEach(function(link) {
+            if (!link.href.includes('favicon.ico') && !link.href.includes('favicon.png')) {
+              link.remove();
+            }
+          });
+          
+          // Ensure our favicon links exist
+          const head = document.head;
+          const existingIco = document.querySelector('link[href="/favicon.ico"]');
+          if (!existingIco) {
+            const ico = document.createElement('link');
+            ico.rel = 'icon';
+            ico.type = 'image/x-icon';
+            ico.href = '/favicon.ico';
+            head.appendChild(ico);
+          }
+        }
+        setFavicon();
         
         function replaceText(element) {
           // Update title dynamically

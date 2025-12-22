@@ -19,11 +19,15 @@ USER root
 COPY branding/i18n/bo /doccano/frontend/i18n/bo
 COPY branding/i18n/index.js /doccano/frontend/i18n/index.js
 COPY branding/static/logo.png /doccano/frontend/assets/icon.png
+# Favicon - proper ICO format for browser compatibility
+COPY branding/static/favicon.ico /doccano/backend/staticfiles/favicon.ico
 COPY branding/static/favicon.png /doccano/backend/staticfiles/favicon.png
-COPY branding/static/favicon.png /doccano/backend/staticfiles/favicon.ico
+COPY branding/static/favicon.ico /doccano/backend/client/dist/favicon.ico
+COPY branding/static/favicon.png /doccano/backend/client/dist/favicon.png
+COPY branding/static/favicon.ico /doccano/backend/client/dist/static/favicon.ico
 COPY branding/static/favicon.png /doccano/backend/client/dist/static/favicon.png
-COPY branding/static/favicon.png /doccano/backend/client/dist/static/favicon.ico
-COPY branding/static/favicon.png /doccano/backend/client/dist/favicon.ico
+# Root favicon.ico for browsers that look at site root
+COPY branding/static/favicon.ico /doccano/backend/favicon.ico
 COPY branding/fonts /doccano/backend/staticfiles/fonts
 COPY branding/static/logo.png /doccano/backend/staticfiles/_nuxt/img/icon.c360b38.png
 COPY branding/static/logo.png /doccano/backend/staticfiles/_nuxt/img/6737785.30d4036.png
@@ -71,8 +75,15 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/frontend/i18n/index.js && \
     chown doccano:doccano /doccano/frontend/assets/icon.png && \
     chown doccano:doccano /doccano/backend/staticfiles/favicon.png && \
+    chown doccano:doccano /doccano/backend/staticfiles/favicon.ico && \
+    chown -R doccano:doccano /doccano/backend/staticfiles/fonts && \
     chown doccano:doccano /doccano/backend/staticfiles/_nuxt/img/icon.c360b38.png && \
     chown doccano:doccano /doccano/backend/staticfiles/_nuxt/img/6737785.30d4036.png && \
+    chown doccano:doccano /doccano/backend/favicon.ico && \
+    chown doccano:doccano /doccano/backend/client/dist/favicon.ico && \
+    chown doccano:doccano /doccano/backend/client/dist/favicon.png && \
+    chown doccano:doccano /doccano/backend/client/dist/static/favicon.ico && \
+    chown doccano:doccano /doccano/backend/client/dist/static/favicon.png && \
     chown doccano:doccano /doccano/backend/data_import/celery_tasks.py && \
     chown doccano:doccano /doccano/backend/examples/serializers.py && \
     chown doccano:doccano /doccano/backend/data_export/models.py && \
