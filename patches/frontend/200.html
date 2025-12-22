@@ -284,6 +284,36 @@
         // Run periodically to catch dynamic updates
         setInterval(styleReviewButtons, 500);
         styleReviewButtons();
+        
+        // ========================================
+        // Force MonlamTBslim font via JavaScript
+        // This overrides Vuetify's !important rules
+        // ========================================
+        const TIBETAN_FONT = "'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+        
+        function forceFont() {
+          // Target all elements with Vuetify typography classes
+          const selectors = [
+            '.display-1', '.display-2', '.display-3', '.display-4',
+            '.headline', '.title', '.subtitle-1', '.subtitle-2',
+            '.body-1', '.body-2', '.caption', '.overline',
+            '.v-btn', '.v-card', '.v-list-item', '.v-chip',
+            '.v-toolbar__title', '.v-tab', '.v-menu__content',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'label', 'input', 'textarea', 'span', 'p', 'div'
+          ];
+          
+          selectors.forEach(function(selector) {
+            document.querySelectorAll(selector).forEach(function(el) {
+              el.style.setProperty('font-family', TIBETAN_FONT, 'important');
+              el.style.setProperty('line-height', '1.8', 'important');
+            });
+          });
+        }
+        
+        // Run immediately and periodically
+        forceFont();
+        setInterval(forceFont, 1000);
       });
     </script>
   <script src="/static/_nuxt/08fba5f.js"></script><script src="/static/_nuxt/132fcbd.js"></script><script src="/static/_nuxt/50aa8ea.js"></script><script src="/static/_nuxt/bd0aa1f.js"></script></body>
