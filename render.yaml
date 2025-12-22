@@ -12,6 +12,8 @@ services:
     region: singapore
     healthCheckPath: /
     envVars:
+      - key: PORT
+        value: "10000"
       - key: ADMIN_USERNAME
         value: admin
       - key: ADMIN_EMAIL
@@ -24,9 +26,9 @@ services:
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
-          name: doccano-redis
-          type: redis
-          property: connectionString
+          name: doccano-rabbitmq
+          type: pserv
+          envVarKey: RABBITMQ_URL
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.production
       - key: DEBUG
@@ -37,20 +39,20 @@ services:
         generateValue: true
 
   # ===========================================
-  # Redis for Celery Task Queue
+  # RabbitMQ Message Broker (Private Service)
   # ===========================================
-  - type: redis
-    name: doccano-redis
+  - type: pserv
+    name: doccano-rabbitmq
+    env: docker
     plan: starter
     region: singapore
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
+    dockerImage: rabbitmq:3-alpine
+    envVars:
+      - key: RABBITMQ_URL
+        value: "amqp://guest:guest@doccano-rabbitmq:5672"
 
 # ===========================================
 # PostgreSQL Database
-# Flexible plans: basic-256mb, basic-512mb, basic-1gb, basic-2gb, basic-4gb
-# Pro plans: pro-4gb, pro-8gb, pro-16gb, etc.
-# Storage: billed separately at $0.30/GB/month
 # ===========================================
 databases:
   - name: doccano-db
