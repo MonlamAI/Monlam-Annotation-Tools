@@ -619,34 +619,67 @@
         // Simple check: look for 'approver' in username from page elements
         // No API calls to avoid 403 errors
         try {
-          // Check from page elements (username menu, etc.)
-          const userMenu = document.querySelector('[data-user]') || 
-                          document.querySelector('.v-menu__content') ||
-                          document.querySelector('[class*="user"]');
-          if (userMenu) {
-            const username = (userMenu.textContent || userMenu.innerText || '').toLowerCase();
-            if (username.includes('approver')) {
-              return true;
+          // Strategy 1: Check from page elements (username menu, toolbar, etc.)
+          const selectors = [
+            '[data-user]',
+            '.v-menu__content',
+            '[class*="user"]',
+            '.v-toolbar__title',
+            '.v-app-bar__title',
+            '[class*="username"]',
+            '[class*="profile"]'
+          ];
+          
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const text = (element.textContent || element.innerText || '').toLowerCase();
+              if (text.includes('approver')) {
+                return true;
+              }
             }
           }
 
-          // Check URL or localStorage for user info
-          const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-          if (storedUser) {
-            try {
-              const user = JSON.parse(storedUser);
-              if (user.username && user.username.toLowerCase().includes('approver')) {
-                return true;
-              }
-            } catch (e) { }
+          // Strategy 2: Check all visible text on page for approver username
+          const bodyText = document.body.textContent || document.body.innerText || '';
+          if (bodyText.toLowerCase().includes('approver')) {
+            return true;
           }
 
-          // Default: show buttons for everyone (backend will handle permissions)
-          // Or return false to hide for non-approvers
-          return false;
+          // Strategy 3: Check localStorage/sessionStorage for user info
+          const storedUser = localStorage.getItem('user') || 
+                            sessionStorage.getItem('user') ||
+                            localStorage.getItem('username') ||
+                            sessionStorage.getItem('username');
+          if (storedUser) {
+            try {
+              const user = typeof storedUser === 'string' ? JSON.parse(storedUser) : storedUser;
+              const username = (user.username || user || '').toLowerCase();
+              if (username.includes('approver')) {
+                return true;
+              }
+            } catch (e) {
+              // If not JSON, check as plain string
+              if (storedUser.toLowerCase().includes('approver')) {
+                return true;
+              }
+            }
+          }
+
+          // Strategy 4: Check URL for user info
+          const urlParams = new URLSearchParams(window.location.search);
+          const urlUser = urlParams.get('user') || urlParams.get('username');
+          if (urlUser && urlUser.toLowerCase().includes('approver')) {
+            return true;
+          }
+
+          // Default: Show buttons for everyone (backend will handle permissions)
+          // This ensures buttons appear even if detection fails
+          return true;
         } catch (e) {
-          // On error, don't show buttons (safer)
-          return false;
+          // On error, show buttons anyway (backend handles permissions)
+          console.debug('Monlam Tools: Could not detect approver status, showing buttons (backend will handle permissions)');
+          return true;
         }
       }
 
@@ -758,10 +791,11 @@
         // Check if buttons already exist
         if (document.querySelector('.monlam-review-container')) return;
 
-        // Check user role (only once, cache result)
+        // Check user role (cache result, but re-check periodically)
         if (!approverCheckDone) {
           isUserApprover = await isApprover();
           approverCheckDone = true;
+          console.debug('Monlam Tools: Approver check result:', isUserApprover);
 
           // Reset check when navigating to new page
           const currentPath = window.location.pathname;
@@ -772,10 +806,11 @@
           }, 2000);
         }
 
-        // Only show buttons for approvers
-        if (!isUserApprover) {
-          return;
-        }
+        // Show buttons (backend will handle permissions)
+        // Changed: Always show buttons, backend validates permissions
+        // if (!isUserApprover) {
+        //   return;
+        // }
 
         // Find the textarea/text input area (transcription field)
         // Look for textarea elements used for transcription
@@ -848,12 +883,24 @@
       // No periodic checks needed - backend finds current example automatically!
 
       // Inject buttons periodically (for SPA navigation)
-      // Check every 2 seconds, but only inject if approver
-      setInterval(injectReviewButtons, 2000);
+      // Check every 1 second to catch dynamic content
+      setInterval(injectReviewButtons, 1000);
 
-      // Initial injection after page load
+      // Initial injection after page load (multiple attempts for Nuxt dynamic rendering)
+      setTimeout(injectReviewButtons, 500);
       setTimeout(injectReviewButtons, 1000);
+      setTimeout(injectReviewButtons, 2000);
       setTimeout(injectReviewButtons, 3000);
+      setTimeout(injectReviewButtons, 5000);
+
+      // Also inject when DOM changes (Nuxt dynamic rendering)
+      const observer = new MutationObserver(() => {
+        injectReviewButtons();
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
 
     });
   </script>
