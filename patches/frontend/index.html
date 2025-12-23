@@ -463,207 +463,6 @@
           }
         }
         
-        // Global cache for example ID
-        let cachedExampleId = null;
-        
-        // Intercept fetch calls to capture example ID from API responses
-        const originalFetch = window.fetch;
-        window.fetch = function(...args) {
-          const promise = originalFetch.apply(this, args);
-          const url = args[0];
-          
-          // Check if this is an example-related API call
-          if (typeof url === 'string' && (url.includes('/examples/') || url.includes('/examples?'))) {
-            promise.then(async response => {
-              if (response.ok) {
-                try {
-                  const data = await response.clone().json();
-                  
-                  // Extract example ID from response
-                  if (data && data.id) {
-                    cachedExampleId = data.id;
-                    updateContainerExampleId(data.id);
-                  } else if (data && data.results && Array.isArray(data.results) && data.results.length > 0) {
-                    // List response - get first example ID
-                    cachedExampleId = data.results[0].id;
-                    updateContainerExampleId(data.results[0].id);
-                  } else if (data && Array.isArray(data) && data.length > 0 && data[0].id) {
-                    // Array response
-                    cachedExampleId = data[0].id;
-                    updateContainerExampleId(data[0].id);
-                  }
-                } catch (e) {
-                  // Not JSON, ignore
-                }
-              }
-            }).catch(() => {});
-          }
-          
-          return promise;
-        };
-        
-        function updateContainerExampleId(exampleId) {
-          const container = document.querySelector('.monlam-review-container');
-          if (container) {
-            container.dataset.exampleId = exampleId;
-          }
-        }
-        
-        // Get current example ID from various sources
-        function getCurrentExampleId() {
-          // Method 0: Use cached ID if available
-          if (cachedExampleId) {
-            return cachedExampleId;
-          }
-          
-          // Method 1: Check container first (where we store it)
-          const container = document.querySelector('.monlam-review-container');
-          if (container && container.dataset.exampleId) {
-            cachedExampleId = container.dataset.exampleId;
-            return cachedExampleId;
-          }
-          
-          // Method 2: Check for data attributes in annotation area
-          const annotationArea = document.querySelector('[class*="annotation"]') || 
-                                document.querySelector('[class*="speech"]') ||
-                                document.querySelector('.v-card') ||
-                                document.querySelector('.v-main__wrap');
-          
-          if (annotationArea) {
-            const exampleEl = annotationArea.querySelector('[data-example-id]') ||
-                              annotationArea.querySelector('[data-id]') ||
-                              annotationArea.closest('[data-example-id]') ||
-                              annotationArea.closest('[data-id]');
-            if (exampleEl) {
-              const id = exampleEl.dataset.exampleId || exampleEl.dataset.id;
-              if (id) {
-                cachedExampleId = id;
-                return id;
-              }
-            }
-          }
-          
-          // Method 3: Check Vue/Nuxt state recursively
-          try {
-            function findExampleInVue(vue, depth = 0) {
-              if (depth > 10) return null; // Prevent infinite recursion
-              
-              // Check component data
-              if (vue.$data) {
-                if (vue.$data.example && vue.$data.example.id) return vue.$data.example.id;
-                if (vue.$data.currentExample && vue.$data.currentExample.id) return vue.$data.currentExample.id;
-                if (vue.$data.exampleId) return vue.$data.exampleId;
-                if (vue.$data.id && typeof vue.$data.id === 'number') return vue.$data.id;
-              }
-              
-              // Check props
-              if (vue.$props) {
-                if (vue.$props.example && vue.$props.example.id) return vue.$props.example.id;
-                if (vue.$props.exampleId) return vue.$props.exampleId;
-                if (vue.$props.id) return vue.$props.id;
-              }
-              
-              // Check store state
-              if (vue.$store && vue.$store.state) {
-                const state = vue.$store.state;
-                if (state.example && state.example.id) return state.example.id;
-                if (state.examples && state.examples.current && state.examples.current.id) return state.examples.current.id;
-                if (state.currentExample && state.currentExample.id) return state.currentExample.id;
-                if (state.exampleId) return state.exampleId;
-              }
-              
-              // Check children recursively
-              if (vue.$children && vue.$children.length > 0) {
-                for (const child of vue.$children) {
-                  const found = findExampleInVue(child, depth + 1);
-                  if (found) return found;
-                }
-              }
-              
-              return null;
-            }
-            
-            const nuxtEl = document.querySelector('#__nuxt');
-            if (nuxtEl && nuxtEl.__vue__) {
-              const found = findExampleInVue(nuxtEl.__vue__);
-              if (found) {
-                cachedExampleId = found;
-                return found;
-              }
-            }
-          } catch (e) {
-            console.log('Vue search error:', e);
-          }
-          
-          // Method 4: Check window/global state
-          try {
-            if (window.__NUXT__ && window.__NUXT__.state) {
-              const state = window.__NUXT__.state;
-              if (state.example && state.example.id) {
-                cachedExampleId = state.example.id;
-                return state.example.id;
-              }
-            }
-          } catch (e) {}
-          
-          // Method 5: Look for ID in all elements
-          const allElements = document.querySelectorAll('[id*="example"], [class*="example"], [data-id], [data-example-id]');
-          for (const el of allElements) {
-            const id = el.dataset.exampleId || el.dataset.id || 
-                       (el.id && el.id.match(/(\d+)/) ? el.id.match(/(\d+)/)[1] : null);
-            if (id && !isNaN(id) && id > 0) {
-              cachedExampleId = id;
-              return id;
-            }
-          }
-          
-          // Method 6: Check URL and route params
-          const urlParams = new URLSearchParams(window.location.search);
-          const hashMatch = window.location.hash.match(/[\/:](\d+)/);
-          if (hashMatch) {
-            cachedExampleId = hashMatch[1];
-            return hashMatch[1];
-          }
-          if (urlParams.get('example_id')) {
-            cachedExampleId = urlParams.get('example_id');
-            return cachedExampleId;
-          }
-          if (urlParams.get('id')) {
-            cachedExampleId = urlParams.get('id');
-            return cachedExampleId;
-          }
-          
-          // Method 7: Try to get from current route
-          try {
-            if (window.$nuxt && window.$nuxt.$route) {
-              const route = window.$nuxt.$route;
-              if (route.params && route.params.id) {
-                cachedExampleId = route.params.id;
-                return cachedExampleId;
-              }
-            }
-          } catch (e) {}
-          
-          // Method 8: Look in page text for example ID patterns
-          const idPatterns = [
-            /"id"\s*:\s*(\d+)/,
-            /example[_-]?id["\s:=]+(\d+)/i,
-            /\/examples\/(\d+)/,
-            /example.*?(\d{4,})/i
-          ];
-          
-          const pageText = document.body.innerText || document.body.textContent || '';
-          for (const pattern of idPatterns) {
-            const match = pageText.match(pattern);
-            if (match && match[1] && !isNaN(match[1])) {
-              cachedExampleId = match[1];
-              return match[1];
-            }
-          }
-          
-          return null;
-        }
-        
         // Get project ID from URL
         function getProjectId() {
           const match = window.location.pathname.match(/\/projects\/(\d+)/);
@@ -676,80 +475,21 @@
           return cookie ? cookie.split('=')[1] : '';
         }
         
-        // Wait for example ID to be available
-        async function waitForExampleId(maxWait = 3000) {
-          let waited = 0;
-          const interval = 200;
-          
-          while (waited < maxWait) {
-            const exampleId = getCurrentExampleId();
-            if (exampleId) {
-              return exampleId;
-            }
-            await new Promise(resolve => setTimeout(resolve, interval));
-            waited += interval;
-          }
-          return null;
-        }
-        
-        // API call to approve/reject
+        // API call to approve/reject - simplified, no complex ID detection
         async function reviewExample(action, notes = '') {
           const projectId = getProjectId();
+          const container = document.querySelector('.monlam-review-container');
+          const exampleId = container ? container.dataset.exampleId : null;
           
           if (!projectId) {
-            showNotification('Cannot determine project ID. Please navigate to a project.', 'error');
+            showNotification('Cannot determine project ID.', 'error');
             return;
           }
           
-          // Try to get example ID immediately
-          let exampleId = getCurrentExampleId();
-          
-          // If not found, wait a bit for it to load
           if (!exampleId) {
-            exampleId = await waitForExampleId(2000);
-          }
-          
-          // If still not found, try to fetch from API
-          if (!exampleId) {
-            try {
-              // Try to get current example from API
-              const response = await fetch(`/v1/projects/${projectId}/examples/?limit=1&offset=0`, {
-                credentials: 'same-origin'
-              });
-              if (response.ok) {
-                const data = await response.json();
-                if (data.results && data.results.length > 0) {
-                  exampleId = data.results[0].id;
-                  cachedExampleId = exampleId;
-                }
-              }
-            } catch (e) {
-              console.error('Failed to fetch example ID:', e);
-            }
-          }
-          
-          // Last resort: try to get from visible elements
-          if (!exampleId) {
-            const firstExample = document.querySelector('.v-list-item[data-id], .example-card[data-id], [data-example-id], [data-id]');
-            if (firstExample) {
-              exampleId = firstExample.dataset.exampleId || firstExample.dataset.id;
-              if (exampleId) {
-                cachedExampleId = exampleId;
-              }
-            }
-          }
-          
-          if (!exampleId) {
-            showNotification('Cannot determine example ID. Please make sure you are viewing an annotation item.', 'error');
+            showNotification('Cannot determine example ID. Please refresh the page.', 'error');
             return;
           }
-          
-          // Store example ID in container and cache for future use
-          const container = document.querySelector('.monlam-review-container');
-          if (container) {
-            container.dataset.exampleId = exampleId;
-          }
-          cachedExampleId = exampleId;
           
           return reviewExampleById(projectId, exampleId, action, notes);
         }
@@ -894,28 +634,9 @@
           
           if (!mainContent && !toolbar) return;
           
-          // Get example ID now to store in container
-          let exampleId = getCurrentExampleId();
-          
-          // If not found, wait a bit
-          if (!exampleId) {
-            setTimeout(() => {
-              exampleId = getCurrentExampleId();
-              const existingContainer = document.querySelector('.monlam-review-container');
-              if (existingContainer && exampleId) {
-                existingContainer.dataset.exampleId = exampleId;
-                cachedExampleId = exampleId;
-              }
-            }, 500);
-          }
-          
-          // Create review container
+          // Create review container (example ID will be set when needed)
           const container = document.createElement('div');
           container.className = 'monlam-review-container';
-          if (exampleId) {
-            container.dataset.exampleId = exampleId;
-            cachedExampleId = exampleId;
-          }
           container.innerHTML = `
             <span class="monlam-review-status monlam-status-pending">📋 Pending Review</span>
             <input type="text" class="monlam-review-notes" placeholder="Review notes (optional)..." />
@@ -940,25 +661,6 @@
               annotationArea.appendChild(container);
             }
           }
-          
-          // Set up MutationObserver to watch for example ID changes
-          const observer = new MutationObserver(() => {
-            const newExampleId = getCurrentExampleId();
-            if (newExampleId && container) {
-              container.dataset.exampleId = newExampleId;
-              cachedExampleId = newExampleId;
-            }
-          });
-          
-          observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['data-id', 'data-example-id']
-          });
-          
-          // Stop observing after 60 seconds
-          setTimeout(() => observer.disconnect(), 60000);
         }
         
         // Global functions for button onclick
