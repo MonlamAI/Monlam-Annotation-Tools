@@ -19,6 +19,7 @@ from .datasets import load_dataset
 from .pipeline.catalog import Format, create_file_format
 from .pipeline.exceptions import (
     FileImportException,
+    FileParseException,
     FileTypeException,
     MaximumFileSizeException,
 )
@@ -110,10 +111,29 @@ def import_dataset(user_id, project_id, file_format: str, upload_ids: List[str],
         fmt = create_file_format(file_format)
         upload_ids, errors = check_uploaded_files(upload_ids, fmt)
         temporary_uploads = TemporaryUpload.objects.filter(upload_id__in=upload_ids)
-        filenames = [
-            FileName(full_path=tu.get_file_path(), generated_name=tu.file.name, upload_name=tu.upload_name)
-            for tu in temporary_uploads
-        ]
+        
+        # === MONLAM PATCH: Handle file path errors gracefully ===
+        filenames = []
+        for tu in temporary_uploads:
+            try:
+                file_path = tu.get_file_path()
+                # Check if file exists before adding to list
+                import os
+                if os.path.exists(file_path):
+                    filenames.append(
+                        FileName(full_path=file_path, generated_name=tu.file.name, upload_name=tu.upload_name)
+                    )
+                else:
+                    logger.warning(f"File not found (skipping): {file_path}")
+                    errors.append(FileParseException(tu.upload_name, 0, f"File not found: {file_path}"))
+            except Exception as e:
+                logger.warning(f"Error getting file path for {tu.upload_name}: {e}")
+                errors.append(FileParseException(tu.upload_name, 0, str(e)))
+        
+        if not filenames:
+            logger.error("No valid files to import")
+            return {"error": [e.dict() for e in errors]}
+        # === END PATCH ===
 
         dataset = load_dataset(task, fmt, filenames, project, **kwargs)
         dataset.save(user, batch_size=settings.IMPORT_BATCH_SIZE)
@@ -129,6 +149,12 @@ def import_dataset(user_id, project_id, file_format: str, upload_ids: List[str],
         return {"error": [e.dict() for e in errors]}
     except FileImportException as e:
         return {"error": [e.dict()]}
+    except FileNotFoundError as e:
+        logger.error(f"FileNotFoundError during import: {e}")
+        return {"error": [{"filename": "unknown", "line": 0, "message": str(e)}]}
+    except Exception as e:
+        logger.error(f"Unexpected error during import: {e}")
+        return {"error": [{"filename": "unknown", "line": 0, "message": str(e)}]}
 
 
 def upload_to_store(temporary_uploads):
