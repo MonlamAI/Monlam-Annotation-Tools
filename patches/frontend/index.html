@@ -91,6 +91,99 @@
         padding-bottom: 8px !important;
         line-height: 1.8 !important;
       }
+      
+      /* ========================================
+         APPROVE/REJECT BUTTONS FOR REVIEWERS
+         ======================================== */
+      .monlam-review-container {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: center;
+        margin: 16px 0;
+        padding: 12px;
+        background: #f5f5f5;
+        border-radius: 8px;
+      }
+      
+      .monlam-approve-btn {
+        background-color: #4caf50 !important;
+        color: white !important;
+        padding: 10px 24px !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+      }
+      
+      .monlam-approve-btn:hover {
+        background-color: #388e3c !important;
+        transform: scale(1.02) !important;
+      }
+      
+      .monlam-reject-btn {
+        background-color: #f44336 !important;
+        color: white !important;
+        padding: 10px 24px !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+      }
+      
+      .monlam-reject-btn:hover {
+        background-color: #c62828 !important;
+        transform: scale(1.02) !important;
+      }
+      
+      .monlam-review-status {
+        font-size: 14px !important;
+        padding: 6px 12px !important;
+        border-radius: 4px !important;
+        font-weight: 500 !important;
+      }
+      
+      .monlam-status-approved {
+        background-color: #e8f5e9 !important;
+        color: #2e7d32 !important;
+        border: 1px solid #4caf50 !important;
+      }
+      
+      .monlam-status-rejected {
+        background-color: #ffebee !important;
+        color: #c62828 !important;
+        border: 1px solid #f44336 !important;
+      }
+      
+      .monlam-status-pending {
+        background-color: #fff3e0 !important;
+        color: #e65100 !important;
+        border: 1px solid #ff9800 !important;
+      }
+      
+      .monlam-review-notes {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        margin-top: 8px;
+      }
+      
+      .monlam-review-notes:focus {
+        outline: none;
+        border-color: var(--monlam-gold);
+      }
     </style>
   </head>
   <body>
@@ -330,6 +423,205 @@
           setTimeout(forceMonlamFont, 500);
           setTimeout(forceMonlamFont, 1000);
         });
+        
+        // ========================================
+        // APPROVE/REJECT BUTTONS FOR REVIEWERS
+        // ========================================
+        
+        // Get current example ID from URL
+        function getCurrentExampleId() {
+          const url = window.location.href;
+          // Look for example ID in URL patterns like /projects/1/speech-to-text?page=1
+          // or annotation state stored in the page
+          
+          // Try to get from Nuxt/Vue state
+          try {
+            const app = document.querySelector('#__nuxt').__vue__;
+            if (app && app.$store && app.$store.state && app.$store.state.example) {
+              return app.$store.state.example.id;
+            }
+          } catch (e) {}
+          
+          // Try to find example ID from current card/item
+          const exampleIdEl = document.querySelector('[data-example-id]');
+          if (exampleIdEl) {
+            return exampleIdEl.dataset.exampleId;
+          }
+          
+          return null;
+        }
+        
+        // Get project ID from URL
+        function getProjectId() {
+          const match = window.location.pathname.match(/\/projects\/(\d+)/);
+          return match ? match[1] : null;
+        }
+        
+        // Get CSRF token
+        function getCSRFToken() {
+          const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+          return cookie ? cookie.split('=')[1] : '';
+        }
+        
+        // API call to approve/reject
+        async function reviewExample(action, notes = '') {
+          const projectId = getProjectId();
+          const exampleId = getCurrentExampleId();
+          
+          if (!projectId || !exampleId) {
+            // Try alternative method - get from the visible content
+            const statusIndicator = document.querySelector('.monlam-review-container');
+            if (statusIndicator && statusIndicator.dataset.exampleId) {
+              return reviewExampleById(projectId, statusIndicator.dataset.exampleId, action, notes);
+            }
+            alert('Cannot determine example ID. Please try refreshing the page.');
+            return;
+          }
+          
+          return reviewExampleById(projectId, exampleId, action, notes);
+        }
+        
+        async function reviewExampleById(projectId, exampleId, action, notes = '') {
+          try {
+            // Use the comments endpoint to record the review action
+            // This is a workaround since we can't add new endpoints without backend changes
+            const response = await fetch(`/v1/projects/${projectId}/comments`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+              },
+              body: JSON.stringify({
+                example: exampleId,
+                text: `[REVIEW:${action.toUpperCase()}] ${notes || 'Reviewed'}`
+              })
+            });
+            
+            if (response.ok) {
+              // Update the Example's annotations_approved_by via state confirm
+              if (action === 'approve') {
+                // Confirm the example state
+                await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken()
+                  }
+                });
+              }
+              
+              // Update UI
+              updateReviewStatus(action, notes);
+              showNotification(`${action === 'approve' ? '✅ Approved' : '❌ Rejected'} successfully!`, action === 'approve' ? 'success' : 'warning');
+            } else {
+              throw new Error('Failed to save review');
+            }
+          } catch (error) {
+            console.error('Review error:', error);
+            showNotification('Failed to save review. Please try again.', 'error');
+          }
+        }
+        
+        function showNotification(message, type) {
+          const notif = document.createElement('div');
+          notif.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 10000;
+            animation: slideIn 0.3s ease;
+            ${type === 'success' ? 'background: #4caf50;' : type === 'warning' ? 'background: #ff9800;' : 'background: #f44336;'}
+          `;
+          notif.textContent = message;
+          document.body.appendChild(notif);
+          
+          setTimeout(() => notif.remove(), 3000);
+        }
+        
+        function updateReviewStatus(action, notes) {
+          const container = document.querySelector('.monlam-review-container');
+          if (container) {
+            const statusEl = container.querySelector('.monlam-review-status');
+            if (statusEl) {
+              statusEl.className = `monlam-review-status ${action === 'approve' ? 'monlam-status-approved' : 'monlam-status-rejected'}`;
+              statusEl.textContent = action === 'approve' ? '✅ Approved' : '❌ Rejected';
+            }
+          }
+        }
+        
+        // Inject review buttons into annotation page
+        function injectReviewButtons() {
+          // Only inject on annotation pages
+          if (!window.location.pathname.includes('/projects/')) return;
+          if (window.location.pathname.includes('/dataset')) return;
+          if (window.location.pathname.includes('/labels')) return;
+          if (window.location.pathname.includes('/members')) return;
+          if (window.location.pathname.includes('/settings')) return;
+          
+          // Check if buttons already exist
+          if (document.querySelector('.monlam-review-container')) return;
+          
+          // Find the annotation toolbar/card area
+          const toolbar = document.querySelector('.v-card__actions') || 
+                         document.querySelector('.v-toolbar__items') ||
+                         document.querySelector('.v-footer');
+          
+          // Or find the main content area for STT
+          const mainContent = document.querySelector('.v-main__wrap') ||
+                             document.querySelector('.v-card');
+          
+          if (!mainContent && !toolbar) return;
+          
+          // Create review container
+          const container = document.createElement('div');
+          container.className = 'monlam-review-container';
+          container.innerHTML = `
+            <span class="monlam-review-status monlam-status-pending">📋 Pending Review</span>
+            <input type="text" class="monlam-review-notes" placeholder="Review notes (optional)..." />
+            <button class="monlam-approve-btn" onclick="window.monlamApprove()">
+              <span>✅</span> Approve
+            </button>
+            <button class="monlam-reject-btn" onclick="window.monlamReject()">
+              <span>❌</span> Reject
+            </button>
+          `;
+          
+          // Insert at appropriate location
+          if (toolbar) {
+            toolbar.parentNode.insertBefore(container, toolbar.nextSibling);
+          } else if (mainContent) {
+            // Find the annotation content area
+            const annotationArea = mainContent.querySelector('.v-card') || mainContent;
+            annotationArea.appendChild(container);
+          }
+        }
+        
+        // Global functions for button onclick
+        window.monlamApprove = function() {
+          const notes = document.querySelector('.monlam-review-notes')?.value || '';
+          reviewExample('approve', notes);
+        };
+        
+        window.monlamReject = function() {
+          const notes = document.querySelector('.monlam-review-notes')?.value || '';
+          if (!notes) {
+            const reason = prompt('Please provide a reason for rejection:');
+            if (reason) {
+              reviewExample('reject', reason);
+            }
+          } else {
+            reviewExample('reject', notes);
+          }
+        };
+        
+        // Inject buttons periodically (for SPA navigation)
+        setInterval(injectReviewButtons, 1000);
+        injectReviewButtons();
+        
       });
     </script>
   <script src="/static/_nuxt/08fba5f.js"></script><script src="/static/_nuxt/132fcbd.js"></script><script src="/static/_nuxt/50aa8ea.js"></script><script src="/static/_nuxt/bd0aa1f.js"></script></body>

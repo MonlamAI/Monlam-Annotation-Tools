@@ -8,6 +8,7 @@
 # - JSONL import with external URLs for STT and Image Classification
 # - Pre-filled labels for annotation review workflow
 # - Review button styling (Red O / Green Check)
+# - Approve/Reject buttons for reviewers (saves to database)
 
 FROM doccano/doccano:1.8.4
 
@@ -51,6 +52,9 @@ COPY patches/backend/catalog.py /doccano/backend/data_import/pipeline/catalog.py
 # Custom dataset classes for STT & Image Classification with pre-filled labels
 COPY patches/backend/datasets.py /doccano/backend/data_import/datasets.py
 
+# Review API for approve/reject workflow (used by frontend)
+COPY patches/backend/review_api.py /doccano/backend/examples/review_api.py
+
 # Example JSONL files (required for import options to appear)
 COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
@@ -93,6 +97,7 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/client/dist/static/favicon.png && \
     chown doccano:doccano /doccano/backend/data_import/celery_tasks.py && \
     chown doccano:doccano /doccano/backend/examples/serializers.py && \
+    chown doccano:doccano /doccano/backend/examples/review_api.py && \
     chown doccano:doccano /doccano/backend/data_export/models.py && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/catalog.py && \
     chown doccano:doccano /doccano/backend/data_import/datasets.py && \
