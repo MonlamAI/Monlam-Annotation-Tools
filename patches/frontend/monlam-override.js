@@ -179,31 +179,87 @@ window.monlamCurrentExampleId = null;
 })();
 
 // ========================================
-// 3. CORE LOGIC (DomContentLoaded)
+// 3. CORE LOGIC - Handle Nuxt Dynamic Rendering
 // ========================================
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('Monlam Tools: overrides loaded');
+let monlamInitialized = false;
+
+function initMonlamTools() {
+  if (monlamInitialized) return;
   
-  // Initial setup
+  console.log('Monlam Tools: initializing...');
+  
+  // Initial setup (can run immediately)
   document.title = 'Monlam Tools';
   setFavicon();
   forceMonlamFont();
   
-  // Start Translation System (Optimized)
+  // Start Translation System (will catch Nuxt content)
   initTranslationSystem();
   
   // Start UI Tweaks
   initUITweaks();
-});
+  
+  monlamInitialized = true;
+}
+
+// Strategy 1: Run immediately if DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMonlamTools);
+} else {
+  // DOM already loaded
+  initMonlamTools();
+}
+
+// Strategy 2: Wait for Nuxt to mount (check for Nuxt app)
+function waitForNuxt() {
+  // Check if Nuxt app is mounted
+  const nuxtApp = document.querySelector('#__nuxt');
+  if (nuxtApp && nuxtApp.__vue__) {
+    console.log('Monlam Tools: Nuxt detected, applying translations');
+    initMonlamTools();
+    // Run translations again after Nuxt renders
+    setTimeout(() => {
+      if (document.body) {
+        replaceText(document.body);
+      }
+    }, 500);
+  } else {
+    // Retry after a short delay
+    setTimeout(waitForNuxt, 100);
+  }
+}
+
+// Start checking for Nuxt after DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', waitForNuxt);
+} else {
+  waitForNuxt();
+}
+
+// Strategy 3: Run after delays to catch late-rendered content
+setTimeout(initMonlamTools, 1000);
+setTimeout(initMonlamTools, 3000);
+setTimeout(initMonlamTools, 5000);
 
 // ========================================
 // 4. TRANSLATION & TEXT REPLACEMENT
 // ========================================
 function initTranslationSystem() {
-  // Initial pass
-  replaceText(document.body);
+  // Initial pass - wait for body if not ready
+  if (document.body) {
+    replaceText(document.body);
+  } else {
+    // Wait for body
+    const bodyObserver = new MutationObserver(function() {
+      if (document.body) {
+        replaceText(document.body);
+        bodyObserver.disconnect();
+      }
+    });
+    bodyObserver.observe(document.documentElement, { childList: true });
+  }
   
-  // MutationObserver for dynamic content
+  // MutationObserver for dynamic content (Nuxt SPA)
   // Debounced to prevent freezing on large DOM updates
   let timeout;
   const observer = new MutationObserver(function(mutations) {
@@ -217,43 +273,91 @@ function initTranslationSystem() {
                 if (node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
                     replaceText(node);
                 }
+              } else if (node.nodeType === Node.TEXT_NODE) {
+                // Handle text nodes directly
+                replaceText(node.parentElement || document.body);
               }
             });
+        }
+        // Also handle text content changes
+        if (mutation.type === 'characterData') {
+          replaceText(mutation.target.parentElement || document.body);
         }
       });
       
       // Also re-apply GitHub hiding
       hideGithub();
-    }, 100); // 100ms debounce
+    }, 50); // Reduced debounce to 50ms for faster updates
   });
   
-  observer.observe(document.body, { childList: true, subtree: true });
+  // Observe body when it's available
+  if (document.body) {
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true,
+      characterData: true
+    });
+  } else {
+    // Wait for body, then observe
+    document.addEventListener('DOMContentLoaded', function() {
+      if (document.body) {
+        observer.observe(document.body, { 
+          childList: true, 
+          subtree: true,
+          characterData: true
+        });
+      }
+    });
+  }
+  
+  // Also observe document root for early content
+  observer.observe(document.documentElement, { 
+    childList: true, 
+    subtree: true 
+  });
+  
+  // Periodic refresh to catch any missed Nuxt content
+  setInterval(function() {
+    if (document.body) {
+      replaceText(document.body);
+    }
+  }, 2000);
 }
 
 function replaceText(element) {
+  // Safety check
+  if (!element || !element.nodeType) {
+    return;
+  }
+  
   // Update title dynamically
-  if (document.title.includes('doccano')) {
+  if (document.title && document.title.includes('doccano')) {
     document.title = 'Monlam Tools';
   }
   
-  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-  let node;
-  while (node = walker.nextNode()) {
-    let text = node.nodeValue;
-    // Fast fail check
-    if (!text || text.trim().length === 0) continue;
-    
-    let changed = false;
-    for (const [eng, tib] of Object.entries(translations)) {
-      if (text.includes(eng)) {
-        text = text.replace(new RegExp(eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), tib);
-        changed = true;
+  try {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while (node = walker.nextNode()) {
+      let text = node.nodeValue;
+      // Fast fail check
+      if (!text || text.trim().length === 0) continue;
+      
+      let changed = false;
+      for (const [eng, tib] of Object.entries(translations)) {
+        if (text.includes(eng)) {
+          text = text.replace(new RegExp(eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), tib);
+          changed = true;
+        }
+      }
+      
+      if (changed) {
+        node.nodeValue = text;
       }
     }
-    
-    if (changed) {
-      node.nodeValue = text;
-    }
+  } catch (e) {
+    // Silently fail if element is not ready
+    console.debug('Monlam Tools: replaceText skipped for element:', e);
   }
 }
 

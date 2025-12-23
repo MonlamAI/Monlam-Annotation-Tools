@@ -13,6 +13,9 @@
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon.png">
   <link rel="preload" href="/static/_nuxt/08fba5f.js" as="script">
+  
+  <!-- Monlam Tools Overrides - Load early in head to catch Nuxt rendering -->
+  <script src="/static/monlam-override.js"></script>
   <link rel="preload" href="/static/_nuxt/132fcbd.js" as="script">
   <link rel="preload" href="/static/_nuxt/50aa8ea.js" as="script">
   <link rel="preload" href="/static/_nuxt/bd0aa1f.js" as="script">
@@ -370,9 +373,6 @@
     </div>
   </div>
   <script>window.__NUXT__ = { config: { _app: { basePath: "/", assetsPath: "/static/_nuxt/", cdnURL: null } } }</script>
-
-  <!-- Monlam Tools Overrides - Load early to catch Nuxt rendering -->
-  <script src="/static/monlam-override.js"></script>
 
   <script src="/static/_nuxt/08fba5f.js"></script>
   <script src="/static/_nuxt/132fcbd.js"></script>
