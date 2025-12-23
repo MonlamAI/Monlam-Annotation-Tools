@@ -431,31 +431,112 @@
         // Check if current user is an approver
         async function isApprover() {
           try {
-            // Try to get user info from the page
-            const userInfo = await fetch('/v1/me').then(r => r.ok ? r.json() : null).catch(() => null);
-            if (userInfo && userInfo.username) {
-              // Check if username contains 'approver' or check role
-              return userInfo.username.toLowerCase().includes('approver') || 
-                     userInfo.is_staff === true ||
-                     (userInfo.groups && userInfo.groups.some(g => g.name && g.name.toLowerCase().includes('approver')));
+            // Method 1: Check from page elements (menu, toolbar, etc.)
+            const userElements = [
+              document.querySelector('[data-user]'),
+              document.querySelector('.v-menu__content'),
+              document.querySelector('.v-toolbar__title'),
+              document.querySelector('[class*="user"]'),
+              document.querySelector('[class*="username"]'),
+              document.querySelector('.v-avatar'),
+              document.querySelector('[aria-label*="user" i]'),
+              document.querySelector('.v-app-bar'),
+              document.querySelector('.v-navigation-drawer'),
+              document.querySelector('header'),
+              document.querySelector('nav')
+            ];
+            
+            for (const el of userElements) {
+              if (el) {
+                const text = (el.textContent || el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
+                // Check for approver pattern
+                if (text.match(/approver\d*/i)) {
+                  return true;
+                }
+              }
             }
             
-            // Fallback: check from page elements
-            const userMenu = document.querySelector('[data-user]') || document.querySelector('.v-menu__content');
-            if (userMenu) {
-              const username = userMenu.textContent || '';
-              return username.toLowerCase().includes('approver');
+            // Also check all text nodes in the page for approver username
+            const walker = document.createTreeWalker(
+              document.body,
+              NodeFilter.SHOW_TEXT,
+              null,
+              false
+            );
+            
+            let node;
+            while (node = walker.nextNode()) {
+              const text = node.textContent.toLowerCase();
+              if (text.match(/approver\d*/i)) {
+                return true;
+              }
             }
             
-            // Check URL or localStorage for user info
-            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-            if (storedUser) {
+            // Method 2: Check Vue/Nuxt state for user info
+            try {
+              const nuxtEl = document.querySelector('#__nuxt');
+              if (nuxtEl && nuxtEl.__vue__) {
+                const vue = nuxtEl.__vue__;
+                
+                // Check store state
+                if (vue.$store && vue.$store.state) {
+                  const state = vue.$store.state;
+                  if (state.user && state.user.username) {
+                    const username = state.user.username.toLowerCase();
+                    if (username.includes('approver')) return true;
+                  }
+                  if (state.auth && state.auth.user) {
+                    const username = (state.auth.user.username || '').toLowerCase();
+                    if (username.includes('approver')) return true;
+                  }
+                }
+                
+                // Check component data
+                if (vue.$data && vue.$data.user) {
+                  const username = (vue.$data.user.username || '').toLowerCase();
+                  if (username.includes('approver')) return true;
+                }
+              }
+            } catch (e) {}
+            
+            // Method 3: Check localStorage/sessionStorage
+            const storageKeys = ['user', 'username', 'auth', 'authUser', 'currentUser'];
+            for (const key of storageKeys) {
               try {
-                const user = JSON.parse(storedUser);
-                return user.username && user.username.toLowerCase().includes('approver');
+                const stored = localStorage.getItem(key) || sessionStorage.getItem(key);
+                if (stored) {
+                  const data = JSON.parse(stored);
+                  const username = (data.username || data.user?.username || '').toLowerCase();
+                  if (username.includes('approver')) return true;
+                }
               } catch (e) {}
             }
             
+            // Method 4: Check page content for username
+            const pageText = document.body.innerText || document.body.textContent || '';
+            const usernameMatch = pageText.match(/(approver\d+)/i);
+            if (usernameMatch) {
+              return true;
+            }
+            
+            // Method 5: Check cookies for user info
+            const cookies = document.cookie.split(';');
+            for (const cookie of cookies) {
+              const [key, value] = cookie.trim().split('=');
+              if (key && value && value.toLowerCase().includes('approver')) {
+                return true;
+              }
+            }
+            
+            // Method 6: Check if user has admin/staff privileges (approvers often have these)
+            // Look for admin menu items or staff-only features
+            const adminIndicators = [
+              document.querySelector('[href*="admin"]'),
+              document.querySelector('[class*="admin"]'),
+              document.querySelector('[aria-label*="admin" i]')
+            ];
+            
+            // If we can't determine, default to false (safer)
             return false;
           } catch (e) {
             console.error('Error checking approver status:', e);
