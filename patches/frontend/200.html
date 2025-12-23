@@ -2,744 +2,746 @@
 <html>
 
 <head>
-    <meta data-n-head="1" charset="utf-8">
-    <meta data-n-head="1" name="viewport" content="width=device-width,initial-scale=1">
-    <meta data-n-head="1" data-hid="description" name="description"
-        content="Monlam Tools - མོན་ལམ་ annotation tools for Tibetan language AI">
-    <title>Monlam Tools</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
-    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
-    <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon.png">
-    <link rel="preload" href="/static/_nuxt/08fba5f.js" as="script">
-    <link rel="preload" href="/static/_nuxt/132fcbd.js" as="script">
-    <link rel="preload" href="/static/_nuxt/50aa8ea.js" as="script">
-    <link rel="preload" href="/static/_nuxt/bd0aa1f.js" as="script">
-    <style>
-        /* Monlam Tools Custom Branding */
-        :root {
-            --monlam-gold: #B8963E;
-            --monlam-gold-dark: #9A7B32;
-            --monlam-navy: #1a1a2e;
-            --monlam-font: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
+  <meta data-n-head="1" charset="utf-8">
+  <meta data-n-head="1" name="viewport" content="width=device-width,initial-scale=1">
+  <meta data-n-head="1" data-hid="description" name="description"
+    content="Monlam Tools - མོན་ལམ་ annotation tools for Tibetan language AI">
+  <title>Monlam Tools</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/favicon.png">
+  <link rel="preload" href="/static/_nuxt/08fba5f.js" as="script">
+  <link rel="preload" href="/static/_nuxt/132fcbd.js" as="script">
+  <link rel="preload" href="/static/_nuxt/50aa8ea.js" as="script">
+  <link rel="preload" href="/static/_nuxt/bd0aa1f.js" as="script">
+  <style>
+    /* Monlam Tools Custom Branding */
+    :root {
+      --monlam-gold: #B8963E;
+      --monlam-gold-dark: #9A7B32;
+      --monlam-navy: #1a1a2e;
+      --monlam-font: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
 
-        .navbar.is-primary {
-            background-color: var(--monlam-navy) !important;
-        }
+    .navbar.is-primary {
+      background-color: var(--monlam-navy) !important;
+    }
 
-        .button.is-primary {
-            background-color: var(--monlam-gold) !important;
-            border-color: var(--monlam-gold) !important;
-        }
+    .button.is-primary {
+      background-color: var(--monlam-gold) !important;
+      border-color: var(--monlam-gold) !important;
+    }
 
-        .button.is-primary:hover {
-            background-color: var(--monlam-gold-dark) !important;
-        }
+    .button.is-primary:hover {
+      background-color: var(--monlam-gold-dark) !important;
+    }
 
-        a.has-text-primary {
-            color: var(--monlam-gold) !important;
-        }
+    a.has-text-primary {
+      color: var(--monlam-gold) !important;
+    }
 
-        .tag.is-primary {
-            background-color: var(--monlam-gold) !important;
-        }
+    .tag.is-primary {
+      background-color: var(--monlam-gold) !important;
+    }
 
-        .menu-list a.is-active {
-            background-color: var(--monlam-gold) !important;
-        }
+    .menu-list a.is-active {
+      background-color: var(--monlam-gold) !important;
+    }
 
-        .progress.is-primary::-webkit-progress-value {
-            background-color: var(--monlam-gold) !important;
-        }
+    .progress.is-primary::-webkit-progress-value {
+      background-color: var(--monlam-gold) !important;
+    }
 
-        .tabs.is-toggle li.is-active a {
-            background-color: var(--monlam-gold) !important;
-            border-color: var(--monlam-gold) !important;
-        }
+    .tabs.is-toggle li.is-active a {
+      background-color: var(--monlam-gold) !important;
+      border-color: var(--monlam-gold) !important;
+    }
 
-        .pagination-link.is-current {
-            background-color: var(--monlam-gold) !important;
-            border-color: var(--monlam-gold) !important;
-        }
+    .pagination-link.is-current {
+      background-color: var(--monlam-gold) !important;
+      border-color: var(--monlam-gold) !important;
+    }
 
-        /* Hide GitHub button and link */
-        a[href*="github.com"],
-        a[href*="GITHUB"],
-        button[class*="github"],
-        .github-button {
-            display: none !important;
-        }
+    /* Hide GitHub button and link */
+    a[href*="github.com"],
+    a[href*="GITHUB"],
+    button[class*="github"],
+    .github-button {
+      display: none !important;
+    }
 
-        /* ========================================
+    /* ========================================
          MonlamTBslim FONT - Roboto deleted from build
          ======================================== */
 
-        /* Primary MonlamTBslim font-face */
-        @font-face {
-            font-family: 'MonlamTBslim';
-            src: local('MonlamTBslim'),
-                url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
-                url('/static/fonts/MonlamTBslim.woff') format('woff'),
-                url('/static/fonts/MonlamTBslim.ttf') format('truetype');
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: swap;
-        }
+    /* Primary MonlamTBslim font-face */
+    @font-face {
+      font-family: 'MonlamTBslim';
+      src: local('MonlamTBslim'),
+        url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
+        url('/static/fonts/MonlamTBslim.woff') format('woff'),
+        url('/static/fonts/MonlamTBslim.ttf') format('truetype');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
 
-        /* Roboto fallback - when Roboto is requested, use MonlamTBslim */
-        @font-face {
-            font-family: 'Roboto';
-            src: local('MonlamTBslim'),
-                url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
-                url('/static/fonts/MonlamTBslim.woff') format('woff'),
-                url('/static/fonts/MonlamTBslim.ttf') format('truetype');
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: swap;
-        }
+    /* Roboto fallback - when Roboto is requested, use MonlamTBslim */
+    @font-face {
+      font-family: 'Roboto';
+      src: local('MonlamTBslim'),
+        url('/static/fonts/MonlamTBslim.woff2') format('woff2'),
+        url('/static/fonts/MonlamTBslim.woff') format('woff'),
+        url('/static/fonts/MonlamTBslim.ttf') format('truetype');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
 
-        /* Apply MonlamTBslim everywhere */
-        *,
-        *::before,
-        *::after {
-            font-family: var(--monlam-font) !important;
-        }
+    /* Apply MonlamTBslim everywhere */
+    *,
+    *::before,
+    *::after {
+      font-family: var(--monlam-font) !important;
+    }
 
-        /* Fix Tibetan vowel marks (ི ུ) being cut off - need extra line-height */
-        html,
-        html body,
-        html body *,
-        .v-application,
-        .v-application *,
-        .v-btn,
-        .v-list-item,
-        .v-menu__content,
-        .v-select__selection,
-        .v-toolbar__title,
-        .v-tab,
-        label,
-        span,
-        p,
-        div,
-        h1,
-        h2,
-        h3,
-        h4,
-        h5,
-        h6 {
-            line-height: 1.8 !important;
-        }
+    /* Fix Tibetan vowel marks (ི ུ) being cut off - need extra line-height */
+    html,
+    html body,
+    html body *,
+    .v-application,
+    .v-application *,
+    .v-btn,
+    .v-list-item,
+    .v-menu__content,
+    .v-select__selection,
+    .v-toolbar__title,
+    .v-tab,
+    label,
+    span,
+    p,
+    div,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      line-height: 1.8 !important;
+    }
 
-        /* Extra padding for menu items and buttons */
-        .v-btn {
-            padding-top: 4px !important;
-            padding-bottom: 4px !important;
-            min-height: 40px !important;
-        }
+    /* Extra padding for menu items and buttons */
+    .v-btn {
+      padding-top: 4px !important;
+      padding-bottom: 4px !important;
+      min-height: 40px !important;
+    }
 
-        .v-list-item {
-            min-height: 48px !important;
-            padding-top: 8px !important;
-            padding-bottom: 8px !important;
-        }
+    .v-list-item {
+      min-height: 48px !important;
+      padding-top: 8px !important;
+      padding-bottom: 8px !important;
+    }
 
-        .v-tab {
-            padding-top: 8px !important;
-            padding-bottom: 8px !important;
-        }
+    .v-tab {
+      padding-top: 8px !important;
+      padding-bottom: 8px !important;
+    }
 
-        .v-chip {
-            height: auto !important;
-            min-height: 32px !important;
-            padding-top: 4px !important;
-            padding-bottom: 4px !important;
-        }
+    .v-chip {
+      height: auto !important;
+      min-height: 32px !important;
+      padding-top: 4px !important;
+      padding-bottom: 4px !important;
+    }
 
-        .v-text-field input,
-        .v-text-field textarea {
-            padding-top: 8px !important;
-            padding-bottom: 8px !important;
-            line-height: 1.8 !important;
-        }
+    .v-text-field input,
+    .v-text-field textarea {
+      padding-top: 8px !important;
+      padding-bottom: 8px !important;
+      line-height: 1.8 !important;
+    }
 
-        /* ========================================
+    /* ========================================
          APPROVE/REJECT BUTTONS FOR REVIEWERS
          ======================================== */
-        .monlam-review-container {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            justify-content: center;
-            margin: 16px 0;
-            padding: 12px;
-            background: #f5f5f5;
-            border-radius: 8px;
-        }
+    .monlam-review-container {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: flex-start;
+      margin: 16px 0;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
 
-        .monlam-approve-btn {
-            background-color: #4caf50 !important;
-            color: white !important;
-            padding: 10px 24px !important;
-            border: none !important;
-            border-radius: 6px !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            cursor: pointer !important;
-            transition: all 0.2s ease !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-        }
+    .monlam-approve-btn {
+      background-color: #4caf50 !important;
+      color: white !important;
+      padding: 10px 24px !important;
+      border: none !important;
+      border-radius: 6px !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      cursor: pointer !important;
+      transition: all 0.2s ease !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+    }
 
-        .monlam-approve-btn:hover {
-            background-color: #388e3c !important;
-            transform: scale(1.02) !important;
-        }
+    .monlam-approve-btn:hover {
+      background-color: #388e3c !important;
+      transform: scale(1.02) !important;
+    }
 
-        .monlam-reject-btn {
-            background-color: #f44336 !important;
-            color: white !important;
-            padding: 10px 24px !important;
-            border: none !important;
-            border-radius: 6px !important;
-            font-size: 16px !important;
-            font-weight: 600 !important;
-            cursor: pointer !important;
-            transition: all 0.2s ease !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 8px !important;
-        }
+    .monlam-reject-btn {
+      background-color: #f44336 !important;
+      color: white !important;
+      padding: 10px 24px !important;
+      border: none !important;
+      border-radius: 6px !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      cursor: pointer !important;
+      transition: all 0.2s ease !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+    }
 
-        .monlam-reject-btn:hover {
-            background-color: #c62828 !important;
-            transform: scale(1.02) !important;
-        }
+    .monlam-reject-btn:hover {
+      background-color: #c62828 !important;
+      transform: scale(1.02) !important;
+    }
 
-        .monlam-review-status {
-            font-size: 14px !important;
-            padding: 6px 12px !important;
-            border-radius: 4px !important;
-            font-weight: 500 !important;
-        }
+    .monlam-review-status {
+      font-size: 14px !important;
+      padding: 6px 12px !important;
+      border-radius: 4px !important;
+      font-weight: 500 !important;
+    }
 
-        .monlam-status-approved {
-            background-color: #e8f5e9 !important;
-            color: #2e7d32 !important;
-            border: 1px solid #4caf50 !important;
-        }
+    .monlam-status-approved {
+      background-color: #e8f5e9 !important;
+      color: #2e7d32 !important;
+      border: 1px solid #4caf50 !important;
+    }
 
-        .monlam-status-rejected {
-            background-color: #ffebee !important;
-            color: #c62828 !important;
-            border: 1px solid #f44336 !important;
-        }
+    .monlam-status-rejected {
+      background-color: #ffebee !important;
+      color: #c62828 !important;
+      border: 1px solid #f44336 !important;
+    }
 
-        .monlam-status-pending {
-            background-color: #fff3e0 !important;
-            color: #e65100 !important;
-            border: 1px solid #ff9800 !important;
-        }
+    .monlam-status-pending {
+      background-color: #fff3e0 !important;
+      color: #e65100 !important;
+      border: 1px solid #ff9800 !important;
+    }
 
-        .monlam-review-notes {
-            width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            margin-top: 8px;
-        }
+    .monlam-review-notes {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-top: 8px;
+    }
 
-        .monlam-review-notes:focus {
-            outline: none;
-            border-color: var(--monlam-gold);
-        }
-    </style>
+    .monlam-review-notes:focus {
+      outline: none;
+      border-color: var(--monlam-gold);
+    }
+  </style>
 </head>
 
 <body>
-    <div id="__nuxt">
-        <style>
-            #nuxt-loading {
-                background: #fff;
-                visibility: hidden;
-                opacity: 0;
-                position: absolute;
-                left: 0;
-                right: 0;
-                top: 0;
-                bottom: 0;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                flex-direction: column;
-                animation: nuxtLoadingIn 10s ease;
-                -webkit-animation: nuxtLoadingIn 10s ease;
-                animation-fill-mode: forwards;
-                overflow: hidden
-            }
+  <div id="__nuxt">
+    <style>
+      #nuxt-loading {
+        background: #fff;
+        visibility: hidden;
+        opacity: 0;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        animation: nuxtLoadingIn 10s ease;
+        -webkit-animation: nuxtLoadingIn 10s ease;
+        animation-fill-mode: forwards;
+        overflow: hidden
+      }
 
-            @keyframes nuxtLoadingIn {
-                0% {
-                    visibility: hidden;
-                    opacity: 0
-                }
+      @keyframes nuxtLoadingIn {
+        0% {
+          visibility: hidden;
+          opacity: 0
+        }
 
-                20% {
-                    visibility: visible;
-                    opacity: 0
-                }
+        20% {
+          visibility: visible;
+          opacity: 0
+        }
 
-                100% {
-                    visibility: visible;
-                    opacity: 1
-                }
-            }
+        100% {
+          visibility: visible;
+          opacity: 1
+        }
+      }
 
-            @-webkit-keyframes nuxtLoadingIn {
-                0% {
-                    visibility: hidden;
-                    opacity: 0
-                }
+      @-webkit-keyframes nuxtLoadingIn {
+        0% {
+          visibility: hidden;
+          opacity: 0
+        }
 
-                20% {
-                    visibility: visible;
-                    opacity: 0
-                }
+        20% {
+          visibility: visible;
+          opacity: 0
+        }
 
-                100% {
-                    visibility: visible;
-                    opacity: 1
-                }
-            }
+        100% {
+          visibility: visible;
+          opacity: 1
+        }
+      }
 
-            #nuxt-loading>div,
-            #nuxt-loading>div:after {
-                border-radius: 50%;
-                width: 5rem;
-                height: 5rem
-            }
+      #nuxt-loading>div,
+      #nuxt-loading>div:after {
+        border-radius: 50%;
+        width: 5rem;
+        height: 5rem
+      }
 
-            #nuxt-loading>div {
-                font-size: 10px;
-                position: relative;
-                text-indent: -9999em;
-                border: .5rem solid #f5f5f5;
-                border-left: .5rem solid #B8963E;
-                -webkit-transform: translateZ(0);
-                -ms-transform: translateZ(0);
-                transform: translateZ(0);
-                -webkit-animation: nuxtLoading 1.1s infinite linear;
-                animation: nuxtLoading 1.1s infinite linear
-            }
+      #nuxt-loading>div {
+        font-size: 10px;
+        position: relative;
+        text-indent: -9999em;
+        border: .5rem solid #f5f5f5;
+        border-left: .5rem solid #B8963E;
+        -webkit-transform: translateZ(0);
+        -ms-transform: translateZ(0);
+        transform: translateZ(0);
+        -webkit-animation: nuxtLoading 1.1s infinite linear;
+        animation: nuxtLoading 1.1s infinite linear
+      }
 
-            #nuxt-loading.error>div {
-                border-left: .5rem solid #ff4500;
-                animation-duration: 5s
-            }
+      #nuxt-loading.error>div {
+        border-left: .5rem solid #ff4500;
+        animation-duration: 5s
+      }
 
-            @-webkit-keyframes nuxtLoading {
-                0% {
-                    -webkit-transform: rotate(0);
-                    transform: rotate(0)
-                }
+      @-webkit-keyframes nuxtLoading {
+        0% {
+          -webkit-transform: rotate(0);
+          transform: rotate(0)
+        }
 
-                100% {
-                    -webkit-transform: rotate(360deg);
-                    transform: rotate(360deg)
-                }
-            }
+        100% {
+          -webkit-transform: rotate(360deg);
+          transform: rotate(360deg)
+        }
+      }
 
-            @keyframes nuxtLoading {
-                0% {
-                    -webkit-transform: rotate(0);
-                    transform: rotate(0)
-                }
+      @keyframes nuxtLoading {
+        0% {
+          -webkit-transform: rotate(0);
+          transform: rotate(0)
+        }
 
-                100% {
-                    -webkit-transform: rotate(360deg);
-                    transform: rotate(360deg)
-                }
-            }
-        </style>
-        <script>window.addEventListener("error", function () { var e = document.getElementById("nuxt-loading"); e && (e.className += " error") })</script>
-        <div id="nuxt-loading" aria-live="polite" role="status">
-            <div>Loading...</div>
-        </div>
+        100% {
+          -webkit-transform: rotate(360deg);
+          transform: rotate(360deg)
+        }
+      }
+    </style>
+    <script>window.addEventListener("error", function () { var e = document.getElementById("nuxt-loading"); e && (e.className += " error") })</script>
+    <div id="nuxt-loading" aria-live="polite" role="status">
+      <div>Loading...</div>
     </div>
-    <script>window.__NUXT__ = { config: { _app: { basePath: "/", assetsPath: "/static/_nuxt/", cdnURL: null } } }</script>
-    <script>
-        // Tibetan translations for Monlam Tools (Doccano)
-        const translations = {
-            // Home page
-            'Text Annotation for Humans': 'ཞུ་དག་བྱ་ཡུལ།',
-            'Get Started': 'འགོ་བརྩམས།',
-            'GET STARTED': 'འགོ་བརྩམས།',
-            'The best features': 'དམིགས་བསལ་ཁྱད་ཆོས།',
-            'Team Collaboration': 'ཚོགས་པའི་མཉམ་ལས།',
-            'Annotation with your team mates': 'ཁྱོད་ཀྱི་ལས་རོགས་དང་མཉམ་དུ་མཆན་འགོད།',
-            'Any Language': 'སྐད་རིགས་གང་ཡང་།',
-            'Annotation with any language': 'སྐད་རིགས་གང་ཡང་རུང་བའི་མཆན་འགོད།',
-            'Open Source': 'ལས་སླ་པོ།',
-            'Annotation that is free and customizable': 'རིན་མེད་དང་རང་མོས་བཟོ་བཅོས་བྱེད་རུང་བའི་མཆན་འགོད།',
-            'Realize your ideas quickly': 'ཁྱོད་ཀྱི་བསམ་བློ་མགྱོགས་པོར་དངོས་སུ་སྒྲུབ།',
-            'Try Demo': 'ཚོད་ལྟ་བྱེད།',
-            'TRY DEMO': 'ཚོད་ལྟ་བྱེད།',
+  </div>
+  <script>window.__NUXT__ = { config: { _app: { basePath: "/", assetsPath: "/static/_nuxt/", cdnURL: null } } }</script>
+  <script>
+    // Tibetan translations for Monlam Tools (Doccano)
+    const translations = {
+      // Home page
+      'Text Annotation for Humans': 'ཞུ་དག་བྱ་ཡུལ།',
+      'Get Started': 'འགོ་བརྩམས།',
+      'GET STARTED': 'འགོ་བརྩམས།',
+      'The best features': 'དམིགས་བསལ་ཁྱད་ཆོས།',
+      'Team Collaboration': 'ཚོགས་པའི་མཉམ་ལས།',
+      'Annotation with your team mates': 'ཁྱོད་ཀྱི་ལས་རོགས་དང་མཉམ་དུ་མཆན་འགོད།',
+      'Any Language': 'སྐད་རིགས་གང་ཡང་།',
+      'Annotation with any language': 'སྐད་རིགས་གང་ཡང་རུང་བའི་མཆན་འགོད།',
+      'Open Source': 'ལས་སླ་པོ།',
+      'Annotation that is free and customizable': 'རིན་མེད་དང་རང་མོས་བཟོ་བཅོས་བྱེད་རུང་བའི་མཆན་འགོད།',
+      'Realize your ideas quickly': 'ཁྱོད་ཀྱི་བསམ་བློ་མགྱོགས་པོར་དངོས་སུ་སྒྲུབ།',
+      'Try Demo': 'ཚོད་ལྟ་བྱེད།',
+      'TRY DEMO': 'ཚོད་ལྟ་བྱེད།',
 
-            // Navigation
-            'Login': 'ནང་འཛུལ།',
-            'LOGIN': 'ནང་འཛུལ།',
-            'Sign Out': 'ཕྱིར་འཐོན།',
-            'Projects': 'ལས་གཞི།',
-            'PROJECTS': 'ལས་གཞི།',
+      // Navigation
+      'Login': 'ནང་འཛུལ།',
+      'LOGIN': 'ནང་འཛུལ།',
+      'Sign Out': 'ཕྱིར་འཐོན།',
+      'Projects': 'ལས་གཞི།',
+      'PROJECTS': 'ལས་གཞི།',
 
-            // Project home
-            'Home': 'མདུན་ངོས།',
-            'Welcome to Doccano!': 'སྐུ་ཁམས་བཟང་།',
-            'Welcome to Monlam Tools!': 'སྐུ་ཁམས་བཟང་།',
-            'Import a dataset': 'གཞི་གྲངས་ནང་འདྲེན།',
-            'Create labels for this project': 'ལས་གཞི་འདིའི་ཆེད་ཁ་བྱང་གསར་བཟོ།',
-            'Add members for collaborative work': 'མཉམ་ལས་ཀྱི་ཆེད་ཚོགས་མི་སྣོན་པ།',
-            'Define a guideline for the work': 'ལས་ཀའི་ལམ་སྟོན་གཏན་འཁེལ།',
-            'Annotate the dataset': 'གཞི་གྲངས་ལ་མཆན་འགོད།',
-            'View statistics': 'ཚད་གཞི་ལྟ་བ།',
-            'Export the dataset': 'གཞི་གྲངས་ཕྱིར་འདྲེན།',
+      // Project home
+      'Home': 'མདུན་ངོས།',
+      'Welcome to Doccano!': 'སྐུ་ཁམས་བཟང་།',
+      'Welcome to Monlam Tools!': 'སྐུ་ཁམས་བཟང་།',
+      'Import a dataset': 'གཞི་གྲངས་ནང་འདྲེན།',
+      'Create labels for this project': 'ལས་གཞི་འདིའི་ཆེད་ཁ་བྱང་གསར་བཟོ།',
+      'Add members for collaborative work': 'མཉམ་ལས་ཀྱི་ཆེད་ཚོགས་མི་སྣོན་པ།',
+      'Define a guideline for the work': 'ལས་ཀའི་ལམ་སྟོན་གཏན་འཁེལ།',
+      'Annotate the dataset': 'གཞི་གྲངས་ལ་མཆན་འགོད།',
+      'View statistics': 'ཚད་གཞི་ལྟ་བ།',
+      'Export the dataset': 'གཞི་གྲངས་ཕྱིར་འདྲེན།',
 
-            // Common
-            'Save': 'ཉར་ཚགས།',
-            'Edit': 'རྩོམ་སྒྲིག',
-            'Create': 'གསར་བཟོ།',
-            'Cancel': 'འདོར་བ།',
-            'Close': 'སྒོ་རྒྱག',
-            'Delete': 'བསུབ་པ།',
-            'Search': 'བཙལ་ཞིབ།',
-            'Import': 'ནང་འདྲེན།',
-            'Export': 'ཕྱིར་འདྲེན།',
-            'Add': 'སྣོན་པ།',
-            'Upload': 'སྐྱེལ་འཇུག',
-            'Yes': 'ཡིན།',
-            'No': 'མིན།',
-            'Loading...': 'སྣན་བཞིན་པ།...',
-            'Loading... Please wait': 'སྣན་བཞིན་པ། སྒུག་རོགས།',
+      // Common
+      'Save': 'ཉར་ཚགས།',
+      'Edit': 'རྩོམ་སྒྲིག',
+      'Create': 'གསར་བཟོ།',
+      'Cancel': 'འདོར་བ།',
+      'Close': 'སྒོ་རྒྱག',
+      'Delete': 'བསུབ་པ།',
+      'Search': 'བཙལ་ཞིབ།',
+      'Import': 'ནང་འདྲེན།',
+      'Export': 'ཕྱིར་འདྲེན།',
+      'Add': 'སྣོན་པ།',
+      'Upload': 'སྐྱེལ་འཇུག',
+      'Yes': 'ཡིན།',
+      'No': 'མིན།',
+      'Loading...': 'སྣན་བཞིན་པ།...',
+      'Loading... Please wait': 'སྣན་བཞིན་པ། སྒུག་རོགས།',
 
-            // Labels/Annotation
-            'Labels': 'ཁ་བྱང་།',
-            'Dataset': 'གཞི་གྲངས།',
-            'Members': 'ཚོགས་མི།',
-            'Guideline': 'ལམ་སྟོན།',
-            'Statistics': 'ཚད་གཞི།',
-            'Metrics': 'ཚད་གཞི།',
-            'Settings': 'སྒྲིག་འགོད།',
-            'Comments': 'མཆན།',
+      // Labels/Annotation
+      'Labels': 'ཁ་བྱང་།',
+      'Dataset': 'གཞི་གྲངས།',
+      'Members': 'ཚོགས་མི།',
+      'Guideline': 'ལམ་སྟོན།',
+      'Statistics': 'ཚད་གཞི།',
+      'Metrics': 'ཚད་གཞི།',
+      'Settings': 'སྒྲིག་འགོད།',
+      'Comments': 'མཆན།',
 
-            // Demo types
-            'Named Entity Recognition': 'མིང་ཚིག་དབྱེ་འབྱེད།',
-            'Sentiment Analysis': 'སེམས་ཚོར་དབྱེ་ཞིབ།',
-            'Translation': 'ཡིག་སྒྱུར།',
-            'Text to SQL': 'ཡི་གེ་ནས་SQL',
-            'Intent Detection and Slot Filling': 'དམིགས་བསལ་འཚོལ་ཞིབ།',
-            'Image Classification': 'པར་རིས་དབྱེ་འབྱེད།',
-            'Image Captioning': 'པར་རིས་འགྲེལ་བཤད།',
-            'Object Detection': 'དངོས་པོ་འཚོལ་ཞིབ།',
-            'Polygon Segmentation': 'མཐའ་རིས་དབྱེ་བཞག',
-            'Speech to Text': 'སྐད་ཆ་ནས་ཡི་གེ།',
+      // Demo types
+      'Named Entity Recognition': 'མིང་ཚིག་དབྱེ་འབྱེད།',
+      'Sentiment Analysis': 'སེམས་ཚོར་དབྱེ་ཞིབ།',
+      'Translation': 'ཡིག་སྒྱུར།',
+      'Text to SQL': 'ཡི་གེ་ནས་SQL',
+      'Intent Detection and Slot Filling': 'དམིགས་བསལ་འཚོལ་ཞིབ།',
+      'Image Classification': 'པར་རིས་དབྱེ་འབྱེད།',
+      'Image Captioning': 'པར་རིས་འགྲེལ་བཤད།',
+      'Object Detection': 'དངོས་པོ་འཚོལ་ཞིབ།',
+      'Polygon Segmentation': 'མཐའ་རིས་དབྱེ་བཞག',
+      'Speech to Text': 'སྐད་ཆ་ནས་ཡི་གེ།',
 
-            // Project types
-            'Text Classification': 'ཡི་གེ་དབྱེ་འབྱེད།',
-            'Sequence Labeling': 'མཚམས་རིས་ཁ་བྱང་།',
-            'Sequence to sequence': 'མཚམས་ནས་མཚམས།',
+      // Project types
+      'Text Classification': 'ཡི་གེ་དབྱེ་འབྱེད།',
+      'Sequence Labeling': 'མཚམས་རིས་ཁ་བྱང་།',
+      'Sequence to sequence': 'མཚམས་ནས་མཚམས།',
 
-            // Doccano branding
-            'doccano': 'Monlam Tools',
-            'Doccano': 'Monlam Tools',
-            'Monlam AI': 'Monlam Tools',
+      // Doccano branding
+      'doccano': 'Monlam Tools',
+      'Doccano': 'Monlam Tools',
+      'Monlam AI': 'Monlam Tools',
 
-            // Copyright - fix year to 2026
-            '© 2025 Monlam Tools': '© 2026 Monlam Tools',
-            '© 2026 Monlam AI': '© 2026 Monlam Tools',
+      // Copyright - fix year to 2026
+      '© 2025 Monlam Tools': '© 2026 Monlam Tools',
+      '© 2026 Monlam AI': '© 2026 Monlam Tools',
 
-        };
+    };
 
-        document.addEventListener('DOMContentLoaded', function () {
-            // Update title
-            document.title = 'Monlam Tools';
+    document.addEventListener('DOMContentLoaded', function () {
+      // Update title
+      document.title = 'Monlam Tools';
 
-            // ========================================
-            // Force Monlam favicon (override any Nuxt.js defaults)
-            // ========================================
-            function setFavicon() {
-                // Remove existing favicons
-                document.querySelectorAll('link[rel*="icon"]').forEach(function (link) {
-                    if (!link.href.includes('favicon.ico') && !link.href.includes('favicon.png')) {
-                        link.remove();
-                    }
-                });
+      // ========================================
+      // Force Monlam favicon (override any Nuxt.js defaults)
+      // ========================================
+      function setFavicon() {
+        // Remove existing favicons
+        document.querySelectorAll('link[rel*="icon"]').forEach(function (link) {
+          if (!link.href.includes('favicon.ico') && !link.href.includes('favicon.png')) {
+            link.remove();
+          }
+        });
 
-                // Ensure our favicon links exist
-                const head = document.head;
-                const existingIco = document.querySelector('link[href="/favicon.ico"]');
-                if (!existingIco) {
-                    const ico = document.createElement('link');
-                    ico.rel = 'icon';
-                    ico.type = 'image/x-icon';
-                    ico.href = '/favicon.ico';
-                    head.appendChild(ico);
-                }
+        // Ensure our favicon links exist
+        const head = document.head;
+        const existingIco = document.querySelector('link[href="/favicon.ico"]');
+        if (!existingIco) {
+          const ico = document.createElement('link');
+          ico.rel = 'icon';
+          ico.type = 'image/x-icon';
+          ico.href = '/favicon.ico';
+          head.appendChild(ico);
+        }
+      }
+      setFavicon();
+
+      function replaceText(element) {
+        // Update title dynamically
+        if (document.title.includes('doccano')) {
+          document.title = 'Monlam Tools';
+        }
+
+        // Walk through all text nodes
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        while (node = walker.nextNode()) {
+          let text = node.nodeValue;
+          let changed = false;
+
+          // Check each translation
+          for (const [eng, tib] of Object.entries(translations)) {
+            if (text.includes(eng)) {
+              text = text.replace(new RegExp(eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), tib);
+              changed = true;
             }
-            setFavicon();
+          }
 
-            function replaceText(element) {
-                // Update title dynamically
-                if (document.title.includes('doccano')) {
-                    document.title = 'Monlam Tools';
-                }
+          if (changed) {
+            node.nodeValue = text;
+          }
+        }
+      }
 
-                // Walk through all text nodes
-                const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
-                let node;
-                while (node = walker.nextNode()) {
-                    let text = node.nodeValue;
-                    let changed = false;
+      // Observe DOM changes
+      const observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          if (mutation.type === 'childList') {
+            mutation.addedNodes.forEach(function (node) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                replaceText(node);
+              }
+            });
+          }
+        });
+      });
 
-                    // Check each translation
-                    for (const [eng, tib] of Object.entries(translations)) {
-                        if (text.includes(eng)) {
-                            text = text.replace(new RegExp(eng.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), tib);
-                            changed = true;
-                        }
-                    }
+      observer.observe(document.body, { childList: true, subtree: true });
 
-                    if (changed) {
-                        node.nodeValue = text;
-                    }
-                }
-            }
+      // Initial replacement
+      replaceText(document.body);
 
-            // Observe DOM changes
-            const observer = new MutationObserver(function (mutations) {
-                mutations.forEach(function (mutation) {
-                    if (mutation.type === 'childList') {
-                        mutation.addedNodes.forEach(function (node) {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                replaceText(node);
-                            }
-                        });
-                    }
-                });
+      // Periodic check
+      setInterval(function () {
+        replaceText(document.body);
+        // Remove GitHub buttons/links
+        document.querySelectorAll('a[href*="github"], button').forEach(function (el) {
+          if (el.textContent.toLowerCase().includes('github')) {
+            el.style.display = 'none';
+          }
+        });
+      }, 1000);
+
+      // ========================================
+      // Review Button Styling: Red O / Green Check
+      // ========================================
+      const CLOSE_PATH = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
+      const CHECK_PATH = "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z";
+      const CIRCLE_PATH = "M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z";
+
+      function styleReviewButtons() {
+        document.querySelectorAll('.v-btn--icon .v-icon svg path').forEach(function (path) {
+          const d = path.getAttribute('d');
+          // X icon -> Red Circle
+          if (d === CLOSE_PATH) {
+            path.setAttribute('d', CIRCLE_PATH);
+            path.style.fill = '#f44336';
+          }
+          // Check icon -> Green
+          else if (d === CHECK_PATH) {
+            path.style.fill = '#4caf50';
+          }
+        });
+      }
+
+      // Run periodically to catch dynamic updates
+      setInterval(styleReviewButtons, 500);
+      styleReviewButtons();
+
+      // ========================================
+      // FORCE MonlamTBslim font - override Vuetify's runtime Roboto injection
+      // ========================================
+      const MONLAM_FONT = "'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+      function forceMonlamFont() {
+        // Override on html and body elements
+        document.documentElement.style.setProperty('font-family', MONLAM_FONT, 'important');
+        document.body.style.setProperty('font-family', MONLAM_FONT, 'important');
+
+        // Override on v-application (Vuetify root)
+        document.querySelectorAll('.v-application').forEach(function (el) {
+          el.style.setProperty('font-family', MONLAM_FONT, 'important');
+        });
+
+        // Override all elements that Vuetify typically styles
+        document.querySelectorAll('h1, h2, h3, h4, h5, h6, .display-1, .display-2, .headline, .title, .subtitle-1, .subtitle-2, .body-1, .body-2, .v-btn, .v-card, .v-list-item, .v-toolbar__title, .v-tab, span, p, div, label, input, textarea').forEach(function (el) {
+          el.style.setProperty('font-family', MONLAM_FONT, 'important');
+          el.style.setProperty('line-height', '1.8', 'important');
+        });
+      }
+
+      // Run immediately and frequently to override Vuetify
+      forceMonlamFont();
+      setInterval(forceMonlamFont, 500);
+
+      // Also run after page fully loads
+      window.addEventListener('load', function () {
+        forceMonlamFont();
+        setTimeout(forceMonlamFont, 100);
+        setTimeout(forceMonlamFont, 500);
+        setTimeout(forceMonlamFont, 1000);
+      });
+
+      // ========================================
+      // APPROVE/REJECT BUTTONS FOR REVIEWERS ONLY
+      // ========================================
+
+      // Check if current user is an approver
+      async function isApprover() {
+        try {
+          // Try to get user info from the page
+          const userInfo = await fetch('/v1/me').then(r => r.ok ? r.json() : null).catch(() => null);
+          if (userInfo && userInfo.username) {
+            // Check if username contains 'approver' or check role
+            return userInfo.username.toLowerCase().includes('approver') ||
+              userInfo.is_staff === true ||
+              (userInfo.groups && userInfo.groups.some(g => g.name && g.name.toLowerCase().includes('approver')));
+          }
+
+          // Fallback: check from page elements
+          const userMenu = document.querySelector('[data-user]') || document.querySelector('.v-menu__content');
+          if (userMenu) {
+            const username = userMenu.textContent || '';
+            return username.toLowerCase().includes('approver');
+          }
+
+          // Check URL or localStorage for user info
+          const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+          if (storedUser) {
+            try {
+              const user = JSON.parse(storedUser);
+              return user.username && user.username.toLowerCase().includes('approver');
+            } catch (e) { }
+          }
+
+          return false;
+        } catch (e) {
+          console.error('Error checking approver status:', e);
+          return false;
+        }
+      }
+
+      // Get project ID from URL
+      function getProjectId() {
+        const match = window.location.pathname.match(/\/projects\/(\d+)/);
+        return match ? match[1] : null;
+      }
+
+      // Get CSRF token
+      function getCSRFToken() {
+        const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+        return cookie ? cookie.split('=')[1] : '';
+      }
+
+      // API call to approve/reject - simplified, no complex ID detection
+      async function reviewExample(action, notes = '') {
+        const projectId = getProjectId();
+        const container = document.querySelector('.monlam-review-container');
+        const exampleId = container ? container.dataset.exampleId : null;
+
+        if (!projectId) {
+          showNotification('Cannot determine project ID.', 'error');
+          return;
+        }
+
+        if (!exampleId) {
+          showNotification('Cannot determine example ID. Please refresh the page.', 'error');
+          return;
+        }
+
+        return reviewExampleById(projectId, exampleId, action, notes);
+      }
+
+      async function reviewExampleById(projectId, exampleId, action, notes = '') {
+        try {
+          // Use Doccano's comment endpoint to record review
+          const commentResponse = await fetch(`/v1/projects/${projectId}/comments`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCSRFToken()
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              example: parseInt(exampleId),
+              text: `[REVIEW:${action.toUpperCase()}] ${notes || (action === 'approve' ? 'Approved' : 'Rejected - Please revise')}`
+            })
+          });
+
+          if (!commentResponse.ok) {
+            const errorData = await commentResponse.text();
+            throw new Error(`Comment API failed: ${errorData}`);
+          }
+
+          // For approval, also confirm the example state
+          if (action === 'approve') {
+            const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+              },
+              credentials: 'same-origin'
             });
 
-            observer.observe(document.body, { childList: true, subtree: true });
-
-            // Initial replacement
-            replaceText(document.body);
-
-            // Periodic check
-            setInterval(function () {
-                replaceText(document.body);
-                // Remove GitHub buttons/links
-                document.querySelectorAll('a[href*="github"], button').forEach(function (el) {
-                    if (el.textContent.toLowerCase().includes('github')) {
-                        el.style.display = 'none';
-                    }
-                });
-            }, 1000);
-
-            // ========================================
-            // Review Button Styling: Red O / Green Check
-            // ========================================
-            const CLOSE_PATH = "M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z";
-            const CHECK_PATH = "M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z";
-            const CIRCLE_PATH = "M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z";
-
-            function styleReviewButtons() {
-                document.querySelectorAll('.v-btn--icon .v-icon svg path').forEach(function (path) {
-                    const d = path.getAttribute('d');
-                    // X icon -> Red Circle
-                    if (d === CLOSE_PATH) {
-                        path.setAttribute('d', CIRCLE_PATH);
-                        path.style.fill = '#f44336';
-                    }
-                    // Check icon -> Green
-                    else if (d === CHECK_PATH) {
-                        path.style.fill = '#4caf50';
-                    }
-                });
+            if (!stateResponse.ok) {
+              console.warn('State confirmation failed, but comment was saved');
             }
-
-            // Run periodically to catch dynamic updates
-            setInterval(styleReviewButtons, 500);
-            styleReviewButtons();
-
-            // ========================================
-            // FORCE MonlamTBslim font - override Vuetify's runtime Roboto injection
-            // ========================================
-            const MONLAM_FONT = "'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-
-            function forceMonlamFont() {
-                // Override on html and body elements
-                document.documentElement.style.setProperty('font-family', MONLAM_FONT, 'important');
-                document.body.style.setProperty('font-family', MONLAM_FONT, 'important');
-
-                // Override on v-application (Vuetify root)
-                document.querySelectorAll('.v-application').forEach(function (el) {
-                    el.style.setProperty('font-family', MONLAM_FONT, 'important');
-                });
-
-                // Override all elements that Vuetify typically styles
-                document.querySelectorAll('h1, h2, h3, h4, h5, h6, .display-1, .display-2, .headline, .title, .subtitle-1, .subtitle-2, .body-1, .body-2, .v-btn, .v-card, .v-list-item, .v-toolbar__title, .v-tab, span, p, div, label, input, textarea').forEach(function (el) {
-                    el.style.setProperty('font-family', MONLAM_FONT, 'important');
-                    el.style.setProperty('line-height', '1.8', 'important');
-                });
-            }
-
-            // Run immediately and frequently to override Vuetify
-            forceMonlamFont();
-            setInterval(forceMonlamFont, 500);
-
-            // Also run after page fully loads
-            window.addEventListener('load', function () {
-                forceMonlamFont();
-                setTimeout(forceMonlamFont, 100);
-                setTimeout(forceMonlamFont, 500);
-                setTimeout(forceMonlamFont, 1000);
+          } else {
+            // For rejection, remove confirmation state
+            const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
+              method: 'DELETE',
+              headers: {
+                'X-CSRFToken': getCSRFToken()
+              },
+              credentials: 'same-origin'
             });
+          }
 
-            // ========================================
-            // APPROVE/REJECT BUTTONS FOR REVIEWERS ONLY
-            // ========================================
+          // Update UI
+          updateReviewStatus(action, notes);
+          showNotification(`${action === 'approve' ? '✅ Approved' : '❌ Rejected'} successfully!`, action === 'approve' ? 'success' : 'warning');
 
-            // Check if current user is an approver
-            async function isApprover() {
-                try {
-                    // Try to get user info from the page
-                    const userInfo = await fetch('/v1/me').then(r => r.ok ? r.json() : null).catch(() => null);
-                    if (userInfo && userInfo.username) {
-                        // Check if username contains 'approver' or check role
-                        return userInfo.username.toLowerCase().includes('approver') ||
-                            userInfo.is_staff === true ||
-                            (userInfo.groups && userInfo.groups.some(g => g.name && g.name.toLowerCase().includes('approver')));
-                    }
+          // Reload page after a short delay to show updated state
+          setTimeout(() => {
+            window.location.reload();
+          }, 1500);
 
-                    // Fallback: check from page elements
-                    const userMenu = document.querySelector('[data-user]') || document.querySelector('.v-menu__content');
-                    if (userMenu) {
-                        const username = userMenu.textContent || '';
-                        return username.toLowerCase().includes('approver');
-                    }
+        } catch (error) {
+          console.error('Review error:', error);
+          showNotification(`Failed to save review: ${error.message}`, 'error');
+        }
+      }
 
-                    // Check URL or localStorage for user info
-                    const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
-                    if (storedUser) {
-                        try {
-                            const user = JSON.parse(storedUser);
-                            return user.username && user.username.toLowerCase().includes('approver');
-                        } catch (e) { }
-                    }
-
-                    return false;
-                } catch (e) {
-                    console.error('Error checking approver status:', e);
-                    return false;
-                }
-            }
-
-            // Get project ID from URL
-            function getProjectId() {
-                const match = window.location.pathname.match(/\/projects\/(\d+)/);
-                return match ? match[1] : null;
-            }
-
-            // Get CSRF token
-            function getCSRFToken() {
-                const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
-                return cookie ? cookie.split('=')[1] : '';
-            }
-
-            // API call to approve/reject - simplified, no complex ID detection
-            async function reviewExample(action, notes = '') {
-                const projectId = getProjectId();
-                const container = document.querySelector('.monlam-review-container');
-                const exampleId = container ? container.dataset.exampleId : null;
-
-                if (!projectId) {
-                    showNotification('Cannot determine project ID.', 'error');
-                    return;
-                }
-
-                if (!exampleId) {
-                    showNotification('Cannot determine example ID. Please refresh the page.', 'error');
-                    return;
-                }
-
-                return reviewExampleById(projectId, exampleId, action, notes);
-            }
-
-            async function reviewExampleById(projectId, exampleId, action, notes = '') {
-                try {
-                    // Use Doccano's comment endpoint to record review
-                    const commentResponse = await fetch(`/v1/projects/${projectId}/comments`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': getCSRFToken()
-                        },
-                        credentials: 'same-origin',
-                        body: JSON.stringify({
-                            example: parseInt(exampleId),
-                            text: `[REVIEW:${action.toUpperCase()}] ${notes || (action === 'approve' ? 'Approved' : 'Rejected - Please revise')}`
-                        })
-                    });
-
-                    if (!commentResponse.ok) {
-                        const errorData = await commentResponse.text();
-                        throw new Error(`Comment API failed: ${errorData}`);
-                    }
-
-                    // For approval, also confirm the example state
-                    if (action === 'approve') {
-                        const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': getCSRFToken()
-                            },
-                            credentials: 'same-origin'
-                        });
-
-                        if (!stateResponse.ok) {
-                            console.warn('State confirmation failed, but comment was saved');
-                        }
-                    } else {
-                        // For rejection, remove confirmation state
-                        const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRFToken': getCSRFToken()
-                            },
-                            credentials: 'same-origin'
-                        });
-                    }
-
-                    // Update UI
-                    updateReviewStatus(action, notes);
-                    showNotification(`${action === 'approve' ? '✅ Approved' : '❌ Rejected'} successfully!`, action === 'approve' ? 'success' : 'warning');
-
-                    // Reload page after a short delay to show updated state
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1500);
-
-                } catch (error) {
-                    console.error('Review error:', error);
-                    showNotification(`Failed to save review: ${error.message}`, 'error');
-                }
-            }
-
-            function showNotification(message, type) {
-                const notif = document.createElement('div');
-                notif.style.cssText = `
+      function showNotification(message, type) {
+        const notif = document.createElement('div');
+        notif.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
@@ -751,75 +753,89 @@
             animation: slideIn 0.3s ease;
             ${type === 'success' ? 'background: #4caf50;' : type === 'warning' ? 'background: #ff9800;' : 'background: #f44336;'}
           `;
-                notif.textContent = message;
-                document.body.appendChild(notif);
+        notif.textContent = message;
+        document.body.appendChild(notif);
 
-                setTimeout(() => notif.remove(), 3000);
+        setTimeout(() => notif.remove(), 3000);
+      }
+
+      function updateReviewStatus(action, notes) {
+        const container = document.querySelector('.monlam-review-container');
+        if (container) {
+          const statusEl = container.querySelector('.monlam-review-status');
+          if (statusEl) {
+            statusEl.className = `monlam-review-status ${action === 'approve' ? 'monlam-status-approved' : 'monlam-status-rejected'}`;
+            statusEl.textContent = action === 'approve' ? '✅ Approved' : '❌ Rejected';
+          }
+        }
+      }
+
+      // Inject review buttons into annotation page (APPROVERS ONLY)
+      let approverCheckDone = false;
+      let isUserApprover = false;
+
+      async function injectReviewButtons() {
+        // Only inject on annotation pages
+        if (!window.location.pathname.includes('/projects/')) return;
+        if (window.location.pathname.includes('/dataset')) return;
+        if (window.location.pathname.includes('/labels')) return;
+        if (window.location.pathname.includes('/members')) return;
+        if (window.location.pathname.includes('/settings')) return;
+
+        // Check if buttons already exist
+        if (document.querySelector('.monlam-review-container')) return;
+
+        // Check user role (only once, cache result)
+        if (!approverCheckDone) {
+          isUserApprover = await isApprover();
+          approverCheckDone = true;
+
+          // Reset check when navigating to new page
+          const currentPath = window.location.pathname;
+          setTimeout(() => {
+            if (window.location.pathname !== currentPath) {
+              approverCheckDone = false;
             }
+          }, 2000);
+        }
 
-            function updateReviewStatus(action, notes) {
-                const container = document.querySelector('.monlam-review-container');
-                if (container) {
-                    const statusEl = container.querySelector('.monlam-review-status');
-                    if (statusEl) {
-                        statusEl.className = `monlam-review-status ${action === 'approve' ? 'monlam-status-approved' : 'monlam-status-rejected'}`;
-                        statusEl.textContent = action === 'approve' ? '✅ Approved' : '❌ Rejected';
-                    }
-                }
-            }
+        // Only show buttons for approvers
+        if (!isUserApprover) {
+          return;
+        }
 
-            // Inject review buttons into annotation page (APPROVERS ONLY)
-            let approverCheckDone = false;
-            let isUserApprover = false;
+        // Find the textarea/text input area (transcription field)
+        // Look for textarea elements used for transcription
+        const textarea = document.querySelector('textarea.v-textarea__control') ||
+          document.querySelector('textarea[placeholder*="text"]') ||
+          document.querySelector('textarea[placeholder*="Text"]') ||
+          document.querySelector('.v-textarea textarea') ||
+          document.querySelector('textarea');
+        
+        // Find the parent container of the textarea
+        let targetParent = null;
+        if (textarea) {
+          // Find the closest parent that's a card or form container
+          targetParent = textarea.closest('.v-card') ||
+                        textarea.closest('.v-textarea') ||
+                        textarea.closest('.v-input') ||
+                        textarea.closest('[class*="text"]') ||
+                        textarea.parentElement;
+        }
+        
+        // Fallback: find main content area
+        if (!targetParent) {
+          targetParent = document.querySelector('.v-main__wrap') ||
+                        document.querySelector('.v-card') ||
+                        document.querySelector('[class*="annotation"]');
+        }
+        
+        if (!targetParent) return;
 
-            async function injectReviewButtons() {
-                // Only inject on annotation pages
-                if (!window.location.pathname.includes('/projects/')) return;
-                if (window.location.pathname.includes('/dataset')) return;
-                if (window.location.pathname.includes('/labels')) return;
-                if (window.location.pathname.includes('/members')) return;
-                if (window.location.pathname.includes('/settings')) return;
-
-                // Check if buttons already exist
-                if (document.querySelector('.monlam-review-container')) return;
-
-                // Check user role (only once, cache result)
-                if (!approverCheckDone) {
-                    isUserApprover = await isApprover();
-                    approverCheckDone = true;
-
-                    // Reset check when navigating to new page
-                    const currentPath = window.location.pathname;
-                    setTimeout(() => {
-                        if (window.location.pathname !== currentPath) {
-                            approverCheckDone = false;
-                        }
-                    }, 2000);
-                }
-
-                // Only show buttons for approvers
-                if (!isUserApprover) {
-                    return;
-                }
-
-                // Find the annotation toolbar/card area
-                const toolbar = document.querySelector('.v-card__actions') ||
-                    document.querySelector('.v-toolbar__items') ||
-                    document.querySelector('.v-footer') ||
-                    document.querySelector('.v-card__text');
-
-                // Or find the main content area for STT
-                const mainContent = document.querySelector('.v-main__wrap') ||
-                    document.querySelector('.v-card') ||
-                    document.querySelector('[class*="annotation"]') ||
-                    document.querySelector('[class*="speech"]');
-
-                if (!mainContent && !toolbar) return;
-
-                // Create review container (example ID will be set when needed)
-                const container = document.createElement('div');
-                container.className = 'monlam-review-container';
-                container.innerHTML = `
+        // Create review container (example ID will be set when needed)
+        const container = document.createElement('div');
+        container.className = 'monlam-review-container';
+        container.innerHTML = `
             <span class="monlam-review-status monlam-status-pending">📋 Pending Review</span>
             <input type="text" class="monlam-review-notes" placeholder="Review notes (optional)..." />
             <button class="monlam-approve-btn" onclick="window.monlamApprove()">
@@ -830,46 +846,46 @@
             </button>
           `;
 
-                // Insert at appropriate location
-                if (toolbar) {
-                    // Insert after toolbar
-                    toolbar.parentNode.insertBefore(container, toolbar.nextSibling);
-                } else if (mainContent) {
-                    // Find the annotation content area or append to main content
-                    const annotationArea = mainContent.querySelector('.v-card') ||
-                        mainContent.querySelector('.v-card__text') ||
-                        mainContent;
-                    if (annotationArea) {
-                        annotationArea.appendChild(container);
-                    }
-                }
-            }
+        // Insert right after the textarea or its parent container
+        if (textarea && textarea.parentElement) {
+          // Insert after the textarea's immediate parent (usually the v-input wrapper)
+          const textareaWrapper = textarea.parentElement;
+          if (textareaWrapper.nextSibling) {
+            textareaWrapper.parentNode.insertBefore(container, textareaWrapper.nextSibling);
+          } else {
+            textareaWrapper.parentNode.appendChild(container);
+          }
+        } else if (targetParent) {
+          // Insert at the end of the target parent
+          targetParent.appendChild(container);
+        }
+      }
 
-            // Global functions for button onclick
-            window.monlamApprove = function () {
-                const notes = document.querySelector('.monlam-review-notes')?.value || '';
-                reviewExample('approve', notes);
-            };
+      // Global functions for button onclick
+      window.monlamApprove = function () {
+        const notes = document.querySelector('.monlam-review-notes')?.value || '';
+        reviewExample('approve', notes);
+      };
 
-            window.monlamReject = function () {
-                const notes = document.querySelector('.monlam-review-notes')?.value || '';
-                reviewExample('reject', notes);
-            };
+      window.monlamReject = function () {
+        const notes = document.querySelector('.monlam-review-notes')?.value || '';
+        reviewExample('reject', notes);
+      };
 
-            // Inject buttons periodically (for SPA navigation)
-            // Check every 2 seconds, but only inject if approver
-            setInterval(injectReviewButtons, 2000);
+      // Inject buttons periodically (for SPA navigation)
+      // Check every 2 seconds, but only inject if approver
+      setInterval(injectReviewButtons, 2000);
 
-            // Initial injection after page load
-            setTimeout(injectReviewButtons, 1000);
-            setTimeout(injectReviewButtons, 3000);
+      // Initial injection after page load
+      setTimeout(injectReviewButtons, 1000);
+      setTimeout(injectReviewButtons, 3000);
 
-        });
-    </script>
-    <script src="/static/_nuxt/08fba5f.js"></script>
-    <script src="/static/_nuxt/132fcbd.js"></script>
-    <script src="/static/_nuxt/50aa8ea.js"></script>
-    <script src="/static/_nuxt/bd0aa1f.js"></script>
+    });
+  </script>
+  <script src="/static/_nuxt/08fba5f.js"></script>
+  <script src="/static/_nuxt/132fcbd.js"></script>
+  <script src="/static/_nuxt/50aa8ea.js"></script>
+  <script src="/static/_nuxt/bd0aa1f.js"></script>
 </body>
 
 </html>

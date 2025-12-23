@@ -171,11 +171,13 @@
       display: flex;
       gap: 12px;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       margin: 16px 0;
       padding: 12px;
       background: #f5f5f5;
       border-radius: 8px;
+      width: 100%;
+      flex-wrap: wrap;
     }
 
     .monlam-approve-btn {
@@ -802,19 +804,33 @@
           return;
         }
 
-        // Find the annotation toolbar/card area
-        const toolbar = document.querySelector('.v-card__actions') ||
-          document.querySelector('.v-toolbar__items') ||
-          document.querySelector('.v-footer') ||
-          document.querySelector('.v-card__text');
-
-        // Or find the main content area for STT
-        const mainContent = document.querySelector('.v-main__wrap') ||
-          document.querySelector('.v-card') ||
-          document.querySelector('[class*="annotation"]') ||
-          document.querySelector('[class*="speech"]');
-
-        if (!mainContent && !toolbar) return;
+        // Find the textarea/text input area (transcription field)
+        // Look for textarea elements used for transcription
+        const textarea = document.querySelector('textarea.v-textarea__control') ||
+          document.querySelector('textarea[placeholder*="text"]') ||
+          document.querySelector('textarea[placeholder*="Text"]') ||
+          document.querySelector('.v-textarea textarea') ||
+          document.querySelector('textarea');
+        
+        // Find the parent container of the textarea
+        let targetParent = null;
+        if (textarea) {
+          // Find the closest parent that's a card or form container
+          targetParent = textarea.closest('.v-card') ||
+                        textarea.closest('.v-textarea') ||
+                        textarea.closest('.v-input') ||
+                        textarea.closest('[class*="text"]') ||
+                        textarea.parentElement;
+        }
+        
+        // Fallback: find main content area
+        if (!targetParent) {
+          targetParent = document.querySelector('.v-main__wrap') ||
+                        document.querySelector('.v-card') ||
+                        document.querySelector('[class*="annotation"]');
+        }
+        
+        if (!targetParent) return;
 
         // Create review container (example ID will be set when needed)
         const container = document.createElement('div');
@@ -830,18 +846,18 @@
             </button>
           `;
 
-        // Insert at appropriate location
-        if (toolbar) {
-          // Insert after toolbar
-          toolbar.parentNode.insertBefore(container, toolbar.nextSibling);
-        } else if (mainContent) {
-          // Find the annotation content area or append to main content
-          const annotationArea = mainContent.querySelector('.v-card') ||
-            mainContent.querySelector('.v-card__text') ||
-            mainContent;
-          if (annotationArea) {
-            annotationArea.appendChild(container);
+        // Insert right after the textarea or its parent container
+        if (textarea && textarea.parentElement) {
+          // Insert after the textarea's immediate parent (usually the v-input wrapper)
+          const textareaWrapper = textarea.parentElement;
+          if (textareaWrapper.nextSibling) {
+            textareaWrapper.parentNode.insertBefore(container, textareaWrapper.nextSibling);
+          } else {
+            textareaWrapper.parentNode.appendChild(container);
           }
+        } else if (targetParent) {
+          // Insert at the end of the target parent
+          targetParent.appendChild(container);
         }
       }
 
