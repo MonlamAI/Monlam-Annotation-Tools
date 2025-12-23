@@ -612,6 +612,51 @@
       // APPROVE/REJECT BUTTONS FOR REVIEWERS ONLY
       // ========================================
 
+      // Lightweight API interceptor - captures example ID from Doccano's API calls
+      // No DOM parsing, just intercepts fetch responses
+      let currentExampleId = null;
+      
+      (function() {
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+          const response = await originalFetch.apply(this, args);
+          
+          // Only intercept relevant API calls (lightweight check)
+          const url = args[0];
+          if (typeof url === 'string' && url.includes('/v1/projects/') && url.includes('/examples/')) {
+            // Clone response to read without consuming
+            try {
+              const clone = response.clone();
+              const contentType = clone.headers.get('content-type');
+              if (contentType && contentType.includes('application/json')) {
+                clone.json().then(data => {
+                  // Extract example ID from API response
+                  if (data && data.id) {
+                    currentExampleId = data.id;
+                    // Store in container if it exists
+                    const container = document.querySelector('.monlam-review-container');
+                    if (container) {
+                      container.dataset.exampleId = data.id;
+                    }
+                  } else if (data && data.results && data.results.length > 0 && data.results[0].id) {
+                    // Handle list responses
+                    currentExampleId = data.results[0].id;
+                    const container = document.querySelector('.monlam-review-container');
+                    if (container) {
+                      container.dataset.exampleId = data.results[0].id;
+                    }
+                  }
+                }).catch(() => {}); // Ignore errors
+              }
+            } catch (e) {
+              // Silently ignore
+            }
+          }
+          
+          return response;
+        };
+      })();
+
       // Check if current user is an approver
       async function isApprover() {
         try {
@@ -659,19 +704,51 @@
         return cookie ? cookie.split('=')[1] : '';
       }
 
-      // API call to approve/reject - simplified, no complex ID detection
+      // API call to approve/reject - uses backend API to get current example
       async function reviewExample(action, notes = '') {
         const projectId = getProjectId();
-        const container = document.querySelector('.monlam-review-container');
-        const exampleId = container ? container.dataset.exampleId : null;
 
         if (!projectId) {
           showNotification('Cannot determine project ID.', 'error');
           return;
         }
 
+        // Use captured example ID from API interceptor (no HTML parsing!)
+        let exampleId = currentExampleId;
+        
+        // Fallback: Check container if API interceptor hasn't captured it yet
         if (!exampleId) {
-          showNotification('Cannot determine example ID. Please refresh the page.', 'error');
+          const container = document.querySelector('.monlam-review-container');
+          if (container && container.dataset.exampleId) {
+            exampleId = container.dataset.exampleId;
+          }
+        }
+        
+        // If still no ID, try to get from Doccano's API (one-time call)
+        if (!exampleId) {
+          try {
+            const examplesResponse = await fetch(`/v1/projects/${projectId}/examples/?limit=1`, {
+              method: 'GET',
+              headers: {
+                'X-CSRFToken': getCSRFToken()
+              },
+              credentials: 'same-origin'
+            });
+            
+            if (examplesResponse.ok) {
+              const examplesData = await examplesResponse.json();
+              if (examplesData.results && examplesData.results.length > 0) {
+                exampleId = examplesData.results[0].id;
+                currentExampleId = exampleId; // Cache it
+              }
+            }
+          } catch (e) {
+            console.debug('Could not fetch example ID from API:', e);
+          }
+        }
+
+        if (!exampleId) {
+          showNotification('Cannot find current example. Please wait for the page to load completely.', 'error');
           return;
         }
 

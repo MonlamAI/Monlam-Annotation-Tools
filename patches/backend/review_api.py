@@ -140,6 +140,63 @@ from django.http import JsonResponse
 import json
 
 
+def get_current_example(request, project_id):
+    """
+    Get the current example ID for the user in a project.
+    Uses Doccano's logic to find the next unconfirmed example.
+    
+    GET /v1/projects/{project_id}/current-example/
+    Returns: {"example_id": 123, "total": 54, "position": 2}
+    """
+    from examples.models import Example, ExampleState
+    from projects.models import Project
+    
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
+    try:
+        project = Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)
+    
+    # Get all examples for this project
+    examples = Example.objects.filter(project=project).order_by('id')
+    total = examples.count()
+    
+    if total == 0:
+        return JsonResponse({'error': 'No examples in project'}, status=404)
+    
+    # Find the first example that:
+    # 1. User hasn't confirmed yet (if collaborative mode)
+    # 2. Or any unconfirmed example
+    if project.collaborative_annotation:
+        # In collaborative mode, find examples user hasn't confirmed
+        confirmed_ids = ExampleState.objects.filter(
+            confirmed_by=request.user
+        ).values_list('example_id', flat=True)
+        current_example = examples.exclude(id__in=confirmed_ids).first()
+    else:
+        # In individual mode, find any unconfirmed example
+        confirmed_ids = ExampleState.objects.filter(
+            example__project=project
+        ).values_list('example_id', flat=True)
+        current_example = examples.exclude(id__in=confirmed_ids).first()
+    
+    # If all are confirmed, return the last one
+    if not current_example:
+        current_example = examples.last()
+    
+    # Calculate position
+    position = list(examples.values_list('id', flat=True)).index(current_example.id) + 1
+    
+    return JsonResponse({
+        'example_id': current_example.id,
+        'total': total,
+        'position': position,
+        'filename': str(current_example.filename) if current_example.filename else None
+    })
+
+
 @csrf_protect
 @require_POST
 def review_example(request, project_id, example_id):
@@ -197,6 +254,86 @@ def review_example(request, project_id, example_id):
         'status': 'success',
         'action': action,
         'example_id': example_id,
+        'reviewed_by': request.user.username
+    })
+
+
+def review_current_example(request, project_id):
+    """
+    Review the current example without needing example_id.
+    Automatically finds the current example for the user.
+    
+    POST /v1/projects/{project_id}/review-current/
+    Body: {"action": "approve" | "reject", "notes": "optional"}
+    """
+    from examples.models import Example, ExampleState, Comment
+    from projects.models import Project
+    
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        action = data.get('action', '').lower()
+        notes = data.get('notes', '')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    
+    if action not in ['approve', 'reject']:
+        return JsonResponse({'error': 'Action must be "approve" or "reject"'}, status=400)
+    
+    try:
+        project = Project.objects.get(pk=project_id)
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)
+    
+    # Get current example using same logic as get_current_example
+    examples = Example.objects.filter(project=project).order_by('id')
+    
+    if project.collaborative_annotation:
+        confirmed_ids = ExampleState.objects.filter(
+            confirmed_by=request.user
+        ).values_list('example_id', flat=True)
+        current_example = examples.exclude(id__in=confirmed_ids).first()
+    else:
+        confirmed_ids = ExampleState.objects.filter(
+            example__project=project
+        ).values_list('example_id', flat=True)
+        current_example = examples.exclude(id__in=confirmed_ids).first()
+    
+    if not current_example:
+        current_example = examples.last()
+    
+    if not current_example:
+        return JsonResponse({'error': 'No examples found'}, status=404)
+    
+    # Now review this example
+    if action == 'approve':
+        current_example.annotations_approved_by = request.user
+        current_example.save(update_fields=['annotations_approved_by'])
+        
+        ExampleState.objects.update_or_create(
+            example=current_example,
+            confirmed_by=request.user,
+            defaults={'confirmed_at': timezone.now()}
+        )
+        review_text = f"[APPROVED] {notes}" if notes else "[APPROVED]"
+    else:
+        current_example.annotations_approved_by = None
+        current_example.save(update_fields=['annotations_approved_by'])
+        ExampleState.objects.filter(example=current_example).delete()
+        review_text = f"[REJECTED] {notes}" if notes else "[REJECTED] Please revise"
+    
+    Comment.objects.create(
+        example=current_example,
+        user=request.user,
+        text=review_text
+    )
+    
+    return JsonResponse({
+        'status': 'success',
+        'action': action,
+        'example_id': current_example.id,
         'reviewed_by': request.user.username
     })
 
