@@ -4,6 +4,7 @@ Patched serializers.py for Doccano with external URL support AND Assignment fiel
 This file replaces /doccano/backend/examples/serializers.py
 - Fixes external URLs (don't prepend /media/)
 - Adds assignment tracking fields
+Based on original Doccano 1.8.4 serializers.py
 """
 
 from rest_framework import serializers
@@ -63,7 +64,10 @@ class ExampleSerializer(serializers.ModelSerializer):
         
         # Default behavior - return the file URL
         if instance.filename:
-            return instance.filename.url
+            try:
+                return instance.filename.url
+            except ValueError:
+                return filename_str
         return None
 
     def get_assigned_to_username(self, instance):
@@ -103,4 +107,3 @@ class ExampleStateSerializer(serializers.ModelSerializer):
         model = ExampleState
         fields = ("id", "example", "confirmed_by", "confirmed_at")
         read_only_fields = ("id", "example", "confirmed_by", "confirmed_at")
-
