@@ -769,14 +769,7 @@
         
         window.monlamReject = function() {
           const notes = document.querySelector('.monlam-review-notes')?.value || '';
-          if (!notes) {
-            const reason = prompt('Please provide a reason for rejection:');
-            if (reason) {
-              reviewExample('reject', reason);
-            }
-          } else {
-            reviewExample('reject', notes);
-          }
+          reviewExample('reject', notes);
         };
         
         // Inject buttons periodically (for SPA navigation)
