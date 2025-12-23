@@ -68,6 +68,7 @@ COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_i
 # - Tibetan translations
 # - Monlam branding colors
 # - Review button styling (Red O / Green Check)
+# - Approve/Reject buttons for reviewers
 # - GitHub button hidden
 COPY patches/frontend/index.html /doccano/backend/client/dist/index.html
 COPY patches/frontend/200.html /doccano/backend/client/dist/200.html
