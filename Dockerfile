@@ -71,8 +71,6 @@ COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_i
 # - GitHub button hidden
 COPY patches/frontend/index.html /doccano/backend/client/dist/index.html
 COPY patches/frontend/200.html /doccano/backend/client/dist/200.html
-# Custom JS logic externalized to prevent freezing
-COPY patches/frontend/monlam-override.js /doccano/backend/client/dist/monlam-override.js
 
 # ============================================
 # DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
@@ -106,8 +104,7 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
-    chown doccano:doccano /doccano/backend/client/dist/200.html && \
-    chown doccano:doccano /doccano/backend/client/dist/monlam-override.js
+    chown doccano:doccano /doccano/backend/client/dist/200.html
 
 USER doccano
 WORKDIR /doccano/backend
