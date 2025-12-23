@@ -8,6 +8,9 @@
 # - JSONL import with external URLs for STT and Image Classification
 # - Pre-filled labels for annotation review workflow
 # - Review button styling (Red O / Green Check)
+# - Task Assignment System (assign examples to annotators)
+# - Review Queue (approvers can approve/reject work)
+# - Annotator restriction (annotators only see assigned items)
 
 FROM doccano/doccano:1.8.4
 
@@ -56,6 +59,31 @@ COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
 
 # ============================================
+# ASSIGNMENT SYSTEM PATCHES
+# ============================================
+
+# Replace models.py with assignment fields (assigned_to, assignment_status, reviewed_by, etc.)
+COPY patches/assignment/models.py /doccano/backend/examples/models.py
+
+# Replace serializers.py with assignment + external URL support
+COPY patches/assignment/serializers_full.py /doccano/backend/examples/serializers.py
+
+# Add assignment API views (bulk assign, auto-assign, review queue, etc.)
+COPY patches/assignment/views_assignment.py /doccano/backend/examples/views_assignment.py
+
+# Add assignment filter mixin (restricts annotators to see only their assigned items)
+COPY patches/assignment/views_filter_patch.py /doccano/backend/examples/views_filter_patch.py
+
+# Add database migration for assignment fields
+COPY patches/assignment/migration_0003_assignment.py /doccano/backend/examples/migrations/0003_assignment_fields.py
+
+# Add URL patcher script (adds assignment routes on startup)
+COPY patches/assignment/patch_urls.py /doccano/backend/patch_urls.py
+
+# Add startup script (runs migrations and patches URLs)
+COPY patches/assignment/startup.sh /doccano/startup.sh
+
+# ============================================
 # FRONTEND PATCHES
 # ============================================
 
@@ -99,7 +127,17 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
-    chown doccano:doccano /doccano/backend/client/dist/200.html
+    chown doccano:doccano /doccano/backend/client/dist/200.html && \
+    chown doccano:doccano /doccano/backend/examples/models.py && \
+    chown doccano:doccano /doccano/backend/examples/views_assignment.py && \
+    chown doccano:doccano /doccano/backend/examples/views_filter_patch.py && \
+    chown doccano:doccano /doccano/backend/examples/migrations/0003_assignment_fields.py && \
+    chown doccano:doccano /doccano/backend/patch_urls.py && \
+    chown doccano:doccano /doccano/startup.sh && \
+    chmod +x /doccano/startup.sh
 
 USER doccano
 WORKDIR /doccano/backend
+
+# Use custom startup script to run migrations before starting server
+ENTRYPOINT ["/doccano/startup.sh"]
