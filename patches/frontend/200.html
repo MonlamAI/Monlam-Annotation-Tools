@@ -615,47 +615,73 @@
       // Lightweight API interceptor - captures example ID from Doccano's API calls
       // No DOM parsing, just intercepts fetch responses
       let currentExampleId = null;
+      let exampleIdAttempts = 0;
       
       (function() {
         const originalFetch = window.fetch;
         window.fetch = async function(...args) {
           const response = await originalFetch.apply(this, args);
           
-          // Only intercept relevant API calls (lightweight check)
-          const url = args[0];
-          if (typeof url === 'string' && url.includes('/v1/projects/') && url.includes('/examples/')) {
+          // Intercept relevant API calls (multiple patterns)
+          const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+          
+          // Check for example-related endpoints
+          if (url.includes('/v1/projects/') && (
+            url.includes('/examples/') || 
+            url.includes('/next') ||
+            url.includes('/texts') ||
+            url.includes('/auto-labeling')
+          )) {
             // Clone response to read without consuming
             try {
               const clone = response.clone();
               const contentType = clone.headers.get('content-type');
               if (contentType && contentType.includes('application/json')) {
                 clone.json().then(data => {
-                  // Extract example ID from API response
-                  if (data && data.id) {
-                    currentExampleId = data.id;
-                    // Store in container if it exists
-                    const container = document.querySelector('.monlam-review-container');
-                    if (container) {
-                      container.dataset.exampleId = data.id;
+                  // Extract example ID from various response formats
+                  if (data) {
+                    // Single example object: {id: 123, ...}
+                    if (data.id && typeof data.id === 'number') {
+                      currentExampleId = data.id;
+                      exampleIdAttempts = 0; // Reset attempts on success
+                      updateExampleIdInContainer(data.id);
+                    } 
+                    // List response: {results: [{id: 123}, ...]}
+                    else if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+                      const firstExample = data.results[0];
+                      if (firstExample && firstExample.id) {
+                        currentExampleId = firstExample.id;
+                        exampleIdAttempts = 0;
+                        updateExampleIdInContainer(firstExample.id);
+                      }
                     }
-                  } else if (data && data.results && data.results.length > 0 && data.results[0].id) {
-                    // Handle list responses
-                    currentExampleId = data.results[0].id;
-                    const container = document.querySelector('.monlam-review-container');
-                    if (container) {
-                      container.dataset.exampleId = data.results[0].id;
+                    // Nested data: {data: {id: 123}}
+                    else if (data.data && data.data.id) {
+                      currentExampleId = data.data.id;
+                      exampleIdAttempts = 0;
+                      updateExampleIdInContainer(data.data.id);
                     }
                   }
-                }).catch(() => {}); // Ignore errors
+                }).catch(() => {}); // Ignore JSON parse errors
               }
             } catch (e) {
-              // Silently ignore
+              // Silently ignore clone errors
             }
           }
           
           return response;
         };
       })();
+      
+      // Helper to update container with example ID
+      function updateExampleIdInContainer(id) {
+        const container = document.querySelector('.monlam-review-container');
+        if (container) {
+          container.dataset.exampleId = id;
+        }
+        // Also store in window for global access
+        window.monlamCurrentExampleId = id;
+      }
 
       // Check if current user is an approver
       async function isApprover() {
@@ -713,10 +739,10 @@
           return;
         }
 
-        // Use captured example ID from API interceptor (no HTML parsing!)
-        let exampleId = currentExampleId;
+        // Strategy 1: Use captured example ID from API interceptor
+        let exampleId = currentExampleId || window.monlamCurrentExampleId;
         
-        // Fallback: Check container if API interceptor hasn't captured it yet
+        // Strategy 2: Check container dataset
         if (!exampleId) {
           const container = document.querySelector('.monlam-review-container');
           if (container && container.dataset.exampleId) {
@@ -724,10 +750,34 @@
           }
         }
         
-        // If still no ID, try to get from Doccano's API (one-time call)
+        // Strategy 3: Try to get from Doccano's "next" endpoint (current example)
         if (!exampleId) {
           try {
-            const examplesResponse = await fetch(`/v1/projects/${projectId}/examples/?limit=1`, {
+            const nextResponse = await fetch(`/v1/projects/${projectId}/examples/next/`, {
+              method: 'GET',
+              headers: {
+                'X-CSRFToken': getCSRFToken()
+              },
+              credentials: 'same-origin'
+            });
+            
+            if (nextResponse.ok) {
+              const nextData = await nextResponse.json();
+              if (nextData && nextData.id) {
+                exampleId = nextData.id;
+                currentExampleId = exampleId;
+                updateExampleIdInContainer(exampleId);
+              }
+            }
+          } catch (e) {
+            console.debug('Next endpoint failed:', e);
+          }
+        }
+        
+        // Strategy 4: Get first unconfirmed example from list
+        if (!exampleId) {
+          try {
+            const examplesResponse = await fetch(`/v1/projects/${projectId}/examples/?limit=10`, {
               method: 'GET',
               headers: {
                 'X-CSRFToken': getCSRFToken()
@@ -738,19 +788,44 @@
             if (examplesResponse.ok) {
               const examplesData = await examplesResponse.json();
               if (examplesData.results && examplesData.results.length > 0) {
-                exampleId = examplesData.results[0].id;
-                currentExampleId = exampleId; // Cache it
+                // Find first unconfirmed example, or use first one
+                const unconfirmed = examplesData.results.find(ex => !ex.is_confirmed) || examplesData.results[0];
+                if (unconfirmed && unconfirmed.id) {
+                  exampleId = unconfirmed.id;
+                  currentExampleId = exampleId;
+                  updateExampleIdInContainer(exampleId);
+                }
               }
             }
           } catch (e) {
-            console.debug('Could not fetch example ID from API:', e);
+            console.debug('Examples list API failed:', e);
+          }
+        }
+        
+        // Strategy 5: Check URL pattern (last resort)
+        if (!exampleId) {
+          const urlMatch = window.location.pathname.match(/\/examples\/(\d+)/) ||
+                          window.location.hash.match(/example[_-]?id[=:](\d+)/i);
+          if (urlMatch) {
+            exampleId = urlMatch[1];
+            currentExampleId = exampleId;
+            updateExampleIdInContainer(exampleId);
           }
         }
 
         if (!exampleId) {
-          showNotification('Cannot find current example. Please wait for the page to load completely.', 'error');
+          exampleIdAttempts++;
+          if (exampleIdAttempts < 3) {
+            // Retry after a short delay (maybe API hasn't loaded yet)
+            setTimeout(() => reviewExample(action, notes), 500);
+            return;
+          }
+          showNotification('Cannot find current example. Please navigate to an example and try again.', 'error');
           return;
         }
+        
+        // Reset attempts on success
+        exampleIdAttempts = 0;
 
         return reviewExampleById(projectId, exampleId, action, notes);
       }
