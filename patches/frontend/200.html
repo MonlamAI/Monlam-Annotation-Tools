@@ -612,94 +612,22 @@
       // APPROVE/REJECT BUTTONS FOR REVIEWERS ONLY
       // ========================================
 
-      // Lightweight API interceptor - captures example ID from Doccano's API calls
-      // No DOM parsing, just intercepts fetch responses
-      let currentExampleId = null;
-      let exampleIdAttempts = 0;
-      
-      (function() {
-        const originalFetch = window.fetch;
-        window.fetch = async function(...args) {
-          const response = await originalFetch.apply(this, args);
-          
-          // Intercept relevant API calls (multiple patterns)
-          const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
-          
-          // Check for example-related endpoints
-          if (url.includes('/v1/projects/') && (
-            url.includes('/examples/') || 
-            url.includes('/next') ||
-            url.includes('/texts') ||
-            url.includes('/auto-labeling')
-          )) {
-            // Clone response to read without consuming
-            try {
-              const clone = response.clone();
-              const contentType = clone.headers.get('content-type');
-              if (contentType && contentType.includes('application/json')) {
-                clone.json().then(data => {
-                  // Extract example ID from various response formats
-                  if (data) {
-                    // Single example object: {id: 123, ...}
-                    if (data.id && typeof data.id === 'number') {
-                      currentExampleId = data.id;
-                      exampleIdAttempts = 0; // Reset attempts on success
-                      updateExampleIdInContainer(data.id);
-                    } 
-                    // List response: {results: [{id: 123}, ...]}
-                    else if (data.results && Array.isArray(data.results) && data.results.length > 0) {
-                      const firstExample = data.results[0];
-                      if (firstExample && firstExample.id) {
-                        currentExampleId = firstExample.id;
-                        exampleIdAttempts = 0;
-                        updateExampleIdInContainer(firstExample.id);
-                      }
-                    }
-                    // Nested data: {data: {id: 123}}
-                    else if (data.data && data.data.id) {
-                      currentExampleId = data.data.id;
-                      exampleIdAttempts = 0;
-                      updateExampleIdInContainer(data.data.id);
-                    }
-                  }
-                }).catch(() => {}); // Ignore JSON parse errors
-              }
-            } catch (e) {
-              // Silently ignore clone errors
-            }
-          }
-          
-          return response;
-        };
-      })();
-      
-      // Helper to update container with example ID
-      function updateExampleIdInContainer(id) {
-        const container = document.querySelector('.monlam-review-container');
-        if (container) {
-          container.dataset.exampleId = id;
-        }
-        // Also store in window for global access
-        window.monlamCurrentExampleId = id;
-      }
+      // No API interceptor needed - backend handles everything!
 
-      // Check if current user is an approver
+      // Check if current user is an approver - simplified, no API calls
       async function isApprover() {
+        // Simple check: look for 'approver' in username from page elements
+        // No API calls to avoid 403 errors
         try {
-          // Try to get user info from the page
-          const userInfo = await fetch('/v1/me').then(r => r.ok ? r.json() : null).catch(() => null);
-          if (userInfo && userInfo.username) {
-            // Check if username contains 'approver' or check role
-            return userInfo.username.toLowerCase().includes('approver') ||
-              userInfo.is_staff === true ||
-              (userInfo.groups && userInfo.groups.some(g => g.name && g.name.toLowerCase().includes('approver')));
-          }
-
-          // Fallback: check from page elements
-          const userMenu = document.querySelector('[data-user]') || document.querySelector('.v-menu__content');
+          // Check from page elements (username menu, etc.)
+          const userMenu = document.querySelector('[data-user]') || 
+                          document.querySelector('.v-menu__content') ||
+                          document.querySelector('[class*="user"]');
           if (userMenu) {
-            const username = userMenu.textContent || '';
-            return username.toLowerCase().includes('approver');
+            const username = (userMenu.textContent || userMenu.innerText || '').toLowerCase();
+            if (username.includes('approver')) {
+              return true;
+            }
           }
 
           // Check URL or localStorage for user info
@@ -707,13 +635,17 @@
           if (storedUser) {
             try {
               const user = JSON.parse(storedUser);
-              return user.username && user.username.toLowerCase().includes('approver');
+              if (user.username && user.username.toLowerCase().includes('approver')) {
+                return true;
+              }
             } catch (e) { }
           }
 
+          // Default: show buttons for everyone (backend will handle permissions)
+          // Or return false to hide for non-approvers
           return false;
         } catch (e) {
-          console.error('Error checking approver status:', e);
+          // On error, don't show buttons (safer)
           return false;
         }
       }
@@ -730,7 +662,8 @@
         return cookie ? cookie.split('=')[1] : '';
       }
 
-      // API call to approve/reject - uses backend API to get current example
+      // API call to approve/reject - uses backend to find current example automatically
+      // No example ID needed! Backend handles everything.
       async function reviewExample(action, notes = '') {
         const projectId = getProjectId();
 
@@ -739,101 +672,10 @@
           return;
         }
 
-        // Strategy 1: Use captured example ID from API interceptor
-        let exampleId = currentExampleId || window.monlamCurrentExampleId;
-        
-        // Strategy 2: Check container dataset
-        if (!exampleId) {
-          const container = document.querySelector('.monlam-review-container');
-          if (container && container.dataset.exampleId) {
-            exampleId = container.dataset.exampleId;
-          }
-        }
-        
-        // Strategy 3: Try to get from Doccano's "next" endpoint (current example)
-        if (!exampleId) {
-          try {
-            const nextResponse = await fetch(`/v1/projects/${projectId}/examples/next/`, {
-              method: 'GET',
-              headers: {
-                'X-CSRFToken': getCSRFToken()
-              },
-              credentials: 'same-origin'
-            });
-            
-            if (nextResponse.ok) {
-              const nextData = await nextResponse.json();
-              if (nextData && nextData.id) {
-                exampleId = nextData.id;
-                currentExampleId = exampleId;
-                updateExampleIdInContainer(exampleId);
-              }
-            }
-          } catch (e) {
-            console.debug('Next endpoint failed:', e);
-          }
-        }
-        
-        // Strategy 4: Get first unconfirmed example from list
-        if (!exampleId) {
-          try {
-            const examplesResponse = await fetch(`/v1/projects/${projectId}/examples/?limit=10`, {
-              method: 'GET',
-              headers: {
-                'X-CSRFToken': getCSRFToken()
-              },
-              credentials: 'same-origin'
-            });
-            
-            if (examplesResponse.ok) {
-              const examplesData = await examplesResponse.json();
-              if (examplesData.results && examplesData.results.length > 0) {
-                // Find first unconfirmed example, or use first one
-                const unconfirmed = examplesData.results.find(ex => !ex.is_confirmed) || examplesData.results[0];
-                if (unconfirmed && unconfirmed.id) {
-                  exampleId = unconfirmed.id;
-                  currentExampleId = exampleId;
-                  updateExampleIdInContainer(exampleId);
-                }
-              }
-            }
-          } catch (e) {
-            console.debug('Examples list API failed:', e);
-          }
-        }
-        
-        // Strategy 5: Check URL pattern (last resort)
-        if (!exampleId) {
-          const urlMatch = window.location.pathname.match(/\/examples\/(\d+)/) ||
-                          window.location.hash.match(/example[_-]?id[=:](\d+)/i);
-          if (urlMatch) {
-            exampleId = urlMatch[1];
-            currentExampleId = exampleId;
-            updateExampleIdInContainer(exampleId);
-          }
-        }
-
-        if (!exampleId) {
-          exampleIdAttempts++;
-          if (exampleIdAttempts < 3) {
-            // Retry after a short delay (maybe API hasn't loaded yet)
-            setTimeout(() => reviewExample(action, notes), 500);
-            return;
-          }
-          showNotification('Cannot find current example. Please navigate to an example and try again.', 'error');
-          return;
-        }
-        
-        // Reset attempts on success
-        exampleIdAttempts = 0;
-
-        return reviewExampleById(projectId, exampleId, action, notes);
-      }
-
-      async function reviewExampleById(projectId, exampleId, action, notes = '') {
+        // Use backend endpoint that finds current example automatically
+        // No need to find example_id in frontend!
         try {
-          // Use Doccano's comment endpoint to record review
-          const commentResponse = await fetch(`/v1/projects/${projectId}/comments`, {
+          const response = await fetch(`/v1/projects/${projectId}/review-current/`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -841,41 +683,18 @@
             },
             credentials: 'same-origin',
             body: JSON.stringify({
-              example: parseInt(exampleId),
-              text: `[REVIEW:${action.toUpperCase()}] ${notes || (action === 'approve' ? 'Approved' : 'Rejected - Please revise')}`
+              action: action,
+              notes: notes
             })
           });
 
-          if (!commentResponse.ok) {
-            const errorData = await commentResponse.text();
-            throw new Error(`Comment API failed: ${errorData}`);
+          if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`Review failed: ${errorData}`);
           }
 
-          // For approval, also confirm the example state
-          if (action === 'approve') {
-            const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCSRFToken()
-              },
-              credentials: 'same-origin'
-            });
-
-            if (!stateResponse.ok) {
-              console.warn('State confirmation failed, but comment was saved');
-            }
-          } else {
-            // For rejection, remove confirmation state
-            const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
-              method: 'DELETE',
-              headers: {
-                'X-CSRFToken': getCSRFToken()
-              },
-              credentials: 'same-origin'
-            });
-          }
-
+          const result = await response.json();
+          
           // Update UI
           updateReviewStatus(action, notes);
           showNotification(`${action === 'approve' ? '✅ Approved' : '❌ Rejected'} successfully!`, action === 'approve' ? 'success' : 'warning');
@@ -890,6 +709,8 @@
           showNotification(`Failed to save review: ${error.message}`, 'error');
         }
       }
+
+      // Old function removed - now using backend endpoint that handles everything
 
       function showNotification(message, type) {
         const notif = document.createElement('div');
@@ -1024,35 +845,7 @@
         reviewExample('reject', notes);
       };
 
-      // Periodically try to get example ID if not captured yet
-      function tryToCaptureExampleId() {
-        const projectId = getProjectId();
-        if (!projectId || currentExampleId) return; // Already have it or no project
-        
-        // Try to fetch current example from Doccano's next endpoint
-        fetch(`/v1/projects/${projectId}/examples/next/`, {
-          method: 'GET',
-          credentials: 'same-origin'
-        }).then(r => r.ok ? r.json() : null)
-          .then(data => {
-            if (data && data.id) {
-              currentExampleId = data.id;
-              updateExampleIdInContainer(data.id);
-            }
-          })
-          .catch(() => {}); // Ignore errors
-      }
-      
-      // Try to capture example ID periodically (every 2 seconds, max 10 times)
-      let captureAttempts = 0;
-      const captureInterval = setInterval(() => {
-        if (currentExampleId || captureAttempts >= 10) {
-          clearInterval(captureInterval);
-          return;
-        }
-        captureAttempts++;
-        tryToCaptureExampleId();
-      }, 2000);
+      // No periodic checks needed - backend finds current example automatically!
 
       // Inject buttons periodically (for SPA navigation)
       // Check every 2 seconds, but only inject if approver

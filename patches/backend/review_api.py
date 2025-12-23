@@ -258,13 +258,18 @@ def review_example(request, project_id, example_id):
     })
 
 
-def review_current_example(request, project_id):
+@csrf_protect
+@require_POST
+def review_current_example_simple(request, project_id):
     """
-    Review the current example without needing example_id.
-    Automatically finds the current example for the user.
+    Simple endpoint: Review current example without needing example_id.
+    Frontend only needs to send project_id and action.
+    Backend finds the current example automatically.
     
     POST /v1/projects/{project_id}/review-current/
     Body: {"action": "approve" | "reject", "notes": "optional"}
+    
+    This is the preferred endpoint - no example ID needed!
     """
     from examples.models import Example, ExampleState, Comment
     from projects.models import Project
@@ -287,25 +292,45 @@ def review_current_example(request, project_id):
     except Project.DoesNotExist:
         return JsonResponse({'error': 'Project not found'}, status=404)
     
-    # Get current example using same logic as get_current_example
-    examples = Example.objects.filter(project=project).order_by('id')
+    # Strategy 1: Get from URL if example_id is in path (if called from example-specific endpoint)
+    example_id_from_url = None
+    if hasattr(request, 'resolver_match') and request.resolver_match:
+        kwargs = request.resolver_match.kwargs
+        example_id_from_url = kwargs.get('example_id')
     
-    if project.collaborative_annotation:
-        confirmed_ids = ExampleState.objects.filter(
-            confirmed_by=request.user
-        ).values_list('example_id', flat=True)
-        current_example = examples.exclude(id__in=confirmed_ids).first()
-    else:
-        confirmed_ids = ExampleState.objects.filter(
-            example__project=project
-        ).values_list('example_id', flat=True)
-        current_example = examples.exclude(id__in=confirmed_ids).first()
+    # Strategy 2: Find current example for user (unconfirmed examples)
+    current_example = None
     
-    if not current_example:
-        current_example = examples.last()
+    if example_id_from_url:
+        try:
+            current_example = Example.objects.get(pk=example_id_from_url, project=project)
+        except Example.DoesNotExist:
+            pass
     
     if not current_example:
-        return JsonResponse({'error': 'No examples found'}, status=404)
+        # Get examples ordered by ID
+        examples = Example.objects.filter(project=project).order_by('id')
+        
+        if project.collaborative_annotation:
+            # In collaborative mode: find examples user hasn't confirmed
+            confirmed_ids = ExampleState.objects.filter(
+                confirmed_by=request.user,
+                example__project=project
+            ).values_list('example_id', flat=True)
+            current_example = examples.exclude(id__in=confirmed_ids).first()
+        else:
+            # In individual mode: find any unconfirmed example
+            confirmed_ids = ExampleState.objects.filter(
+                example__project=project
+            ).values_list('example_id', flat=True)
+            current_example = examples.exclude(id__in=confirmed_ids).first()
+        
+        # If all confirmed, get the last one (or first one)
+        if not current_example:
+            current_example = examples.first()
+    
+    if not current_example:
+        return JsonResponse({'error': 'No examples found in project'}, status=404)
     
     # Now review this example
     if action == 'approve':
@@ -334,6 +359,9 @@ def review_current_example(request, project_id):
         'status': 'success',
         'action': action,
         'example_id': current_example.id,
-        'reviewed_by': request.user.username
+        'reviewed_by': request.user.username,
+        'message': f'Successfully {action}d example {current_example.id}'
     })
+
+
 
