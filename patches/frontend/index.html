@@ -431,112 +431,31 @@
         // Check if current user is an approver
         async function isApprover() {
           try {
-            // Method 1: Check from page elements (menu, toolbar, etc.)
-            const userElements = [
-              document.querySelector('[data-user]'),
-              document.querySelector('.v-menu__content'),
-              document.querySelector('.v-toolbar__title'),
-              document.querySelector('[class*="user"]'),
-              document.querySelector('[class*="username"]'),
-              document.querySelector('.v-avatar'),
-              document.querySelector('[aria-label*="user" i]'),
-              document.querySelector('.v-app-bar'),
-              document.querySelector('.v-navigation-drawer'),
-              document.querySelector('header'),
-              document.querySelector('nav')
-            ];
-            
-            for (const el of userElements) {
-              if (el) {
-                const text = (el.textContent || el.innerText || el.getAttribute('aria-label') || '').toLowerCase();
-                // Check for approver pattern
-                if (text.match(/approver\d*/i)) {
-                  return true;
-                }
-              }
+            // Try to get user info from the page
+            const userInfo = await fetch('/v1/me').then(r => r.ok ? r.json() : null).catch(() => null);
+            if (userInfo && userInfo.username) {
+              // Check if username contains 'approver' or check role
+              return userInfo.username.toLowerCase().includes('approver') || 
+                     userInfo.is_staff === true ||
+                     (userInfo.groups && userInfo.groups.some(g => g.name && g.name.toLowerCase().includes('approver')));
             }
             
-            // Also check all text nodes in the page for approver username
-            const walker = document.createTreeWalker(
-              document.body,
-              NodeFilter.SHOW_TEXT,
-              null,
-              false
-            );
-            
-            let node;
-            while (node = walker.nextNode()) {
-              const text = node.textContent.toLowerCase();
-              if (text.match(/approver\d*/i)) {
-                return true;
-              }
+            // Fallback: check from page elements
+            const userMenu = document.querySelector('[data-user]') || document.querySelector('.v-menu__content');
+            if (userMenu) {
+              const username = userMenu.textContent || '';
+              return username.toLowerCase().includes('approver');
             }
             
-            // Method 2: Check Vue/Nuxt state for user info
-            try {
-              const nuxtEl = document.querySelector('#__nuxt');
-              if (nuxtEl && nuxtEl.__vue__) {
-                const vue = nuxtEl.__vue__;
-                
-                // Check store state
-                if (vue.$store && vue.$store.state) {
-                  const state = vue.$store.state;
-                  if (state.user && state.user.username) {
-                    const username = state.user.username.toLowerCase();
-                    if (username.includes('approver')) return true;
-                  }
-                  if (state.auth && state.auth.user) {
-                    const username = (state.auth.user.username || '').toLowerCase();
-                    if (username.includes('approver')) return true;
-                  }
-                }
-                
-                // Check component data
-                if (vue.$data && vue.$data.user) {
-                  const username = (vue.$data.user.username || '').toLowerCase();
-                  if (username.includes('approver')) return true;
-                }
-              }
-            } catch (e) {}
-            
-            // Method 3: Check localStorage/sessionStorage
-            const storageKeys = ['user', 'username', 'auth', 'authUser', 'currentUser'];
-            for (const key of storageKeys) {
+            // Check URL or localStorage for user info
+            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+            if (storedUser) {
               try {
-                const stored = localStorage.getItem(key) || sessionStorage.getItem(key);
-                if (stored) {
-                  const data = JSON.parse(stored);
-                  const username = (data.username || data.user?.username || '').toLowerCase();
-                  if (username.includes('approver')) return true;
-                }
+                const user = JSON.parse(storedUser);
+                return user.username && user.username.toLowerCase().includes('approver');
               } catch (e) {}
             }
             
-            // Method 4: Check page content for username
-            const pageText = document.body.innerText || document.body.textContent || '';
-            const usernameMatch = pageText.match(/(approver\d+)/i);
-            if (usernameMatch) {
-              return true;
-            }
-            
-            // Method 5: Check cookies for user info
-            const cookies = document.cookie.split(';');
-            for (const cookie of cookies) {
-              const [key, value] = cookie.trim().split('=');
-              if (key && value && value.toLowerCase().includes('approver')) {
-                return true;
-              }
-            }
-            
-            // Method 6: Check if user has admin/staff privileges (approvers often have these)
-            // Look for admin menu items or staff-only features
-            const adminIndicators = [
-              document.querySelector('[href*="admin"]'),
-              document.querySelector('[class*="admin"]'),
-              document.querySelector('[aria-label*="admin" i]')
-            ];
-            
-            // If we can't determine, default to false (safer)
             return false;
           } catch (e) {
             console.error('Error checking approver status:', e);
@@ -544,38 +463,51 @@
           }
         }
         
-        // Store example ID when detected
+        // Global cache for example ID
         let cachedExampleId = null;
         
         // Intercept fetch calls to capture example ID from API responses
         const originalFetch = window.fetch;
         window.fetch = function(...args) {
           const promise = originalFetch.apply(this, args);
+          const url = args[0];
           
           // Check if this is an example-related API call
-          const url = args[0];
-          if (typeof url === 'string' && url.includes('/examples/')) {
-            promise.then(response => {
+          if (typeof url === 'string' && (url.includes('/examples/') || url.includes('/examples?'))) {
+            promise.then(async response => {
               if (response.ok) {
-                response.clone().json().then(data => {
+                try {
+                  const data = await response.clone().json();
+                  
                   // Extract example ID from response
                   if (data && data.id) {
                     cachedExampleId = data.id;
-                    const container = document.querySelector('.monlam-review-container');
-                    if (container) {
-                      container.dataset.exampleId = data.id;
-                    }
-                  } else if (data && data.results && data.results.length > 0) {
+                    updateContainerExampleId(data.id);
+                  } else if (data && data.results && Array.isArray(data.results) && data.results.length > 0) {
                     // List response - get first example ID
                     cachedExampleId = data.results[0].id;
+                    updateContainerExampleId(data.results[0].id);
+                  } else if (data && Array.isArray(data) && data.length > 0 && data[0].id) {
+                    // Array response
+                    cachedExampleId = data[0].id;
+                    updateContainerExampleId(data[0].id);
                   }
-                }).catch(() => {});
+                } catch (e) {
+                  // Not JSON, ignore
+                }
               }
             }).catch(() => {});
           }
           
           return promise;
         };
+        
+        function updateContainerExampleId(exampleId) {
+          const container = document.querySelector('.monlam-review-container');
+          if (container) {
+            container.dataset.exampleId = exampleId;
+          }
+        }
         
         // Get current example ID from various sources
         function getCurrentExampleId() {
@@ -584,10 +516,37 @@
             return cachedExampleId;
           }
           
-          // Method 1: Check Vue component tree recursively
+          // Method 1: Check container first (where we store it)
+          const container = document.querySelector('.monlam-review-container');
+          if (container && container.dataset.exampleId) {
+            cachedExampleId = container.dataset.exampleId;
+            return cachedExampleId;
+          }
+          
+          // Method 2: Check for data attributes in annotation area
+          const annotationArea = document.querySelector('[class*="annotation"]') || 
+                                document.querySelector('[class*="speech"]') ||
+                                document.querySelector('.v-card') ||
+                                document.querySelector('.v-main__wrap');
+          
+          if (annotationArea) {
+            const exampleEl = annotationArea.querySelector('[data-example-id]') ||
+                              annotationArea.querySelector('[data-id]') ||
+                              annotationArea.closest('[data-example-id]') ||
+                              annotationArea.closest('[data-id]');
+            if (exampleEl) {
+              const id = exampleEl.dataset.exampleId || exampleEl.dataset.id;
+              if (id) {
+                cachedExampleId = id;
+                return id;
+              }
+            }
+          }
+          
+          // Method 3: Check Vue/Nuxt state recursively
           try {
             function findExampleInVue(vue, depth = 0) {
-              if (depth > 5) return null; // Prevent infinite recursion
+              if (depth > 10) return null; // Prevent infinite recursion
               
               // Check component data
               if (vue.$data) {
@@ -613,7 +572,7 @@
                 if (state.exampleId) return state.exampleId;
               }
               
-              // Check children
+              // Check children recursively
               if (vue.$children && vue.$children.length > 0) {
                 for (const child of vue.$children) {
                   const found = findExampleInVue(child, depth + 1);
@@ -636,36 +595,29 @@
             console.log('Vue search error:', e);
           }
           
-          // Method 2: Check for data attributes in annotation area
-          const annotationArea = document.querySelector('[class*="annotation"]') || 
-                                document.querySelector('[class*="speech"]') ||
-                                document.querySelector('.v-card');
-          if (annotationArea) {
-            const exampleEl = annotationArea.querySelector('[data-example-id]') ||
-                             annotationArea.querySelector('[data-id]') ||
-                             annotationArea.closest('[data-example-id]') ||
-                             annotationArea.closest('[data-id]');
-            if (exampleEl) {
-              const id = exampleEl.dataset.exampleId || exampleEl.dataset.id;
-              if (id) {
-                cachedExampleId = id;
-                return id;
+          // Method 4: Check window/global state
+          try {
+            if (window.__NUXT__ && window.__NUXT__.state) {
+              const state = window.__NUXT__.state;
+              if (state.example && state.example.id) {
+                cachedExampleId = state.example.id;
+                return state.example.id;
               }
             }
-          }
+          } catch (e) {}
           
-          // Method 3: Look for example ID in DOM attributes
-          const allElements = document.querySelectorAll('[id*="example"], [class*="example"], [data-id]');
+          // Method 5: Look for ID in all elements
+          const allElements = document.querySelectorAll('[id*="example"], [class*="example"], [data-id], [data-example-id]');
           for (const el of allElements) {
             const id = el.dataset.exampleId || el.dataset.id || 
                        (el.id && el.id.match(/(\d+)/) ? el.id.match(/(\d+)/)[1] : null);
-            if (id && !isNaN(id)) {
+            if (id && !isNaN(id) && id > 0) {
               cachedExampleId = id;
               return id;
             }
           }
           
-          // Method 4: Check URL and route params
+          // Method 6: Check URL and route params
           const urlParams = new URLSearchParams(window.location.search);
           const hashMatch = window.location.hash.match(/[\/:](\d+)/);
           if (hashMatch) {
@@ -681,7 +633,7 @@
             return cachedExampleId;
           }
           
-          // Method 5: Try to get from current route
+          // Method 7: Try to get from current route
           try {
             if (window.$nuxt && window.$nuxt.$route) {
               const route = window.$nuxt.$route;
@@ -692,7 +644,7 @@
             }
           } catch (e) {}
           
-          // Method 6: Look in page text for example ID patterns
+          // Method 8: Look in page text for example ID patterns
           const idPatterns = [
             /"id"\s*:\s*(\d+)/,
             /example[_-]?id["\s:=]+(\d+)/i,
@@ -703,7 +655,7 @@
           const pageText = document.body.innerText || document.body.textContent || '';
           for (const pattern of idPatterns) {
             const match = pageText.match(pattern);
-            if (match && match[1]) {
+            if (match && match[1] && !isNaN(match[1])) {
               cachedExampleId = match[1];
               return match[1];
             }
@@ -725,7 +677,7 @@
         }
         
         // Wait for example ID to be available
-        async function waitForExampleId(maxWait = 5000) {
+        async function waitForExampleId(maxWait = 3000) {
           let waited = 0;
           const interval = 200;
           
@@ -749,24 +701,15 @@
             return;
           }
           
-          // Try to get example ID from container first
-          let exampleId = null;
-          const container = document.querySelector('.monlam-review-container');
-          if (container && container.dataset.exampleId) {
-            exampleId = container.dataset.exampleId;
-          }
+          // Try to get example ID immediately
+          let exampleId = getCurrentExampleId();
           
-          // If not in container, try to detect it
+          // If not found, wait a bit for it to load
           if (!exampleId) {
-            exampleId = getCurrentExampleId();
+            exampleId = await waitForExampleId(2000);
           }
           
-          // If still not found, wait a bit for it to load
-          if (!exampleId) {
-            exampleId = await waitForExampleId(3000);
-          }
-          
-          // Last resort: try to get from API
+          // If still not found, try to fetch from API
           if (!exampleId) {
             try {
               // Try to get current example from API
@@ -785,12 +728,24 @@
             }
           }
           
+          // Last resort: try to get from visible elements
+          if (!exampleId) {
+            const firstExample = document.querySelector('.v-list-item[data-id], .example-card[data-id], [data-example-id], [data-id]');
+            if (firstExample) {
+              exampleId = firstExample.dataset.exampleId || firstExample.dataset.id;
+              if (exampleId) {
+                cachedExampleId = exampleId;
+              }
+            }
+          }
+          
           if (!exampleId) {
             showNotification('Cannot determine example ID. Please make sure you are viewing an annotation item.', 'error');
             return;
           }
           
           // Store example ID in container and cache for future use
+          const container = document.querySelector('.monlam-review-container');
           if (container) {
             container.dataset.exampleId = exampleId;
           }
@@ -942,16 +897,16 @@
           // Get example ID now to store in container
           let exampleId = getCurrentExampleId();
           
-          // If not found, try waiting a bit
+          // If not found, wait a bit
           if (!exampleId) {
-            // Use a small delay to let the page load
             setTimeout(() => {
               exampleId = getCurrentExampleId();
               const existingContainer = document.querySelector('.monlam-review-container');
               if (existingContainer && exampleId) {
                 existingContainer.dataset.exampleId = exampleId;
+                cachedExampleId = exampleId;
               }
-            }, 1000);
+            }, 500);
           }
           
           // Create review container
@@ -1002,8 +957,8 @@
             attributeFilter: ['data-id', 'data-example-id']
           });
           
-          // Stop observing after 30 seconds
-          setTimeout(() => observer.disconnect(), 30000);
+          // Stop observing after 60 seconds
+          setTimeout(() => observer.disconnect(), 60000);
         }
         
         // Global functions for button onclick
