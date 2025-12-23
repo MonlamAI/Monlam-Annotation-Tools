@@ -1024,6 +1024,36 @@
         reviewExample('reject', notes);
       };
 
+      // Periodically try to get example ID if not captured yet
+      function tryToCaptureExampleId() {
+        const projectId = getProjectId();
+        if (!projectId || currentExampleId) return; // Already have it or no project
+        
+        // Try to fetch current example from Doccano's next endpoint
+        fetch(`/v1/projects/${projectId}/examples/next/`, {
+          method: 'GET',
+          credentials: 'same-origin'
+        }).then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data && data.id) {
+              currentExampleId = data.id;
+              updateExampleIdInContainer(data.id);
+            }
+          })
+          .catch(() => {}); // Ignore errors
+      }
+      
+      // Try to capture example ID periodically (every 2 seconds, max 10 times)
+      let captureAttempts = 0;
+      const captureInterval = setInterval(() => {
+        if (currentExampleId || captureAttempts >= 10) {
+          clearInterval(captureInterval);
+          return;
+        }
+        captureAttempts++;
+        tryToCaptureExampleId();
+      }, 2000);
+
       // Inject buttons periodically (for SPA navigation)
       // Check every 2 seconds, but only inject if approver
       setInterval(injectReviewButtons, 2000);
