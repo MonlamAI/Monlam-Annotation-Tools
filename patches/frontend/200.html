@@ -425,28 +425,100 @@
         });
         
         // ========================================
-        // APPROVE/REJECT BUTTONS FOR REVIEWERS
+        // APPROVE/REJECT BUTTONS FOR REVIEWERS ONLY
         // ========================================
         
-        // Get current example ID from URL
-        function getCurrentExampleId() {
-          const url = window.location.href;
-          // Look for example ID in URL patterns like /projects/1/speech-to-text?page=1
-          // or annotation state stored in the page
-          
-          // Try to get from Nuxt/Vue state
+        // Check if current user is an approver
+        async function isApprover() {
           try {
-            const app = document.querySelector('#__nuxt').__vue__;
-            if (app && app.$store && app.$store.state && app.$store.state.example) {
-              return app.$store.state.example.id;
+            // Try to get user info from the page
+            const userInfo = await fetch('/v1/me').then(r => r.ok ? r.json() : null).catch(() => null);
+            if (userInfo && userInfo.username) {
+              // Check if username contains 'approver' or check role
+              return userInfo.username.toLowerCase().includes('approver') || 
+                     userInfo.is_staff === true ||
+                     (userInfo.groups && userInfo.groups.some(g => g.name && g.name.toLowerCase().includes('approver')));
+            }
+            
+            // Fallback: check from page elements
+            const userMenu = document.querySelector('[data-user]') || document.querySelector('.v-menu__content');
+            if (userMenu) {
+              const username = userMenu.textContent || '';
+              return username.toLowerCase().includes('approver');
+            }
+            
+            // Check URL or localStorage for user info
+            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+            if (storedUser) {
+              try {
+                const user = JSON.parse(storedUser);
+                return user.username && user.username.toLowerCase().includes('approver');
+              } catch (e) {}
+            }
+            
+            return false;
+          } catch (e) {
+            console.error('Error checking approver status:', e);
+            return false;
+          }
+        }
+        
+        // Get current example ID from various sources
+        function getCurrentExampleId() {
+          // Method 1: Check for data attributes
+          const exampleEl = document.querySelector('[data-example-id]') || 
+                           document.querySelector('[data-id]') ||
+                           document.querySelector('.example-card[data-id]');
+          if (exampleEl) {
+            return exampleEl.dataset.exampleId || exampleEl.dataset.id;
+          }
+          
+          // Method 2: Check Vue/Nuxt state
+          try {
+            const nuxtEl = document.querySelector('#__nuxt');
+            if (nuxtEl && nuxtEl.__vue__) {
+              const vue = nuxtEl.__vue__;
+              // Try various paths to example data
+              if (vue.$store && vue.$store.state) {
+                const state = vue.$store.state;
+                if (state.example && state.example.id) return state.example.id;
+                if (state.examples && state.examples.current && state.examples.current.id) return state.examples.current.id;
+                if (state.currentExample && state.currentExample.id) return state.currentExample.id;
+              }
+              // Try component data
+              if (vue.$data && vue.$data.example && vue.$data.example.id) return vue.$data.example.id;
             }
           } catch (e) {}
           
-          // Try to find example ID from current card/item
-          const exampleIdEl = document.querySelector('[data-example-id]');
-          if (exampleIdEl) {
-            return exampleIdEl.dataset.exampleId;
+          // Method 3: Check window/global state
+          try {
+            if (window.__NUXT__ && window.__NUXT__.state) {
+              const state = window.__NUXT__.state;
+              if (state.example && state.example.id) return state.example.id;
+            }
+          } catch (e) {}
+          
+          // Method 4: Extract from API calls or network requests
+          // Look for example ID in visible text/cards
+          const card = document.querySelector('.v-card[data-id]') || 
+                      document.querySelector('.example-item[data-id]') ||
+                      document.querySelector('[class*="example"][data-id]');
+          if (card && card.dataset.id) {
+            return card.dataset.id;
           }
+          
+          // Method 5: Check URL hash or query params
+          const urlParams = new URLSearchParams(window.location.search);
+          const hashMatch = window.location.hash.match(/example[_-]?id[=:](\d+)/i);
+          if (hashMatch) return hashMatch[1];
+          if (urlParams.get('example_id')) return urlParams.get('example_id');
+          if (urlParams.get('id')) return urlParams.get('id');
+          
+          // Method 6: Look for ID in page content (last resort)
+          const idPattern = /example[_-]?id["\s:=]+(\d+)/i;
+          const pageText = document.body.innerText;
+          const match = pageText.match(idPattern);
+          if (match) return match[1];
           
           return null;
         }
@@ -466,16 +538,49 @@
         // API call to approve/reject
         async function reviewExample(action, notes = '') {
           const projectId = getProjectId();
-          const exampleId = getCurrentExampleId();
+          let exampleId = getCurrentExampleId();
           
-          if (!projectId || !exampleId) {
-            // Try alternative method - get from the visible content
-            const statusIndicator = document.querySelector('.monlam-review-container');
-            if (statusIndicator && statusIndicator.dataset.exampleId) {
-              return reviewExampleById(projectId, statusIndicator.dataset.exampleId, action, notes);
+          // If still no example ID, try to get from the container we created
+          if (!exampleId) {
+            const container = document.querySelector('.monlam-review-container');
+            if (container && container.dataset.exampleId) {
+              exampleId = container.dataset.exampleId;
             }
-            alert('Cannot determine example ID. Please try refreshing the page.');
+          }
+          
+          // Last resort: try to find from the current annotation view
+          if (!exampleId) {
+            // Look for any element that might have the example ID
+            const possibleIds = document.querySelectorAll('[id*="example"], [class*="example"]');
+            for (const el of possibleIds) {
+              const idMatch = el.id.match(/(\d+)/) || el.className.match(/example[_-]?(\d+)/i);
+              if (idMatch) {
+                exampleId = idMatch[1];
+                break;
+              }
+            }
+          }
+          
+          if (!projectId) {
+            showNotification('Cannot determine project ID. Please navigate to a project.', 'error');
             return;
+          }
+          
+          if (!exampleId) {
+            // Try to get from the first example in the list if we're on a list page
+            const firstExample = document.querySelector('.v-list-item[data-id], .example-card[data-id]');
+            if (firstExample && firstExample.dataset.id) {
+              exampleId = firstExample.dataset.id;
+            } else {
+              showNotification('Cannot determine example ID. Please click on an annotation item first.', 'error');
+              return;
+            }
+          }
+          
+          // Store example ID in container for future use
+          const container = document.querySelector('.monlam-review-container');
+          if (container) {
+            container.dataset.exampleId = exampleId;
           }
           
           return reviewExampleById(projectId, exampleId, action, notes);
@@ -483,42 +588,62 @@
         
         async function reviewExampleById(projectId, exampleId, action, notes = '') {
           try {
-            // Use the comments endpoint to record the review action
-            // This is a workaround since we can't add new endpoints without backend changes
-            const response = await fetch(`/v1/projects/${projectId}/comments`, {
+            // Use Doccano's comment endpoint to record review
+            const commentResponse = await fetch(`/v1/projects/${projectId}/comments`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCSRFToken()
               },
+              credentials: 'same-origin',
               body: JSON.stringify({
-                example: exampleId,
-                text: `[REVIEW:${action.toUpperCase()}] ${notes || 'Reviewed'}`
+                example: parseInt(exampleId),
+                text: `[REVIEW:${action.toUpperCase()}] ${notes || (action === 'approve' ? 'Approved' : 'Rejected - Please revise')}`
               })
             });
             
-            if (response.ok) {
-              // Update the Example's annotations_approved_by via state confirm
-              if (action === 'approve') {
-                // Confirm the example state
-                await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCSRFToken()
-                  }
-                });
-              }
-              
-              // Update UI
-              updateReviewStatus(action, notes);
-              showNotification(`${action === 'approve' ? '✅ Approved' : '❌ Rejected'} successfully!`, action === 'approve' ? 'success' : 'warning');
-            } else {
-              throw new Error('Failed to save review');
+            if (!commentResponse.ok) {
+              const errorData = await commentResponse.text();
+              throw new Error(`Comment API failed: ${errorData}`);
             }
+            
+            // For approval, also confirm the example state
+            if (action === 'approve') {
+              const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': getCSRFToken()
+                },
+                credentials: 'same-origin'
+              });
+              
+              if (!stateResponse.ok) {
+                console.warn('State confirmation failed, but comment was saved');
+              }
+            } else {
+              // For rejection, remove confirmation state
+              const stateResponse = await fetch(`/v1/projects/${projectId}/examples/${exampleId}/states`, {
+                method: 'DELETE',
+                headers: {
+                  'X-CSRFToken': getCSRFToken()
+                },
+                credentials: 'same-origin'
+              });
+            }
+            
+            // Update UI
+            updateReviewStatus(action, notes);
+            showNotification(`${action === 'approve' ? '✅ Approved' : '❌ Rejected'} successfully!`, action === 'approve' ? 'success' : 'warning');
+            
+            // Reload page after a short delay to show updated state
+            setTimeout(() => {
+              window.location.reload();
+            }, 1500);
+            
           } catch (error) {
             console.error('Review error:', error);
-            showNotification('Failed to save review. Please try again.', 'error');
+            showNotification(`Failed to save review: ${error.message}`, 'error');
           }
         }
         
@@ -553,8 +678,11 @@
           }
         }
         
-        // Inject review buttons into annotation page
-        function injectReviewButtons() {
+        // Inject review buttons into annotation page (APPROVERS ONLY)
+        let approverCheckDone = false;
+        let isUserApprover = false;
+        
+        async function injectReviewButtons() {
           // Only inject on annotation pages
           if (!window.location.pathname.includes('/projects/')) return;
           if (window.location.pathname.includes('/dataset')) return;
@@ -565,20 +693,48 @@
           // Check if buttons already exist
           if (document.querySelector('.monlam-review-container')) return;
           
+          // Check user role (only once, cache result)
+          if (!approverCheckDone) {
+            isUserApprover = await isApprover();
+            approverCheckDone = true;
+            
+            // Reset check when navigating to new page
+            const currentPath = window.location.pathname;
+            setTimeout(() => {
+              if (window.location.pathname !== currentPath) {
+                approverCheckDone = false;
+              }
+            }, 2000);
+          }
+          
+          // Only show buttons for approvers
+          if (!isUserApprover) {
+            return;
+          }
+          
           // Find the annotation toolbar/card area
           const toolbar = document.querySelector('.v-card__actions') || 
                          document.querySelector('.v-toolbar__items') ||
-                         document.querySelector('.v-footer');
+                         document.querySelector('.v-footer') ||
+                         document.querySelector('.v-card__text');
           
           // Or find the main content area for STT
           const mainContent = document.querySelector('.v-main__wrap') ||
-                             document.querySelector('.v-card');
+                             document.querySelector('.v-card') ||
+                             document.querySelector('[class*="annotation"]') ||
+                             document.querySelector('[class*="speech"]');
           
           if (!mainContent && !toolbar) return;
+          
+          // Get example ID now to store in container
+          const exampleId = getCurrentExampleId();
           
           // Create review container
           const container = document.createElement('div');
           container.className = 'monlam-review-container';
+          if (exampleId) {
+            container.dataset.exampleId = exampleId;
+          }
           container.innerHTML = `
             <span class="monlam-review-status monlam-status-pending">📋 Pending Review</span>
             <input type="text" class="monlam-review-notes" placeholder="Review notes (optional)..." />
@@ -592,11 +748,16 @@
           
           // Insert at appropriate location
           if (toolbar) {
+            // Insert after toolbar
             toolbar.parentNode.insertBefore(container, toolbar.nextSibling);
           } else if (mainContent) {
-            // Find the annotation content area
-            const annotationArea = mainContent.querySelector('.v-card') || mainContent;
-            annotationArea.appendChild(container);
+            // Find the annotation content area or append to main content
+            const annotationArea = mainContent.querySelector('.v-card') || 
+                                  mainContent.querySelector('.v-card__text') ||
+                                  mainContent;
+            if (annotationArea) {
+              annotationArea.appendChild(container);
+            }
           }
         }
         
@@ -619,8 +780,12 @@
         };
         
         // Inject buttons periodically (for SPA navigation)
-        setInterval(injectReviewButtons, 1000);
-        injectReviewButtons();
+        // Check every 2 seconds, but only inject if approver
+        setInterval(injectReviewButtons, 2000);
+        
+        // Initial injection after page load
+        setTimeout(injectReviewButtons, 1000);
+        setTimeout(injectReviewButtons, 3000);
         
       });
     </script>
