@@ -145,7 +145,7 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # Copy JS files to staticfiles
 COPY --chown=doccano:doccano patches/frontend/audio-loop-simple.js /doccano/backend/staticfiles/_nuxt/
 COPY --chown=doccano:doccano patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
-COPY --chown=doccano:doccano patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
+COPY --chown=doccano:doccano patches/frontend/dataset-completion-columns-simple.js /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
 COPY --chown=doccano:doccano patches/frontend/metrics-completion-matrix.js /doccano/backend/staticfiles/_nuxt/
 COPY --chown=doccano:doccano patches/frontend/approve-reject-buttons.js /doccano/backend/staticfiles/_nuxt/
 
