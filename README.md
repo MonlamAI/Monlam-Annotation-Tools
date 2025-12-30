@@ -21,6 +21,7 @@ Custom [Doccano](https://github.com/doccano/doccano) annotation platform with Ti
 - **Auto TextLabel creation** - Transcripts are automatically created as annotations
 - **Pre-filled labels** - Annotators can review/edit instead of transcribing from scratch
 - **Correct audio URL export** - Exports include the original audio URLs
+- **Auto-loop audio playback** - Audio automatically loops by default with toggle controls ([📖 Setup Guide](patches/frontend/AUDIO_LOOP_INSTALL.md))
 
 ### 🖼️ Image Classification Enhancements  
 - **JSONL import with external image URLs** - Import images from S3/MinIO
@@ -28,6 +29,17 @@ Custom [Doccano](https://github.com/doccano/doccano) annotation platform with Ti
 
 ### ✅ UI Improvements
 - **Review button styling**: 🔴 Red Circle for "not done", 🟢 Green Check for "done"
+
+### 📊 Custom Annotation Status Tracking System
+- **Per-annotator completion status** - Track each annotator's progress on every example
+- **Per-approver approval status** - Track each approver's reviews with notes
+- **Visual indicators** - Color-coded status badges and progress bars in UI
+- **Project Manager role** - New role with full visibility of completion matrix
+- **Admin dashboard** - Comprehensive dashboard showing completion matrix for all team members
+- **Real-time tracking** - Auto-updating status indicators
+- **Export functionality** - Download completion data as CSV
+
+[📖 View Completion Tracking Documentation](patches/assignment/COMPLETION_TRACKING_README.md)
 
 ## Quick Start
 
@@ -98,6 +110,20 @@ monlam-doccano/
 │       ├── logo.png        # Monlam logo
 │       └── favicon.png     # Browser favicon
 └── patches/
+    ├── assignment/         # Custom assignment & completion tracking
+    │   ├── models_separate.py          # Assignment models
+    │   ├── completion_tracking.py      # Completion tracking models
+    │   ├── roles.py                    # Project Manager role
+    │   ├── completion_views.py         # Completion matrix API
+    │   ├── views.py                    # Assignment API
+    │   ├── serializers.py              # REST serializers
+    │   ├── urls.py                     # URL routing
+    │   ├── migrations/
+    │   │   ├── 0001_initial.py
+    │   │   └── 0002_completion_tracking.py
+    │   ├── COMPLETION_TRACKING_README.md
+    │   ├── INSTALLATION_GUIDE.md
+    │   └── QUICK_START.md
     ├── backend/
     │   ├── celery_tasks.py # Auto TextLabel creation
     │   ├── serializers.py  # External URL handling
@@ -105,8 +131,10 @@ monlam-doccano/
     │   ├── catalog.py      # JSONL import options
     │   └── datasets.py     # Custom dataset classes
     ├── frontend/
-    │   ├── index.html      # UI customizations
-    │   └── 200.html        # SPA fallback
+    │   ├── index.html              # UI customizations
+    │   ├── 200.html                # SPA fallback
+    │   ├── completion-matrix.html  # Completion dashboard
+    │   └── status-indicators.js    # Status UI components
     └── examples/
         ├── speech_to_text/
         │   └── example.jsonl
