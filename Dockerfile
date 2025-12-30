@@ -71,6 +71,12 @@ COPY patches/assignment /doccano/backend/assignment
 # Register the assignment app in settings
 RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/base.py || true
 
+# Integrate assignment URLs into main urls.py
+# Add the assignment URL pattern to urlpatterns
+RUN if ! grep -q "assignment.urls" /doccano/backend/config/urls.py; then \
+        sed -i "s|urlpatterns = \[|urlpatterns = [\n    # Monlam: Assignment and Completion Tracking APIs\n    path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),|" /doccano/backend/config/urls.py; \
+    fi
+
 # Add MIME type configuration at the VERY START of base.py (before any imports)
 RUN sed -i '1i # Monlam: Configure MIME types for JavaScript files BEFORE WhiteNoise loads\nimport mimetypes\nmimetypes.add_type("application/javascript", ".js", True)\n' /doccano/backend/config/settings/base.py
 
