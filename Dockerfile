@@ -60,6 +60,28 @@ COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
 
 # ============================================
+# ASSIGNMENT & COMPLETION TRACKING SYSTEM
+# ============================================
+# Copy the entire assignment app to doccano backend
+COPY patches/assignment /doccano/backend/assignment
+
+# Register the assignment app in settings
+RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/base.py || true
+
+# ============================================
+# FRONTEND ENHANCEMENTS: AUDIO LOOP & COMPLETION UI
+# ============================================
+# Create js directory if it doesn't exist
+RUN mkdir -p /doccano/backend/client/dist/js
+
+# Copy audio loop script to static directory
+COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/client/dist/js/
+
+# Copy completion tracking UI enhancements
+COPY patches/frontend/enhance-members-progress.js /doccano/backend/client/dist/js/
+COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist/js/
+
+# ============================================
 # FRONTEND PATCHES
 # ============================================
 
@@ -69,8 +91,13 @@ COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_i
 # - Monlam branding colors
 # - Review button styling (Red O / Green Check)
 # - GitHub button hidden
+# - Audio loop script for STT projects
 COPY patches/frontend/index.html /doccano/backend/client/dist/index.html
 COPY patches/frontend/200.html /doccano/backend/client/dist/200.html
+
+# Add enhancement scripts to index.html (inject before closing body tag)
+RUN sed -i 's|</body>|  <!-- Monlam Enhancements -->\n  <script src="/js/audio-loop-enhanced.js"></script>\n  <script src="/js/enhance-members-progress.js"></script>\n  <script src="/js/dataset-completion-columns.js"></script>\n</body>|' /doccano/backend/client/dist/index.html && \
+    sed -i 's|</body>|  <!-- Monlam Enhancements -->\n  <script src="/js/audio-loop-enhanced.js"></script>\n  <script src="/js/enhance-members-progress.js"></script>\n  <script src="/js/dataset-completion-columns.js"></script>\n</body>|' /doccano/backend/client/dist/200.html
 
 # ============================================
 # DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
@@ -104,7 +131,16 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
-    chown doccano:doccano /doccano/backend/client/dist/200.html
+    chown doccano:doccano /doccano/backend/client/dist/200.html && \
+    chown -R doccano:doccano /doccano/backend/assignment && \
+    chown -R doccano:doccano /doccano/backend/client/dist/js
+
+# ============================================
+# RUN MIGRATIONS
+# ============================================
+# Run migrations for assignment and completion tracking
+RUN python manage.py makemigrations assignment || true && \
+    python manage.py migrate assignment || true
 
 USER doccano
 WORKDIR /doccano/backend

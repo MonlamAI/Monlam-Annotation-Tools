@@ -39,7 +39,14 @@ Custom [Doccano](https://github.com/doccano/doccano) annotation platform with Ti
 - **Real-time tracking** - Auto-updating status indicators
 - **Export functionality** - Download completion data as CSV
 
-[📖 View Completion Tracking Documentation](patches/assignment/COMPLETION_TRACKING_README.md)
+**🎨 UI Integration Features:**
+- **Enhanced Members Progress Page** - Color-coded progress bars with hover tooltips and detailed stats modal
+- **Dataset Table Completion Columns** - Annotator and Approver status columns with badges and usernames
+- **Non-invasive design** - JavaScript-based enhancements, no core file modifications
+- **Real-time updates** - Automatic refresh on pagination and filtering
+
+[📖 View Completion Tracking Documentation](patches/assignment/COMPLETION_TRACKING_README.md)  
+[📖 View UI Integration Guide](UI_INTEGRATION_SUMMARY.md)
 
 ## Quick Start
 
