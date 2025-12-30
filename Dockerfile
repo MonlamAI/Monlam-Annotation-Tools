@@ -71,10 +71,21 @@ RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/
 # ============================================
 # FRONTEND ENHANCEMENTS: AUDIO LOOP & COMPLETION UI
 # ============================================
-# Copy scripts to staticfiles/_nuxt directory (Django serves /static/ from here)
+# Copy scripts to ALL possible static locations to ensure Django finds them
+# Location 1: client/dist/static/_nuxt (where built frontend files are)
+COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/client/dist/static/_nuxt/
+COPY patches/frontend/enhance-members-progress.js /doccano/backend/client/dist/static/_nuxt/
+COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist/static/_nuxt/
+
+# Location 2: staticfiles/_nuxt (Django collectstatic location)
 COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/staticfiles/_nuxt/
 COPY patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
 COPY patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
+
+# Location 3: client/dist/_nuxt (alternative frontend build location)
+COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/client/dist/_nuxt/
+COPY patches/frontend/enhance-members-progress.js /doccano/backend/client/dist/_nuxt/
+COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist/_nuxt/
 
 # ============================================
 # FRONTEND PATCHES
@@ -128,9 +139,9 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
     chown -R doccano:doccano /doccano/backend/assignment && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/audio-loop-enhanced.js && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
+    chown doccano:doccano /doccano/backend/client/dist/static/_nuxt/*.js && \
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/*.js && \
+    chown doccano:doccano /doccano/backend/client/dist/_nuxt/*.js || true
 
 # ============================================
 # RUN MIGRATIONS
