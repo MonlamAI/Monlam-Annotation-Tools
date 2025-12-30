@@ -55,6 +55,9 @@ COPY patches/backend/datasets.py /doccano/backend/data_import/datasets.py
 # Review API for approve/reject workflow (used by frontend)
 COPY patches/backend/review_api.py /doccano/backend/examples/review_api.py
 
+# Custom WhiteNoise storage with proper MIME types
+COPY patches/backend/whitenoise_config.py /doccano/backend/config/whitenoise_config.py
+
 # Example JSONL files (required for import options to appear)
 COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
@@ -68,11 +71,8 @@ COPY patches/assignment /doccano/backend/assignment
 # Register the assignment app in settings
 RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/base.py || true
 
-# Configure WhiteNoise MIME types for JavaScript files
-RUN echo "" >> /doccano/backend/config/settings/base.py && \
-    echo "# Monlam: Ensure JavaScript files are served with correct MIME type" >> /doccano/backend/config/settings/base.py && \
-    echo "import mimetypes" >> /doccano/backend/config/settings/base.py && \
-    echo "mimetypes.add_type('application/javascript', '.js', True)" >> /doccano/backend/config/settings/base.py
+# Use custom WhiteNoise storage with proper MIME types
+RUN sed -i 's|STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"|STATICFILES_STORAGE = "config.whitenoise_config.MonlamWhiteNoiseStorage"|' /doccano/backend/config/settings/base.py
 
 # ============================================
 # FRONTEND PATCHES
@@ -114,6 +114,7 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/celery_tasks.py && \
     chown doccano:doccano /doccano/backend/examples/serializers.py && \
     chown doccano:doccano /doccano/backend/examples/review_api.py && \
+    chown doccano:doccano /doccano/backend/config/whitenoise_config.py && \
     chown doccano:doccano /doccano/backend/data_export/models.py && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/catalog.py && \
     chown doccano:doccano /doccano/backend/data_import/datasets.py && \
