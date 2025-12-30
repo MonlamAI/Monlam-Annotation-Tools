@@ -819,6 +819,18 @@
         function injectButtons() {
             if (document.querySelector('.monlam-approve-btns')) return;
             
+            // First, fetch the current approval status
+            fetch(`/v1/projects/${CONFIG.projectId}/assignments/${exampleId}/`)
+                .then(r => r.ok ? r.json() : null)
+                .catch(() => null)
+                .then(assignment => {
+                    createButtonContainer(assignment);
+                });
+        }
+        
+        function createButtonContainer(assignment) {
+            if (document.querySelector('.monlam-approve-btns')) return;
+            
             const container = document.createElement('div');
             container.className = 'monlam-approve-btns';
             container.style.cssText = `
@@ -826,20 +838,89 @@
                 padding: 16px;
                 background: #f5f5f5;
                 border-radius: 8px;
-                display: flex;
-                gap: 12px;
-                align-items: center;
                 border-left: 4px solid #1976D2;
             `;
             
+            // Build status indicators
+            let statusHTML = '';
+            
+            if (assignment) {
+                const statusColor = {
+                    'assigned': '#999',
+                    'in_progress': '#2196F3',
+                    'submitted': '#FF9800',
+                    'approved': '#4CAF50',
+                    'rejected': '#F44336'
+                };
+                
+                const statusIcon = {
+                    'assigned': '⏳',
+                    'in_progress': '🔄',
+                    'submitted': '📤',
+                    'approved': '✅',
+                    'rejected': '❌'
+                };
+                
+                // Determine approval status from assignment status
+                let approvalStatus = 'pending';
+                let approvalColor = '#999';
+                let approvalIcon = '⏳';
+                
+                if (assignment.status === 'submitted') {
+                    approvalStatus = 'Pending Review';
+                    approvalColor = '#FF9800';
+                    approvalIcon = '📋';
+                } else if (assignment.status === 'approved') {
+                    approvalStatus = 'Approved';
+                    approvalColor = '#4CAF50';
+                    approvalIcon = '✅';
+                } else if (assignment.status === 'rejected') {
+                    approvalStatus = 'Rejected';
+                    approvalColor = '#F44336';
+                    approvalIcon = '❌';
+                } else {
+                    approvalStatus = 'Not Submitted';
+                }
+                
+                statusHTML = `
+                    <div style="margin-bottom: 12px; padding: 12px; background: white; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <div style="font-size: 13px; color: #666; margin-bottom: 8px; font-weight: 600;">📋 Approval Status Chain:</div>
+                        <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 150px;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">👤 Annotator</div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 16px;">${statusIcon[assignment.status] || '⏳'}</span>
+                                    <span style="color: ${statusColor[assignment.status] || '#999'}; font-weight: 600; font-size: 12px;">${assignment.status.replace('_', ' ').toUpperCase()}</span>
+                                </div>
+                                <div style="font-size: 10px; color: #999; margin-top: 2px;">${assignment.assigned_to_username || 'Unknown'}</div>
+                            </div>
+                            <div style="flex: 1; min-width: 150px;">
+                                <div style="font-size: 11px; color: #666; margin-bottom: 4px;">✓ Approver</div>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 16px;">${approvalIcon}</span>
+                                    <span style="color: ${approvalColor}; font-weight: 600; font-size: 12px;">${approvalStatus.toUpperCase()}</span>
+                                </div>
+                                <div style="font-size: 10px; color: #999; margin-top: 2px;">
+                                    ${assignment.reviewed_by_username || 'Not reviewed'}
+                                    ${assignment.reviewed_at ? '<br>(' + new Date(assignment.reviewed_at).toLocaleDateString() + ')' : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
             container.innerHTML = `
-                <span style="font-weight: 600; color: #666; margin-right: auto;">🔍 Review Actions:</span>
-                <button class="approve-btn" style="background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(76,175,80,0.3); transition: all 0.2s;">
-                    ✓ Approve
-                </button>
-                <button class="reject-btn" style="background: #F44336; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(244,67,54,0.3); transition: all 0.2s;">
-                    ✗ Reject
-                </button>
+                ${statusHTML}
+                <div style="display: flex; gap: 12px; align-items: center; padding-top: 8px; border-top: 1px solid #ddd;">
+                    <span style="font-weight: 600; color: #666; margin-right: auto;">🔍 Review Actions:</span>
+                    <button class="approve-btn" style="background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(76,175,80,0.3); transition: all 0.2s;">
+                        ✓ Approve
+                    </button>
+                    <button class="reject-btn" style="background: #F44336; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(244,67,54,0.3); transition: all 0.2s;">
+                        ✗ Reject
+                    </button>
+                </div>
             `;
             
             // Add hover effects
