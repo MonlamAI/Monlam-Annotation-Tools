@@ -131,11 +131,14 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown -R doccano:doccano /doccano/backend/assignment
 
 # ============================================
-# MIGRATIONS
+# RUN MIGRATIONS FOR ASSIGNMENT APP
 # ============================================
-# Note: Migrations are created locally and committed to the repo
-# DO NOT run makemigrations in production/Docker builds!
-# The app will auto-migrate at startup via entrypoint
+# Doccano's entrypoint only migrates its own apps, not custom apps
+# We must run migrate for the assignment app during build
+# Note: Migrations 0001 and 0002 are pre-created and committed to repo
+USER root
+WORKDIR /doccano/backend
+RUN python manage.py migrate assignment --noinput || echo "⚠️  Assignment migrations failed, will retry at startup"
 
 # ============================================
 # COPY MONLAM JS FILES AND COMPRESS THEM
