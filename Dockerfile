@@ -135,12 +135,12 @@ RUN python manage.py makemigrations assignment || true && \
 # COPY MONLAM JS FILES AND COMPRESS THEM
 # ============================================
 # Copy JS files to staticfiles
-COPY --chown=doccano:doccano patches/frontend/audio-loop-enhanced.js /doccano/backend/staticfiles/_nuxt/
+COPY --chown=doccano:doccano patches/frontend/audio-loop-simple.js /doccano/backend/staticfiles/_nuxt/
 COPY --chown=doccano:doccano patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
 COPY --chown=doccano:doccano patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
 
 # Compress files for WhiteNoise (it requires .gz versions)
-RUN gzip -k -f /doccano/backend/staticfiles/_nuxt/audio-loop-enhanced.js && \
+RUN gzip -k -f /doccano/backend/staticfiles/_nuxt/audio-loop-simple.js && \
     gzip -k -f /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
     gzip -k -f /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
 
