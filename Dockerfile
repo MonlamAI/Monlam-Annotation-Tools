@@ -68,6 +68,12 @@ COPY patches/assignment /doccano/backend/assignment
 # Register the assignment app in settings
 RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/base.py || true
 
+# Configure WhiteNoise MIME types for JavaScript files
+RUN echo "" >> /doccano/backend/config/settings/base.py && \
+    echo "# Monlam: Ensure JavaScript files are served with correct MIME type" >> /doccano/backend/config/settings/base.py && \
+    echo "import mimetypes" >> /doccano/backend/config/settings/base.py && \
+    echo "mimetypes.add_type('application/javascript', '.js', True)" >> /doccano/backend/config/settings/base.py
+
 # ============================================
 # FRONTEND PATCHES
 # ============================================
