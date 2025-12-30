@@ -576,8 +576,15 @@
             audioObserver = null;
         }
         
+        // STOP and reset ALL audio elements when NOT on annotation page
         if (!isAnnotationPage) {
-            console.log('[Monlam Audio] Not on annotation page');
+            console.log('[Monlam Audio] Not on annotation page - stopping all audio');
+            document.querySelectorAll('audio[data-monlam-loop]').forEach(audio => {
+                audio.pause();
+                audio.currentTime = 0;
+                audio.loop = false;
+                audio.removeAttribute('data-monlam-loop');
+            });
             return;
         }
         
@@ -790,16 +797,23 @@
     // FEATURE 4: APPROVE/REJECT BUTTONS
     function addApproveButtons() {
         const path = window.location.pathname;
-        const isAnnotationPage = path.includes('/speech-to-text') || path.match(/\/projects\/\d+\/\d+$/);
+        const isAnnotationPage = path.includes('/speech-to-text') || path.match(/\/projects\/\d+\/(\d+)$/);
         
-        if (!isAnnotationPage) return;
+        if (!isAnnotationPage) {
+            console.log('[Monlam Approve] Not on annotation page:', path);
+            return;
+        }
         
-        console.log('[Monlam Approve] Adding buttons...');
+        console.log('[Monlam Approve] Detected annotation page:', path);
         CONFIG.projectId = getProjectId();
         
         const match = path.match(/\/projects\/\d+\/(\d+)/);
-        if (!match) return;
+        if (!match) {
+            console.log('[Monlam Approve] Could not extract example ID from path');
+            return;
+        }
         const exampleId = match[1];
+        console.log('[Monlam Approve] Example ID:', exampleId, 'Project ID:', CONFIG.projectId);
         
         // Try multiple injection strategies
         function injectButtons() {
@@ -896,36 +910,83 @@
                 });
             };
             
-            // Strategy 1: Insert after toolbar
+            // Debug: Log what elements are available
+            console.log('[Monlam Approve] Searching for injection points...');
             const toolbar = document.querySelector('.v-toolbar, header');
+            const main = document.querySelector('main, .v-main__wrap, .v-content__wrap');
+            const body = document.body;
+            
+            console.log('[Monlam Approve] Found toolbar:', !!toolbar);
+            console.log('[Monlam Approve] Found main:', !!main);
+            
+            // Strategy 1: Insert after toolbar
             if (toolbar && toolbar.parentNode) {
                 toolbar.parentNode.insertBefore(container, toolbar.nextSibling);
-                console.log('[Monlam Approve] Buttons added (after toolbar)');
+                console.log('[Monlam Approve] ✅ Buttons added (after toolbar)');
                 return true;
             }
             
             // Strategy 2: Insert at top of main
-            const main = document.querySelector('main, .v-main__wrap, .v-content__wrap');
             if (main && main.firstChild) {
                 main.insertBefore(container, main.firstChild);
-                console.log('[Monlam Approve] Buttons added (top of main)');
+                console.log('[Monlam Approve] ✅ Buttons added (top of main)');
                 return true;
             }
             
             // Strategy 3: Append to main
             if (main) {
                 main.appendChild(container);
-                console.log('[Monlam Approve] Buttons added (in main)');
+                console.log('[Monlam Approve] ✅ Buttons added (in main)');
                 return true;
             }
             
+            // Strategy 4: Append to body (last resort)
+            if (body) {
+                container.style.position = 'fixed';
+                container.style.top = '80px';
+                container.style.right = '20px';
+                container.style.zIndex = '9999';
+                container.style.width = 'auto';
+                body.appendChild(container);
+                console.log('[Monlam Approve] ✅ Buttons added (fixed to body)');
+                return true;
+            }
+            
+            console.log('[Monlam Approve] ❌ No injection point found');
             return false;
         }
         
-        // Try multiple times with increasing delay
-        setTimeout(() => injectButtons(), 500);
-        setTimeout(() => injectButtons(), 1000);
-        setTimeout(() => injectButtons(), 2000);
+        // Try multiple times with increasing delay, then use interval
+        let attempts = 0;
+        const maxAttempts = 20;
+        
+        const tryInject = () => {
+            attempts++;
+            const success = injectButtons();
+            if (success) {
+                console.log('[Monlam Approve] Success on attempt', attempts);
+                return true;
+            }
+            if (attempts >= maxAttempts) {
+                console.log('[Monlam Approve] Failed after', maxAttempts, 'attempts');
+                return false;
+            }
+            return false;
+        };
+        
+        // Initial attempts
+        setTimeout(tryInject, 500);
+        setTimeout(tryInject, 1000);
+        setTimeout(tryInject, 1500);
+        setTimeout(tryInject, 2000);
+        
+        // Persistent polling for up to 10 seconds
+        const interval = setInterval(() => {
+            const success = tryInject();
+            if (success || attempts >= maxAttempts) {
+                clearInterval(interval);
+            }
+        }, 500);
     }
     
     function getCsrfToken() {
