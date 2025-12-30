@@ -131,11 +131,11 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown -R doccano:doccano /doccano/backend/assignment
 
 # ============================================
-# RUN MIGRATIONS
+# MIGRATIONS
 # ============================================
-# Run migrations for assignment and completion tracking
-RUN python manage.py makemigrations assignment || true && \
-    python manage.py migrate assignment || true
+# Note: Migrations are created locally and committed to the repo
+# DO NOT run makemigrations in production/Docker builds!
+# The app will auto-migrate at startup via entrypoint
 
 # ============================================
 # COPY MONLAM JS FILES AND COMPRESS THEM
