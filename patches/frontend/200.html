@@ -642,7 +642,8 @@
                 console.log('[Monlam Dataset] Header added');
             });
             
-            const observer = new MutationObserver(() => {
+            // Function to process rows and add completion data
+            function processRows() {
                 document.querySelectorAll('tbody tr:not([data-monlam-col])').forEach(row => {
                     row.setAttribute('data-monlam-col', 'true');
                     
@@ -674,11 +675,23 @@
                     
                     row.appendChild(td);
                 });
+                
+                const rowsProcessed = document.querySelectorAll('tbody tr[data-monlam-col]').length;
+                if (rowsProcessed > 0) {
+                    console.log('[Monlam Dataset] Processed', rowsProcessed, 'rows');
+                }
+            }
+            
+            // Set up observer for future rows
+            const observer = new MutationObserver(() => {
+                processRows();
             });
             
             waitForElement('tbody', (tbody) => {
-                observer.observe(tbody, { childList: true, subtree: true });
-                observer.disconnect();
+                // Process existing rows first
+                processRows();
+                
+                // Then watch for new rows
                 observer.observe(tbody, { childList: true, subtree: true });
             });
         }
@@ -778,38 +791,77 @@
         if (!match) return;
         const exampleId = match[1];
         
-        waitForElement('main', (main) => {
-            if (main.querySelector('.monlam-approve-btns')) return;
+        // Try multiple injection strategies
+        function injectButtons() {
+            if (document.querySelector('.monlam-approve-btns')) return;
             
             const container = document.createElement('div');
             container.className = 'monlam-approve-btns';
-            container.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 1000; display: flex; gap: 12px;';
+            container.style.cssText = `
+                margin: 16px 0;
+                padding: 16px;
+                background: #f5f5f5;
+                border-radius: 8px;
+                display: flex;
+                gap: 12px;
+                align-items: center;
+                border-left: 4px solid #1976D2;
+            `;
             
             container.innerHTML = `
-                <button class="approve-btn" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(76,175,80,0.3);">
+                <span style="font-weight: 600; color: #666; margin-right: auto;">🔍 Review Actions:</span>
+                <button class="approve-btn" style="background: #4CAF50; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(76,175,80,0.3); transition: all 0.2s;">
                     ✓ Approve
                 </button>
-                <button class="reject-btn" style="background: #F44336; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(244,67,54,0.3);">
+                <button class="reject-btn" style="background: #F44336; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(244,67,54,0.3); transition: all 0.2s;">
                     ✗ Reject
                 </button>
             `;
             
-            container.querySelector('.approve-btn').onclick = () => {
+            // Add hover effects
+            const approveBtn = container.querySelector('.approve-btn');
+            const rejectBtn = container.querySelector('.reject-btn');
+            
+            approveBtn.onmouseenter = () => approveBtn.style.transform = 'scale(1.05)';
+            approveBtn.onmouseleave = () => approveBtn.style.transform = 'scale(1)';
+            rejectBtn.onmouseenter = () => rejectBtn.style.transform = 'scale(1.05)';
+            rejectBtn.onmouseleave = () => rejectBtn.style.transform = 'scale(1)';
+            
+            approveBtn.onclick = () => {
+                approveBtn.disabled = true;
+                approveBtn.style.opacity = '0.6';
+                approveBtn.textContent = '⏳ Approving...';
+                
                 fetch(`/v1/projects/${CONFIG.projectId}/assignments/approver-completion/${exampleId}/approve/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
                     body: JSON.stringify({ review_notes: '' })
                 }).then(r => {
                     if (r.ok) {
-                        alert('✅ Approved!');
-                        container.querySelector('.approve-btn').disabled = true;
+                        approveBtn.textContent = '✅ Approved!';
+                        approveBtn.style.background = '#81C784';
+                        rejectBtn.disabled = true;
+                        rejectBtn.style.opacity = '0.3';
+                    } else {
+                        approveBtn.textContent = '❌ Failed';
+                        approveBtn.disabled = false;
+                        approveBtn.style.opacity = '1';
                     }
+                }).catch(e => {
+                    console.error('[Monlam Approve] Error:', e);
+                    approveBtn.textContent = '❌ Error';
+                    approveBtn.disabled = false;
+                    approveBtn.style.opacity = '1';
                 });
             };
             
-            container.querySelector('.reject-btn').onclick = () => {
-                const notes = prompt('Rejection reason:');
+            rejectBtn.onclick = () => {
+                const notes = prompt('Please provide a reason for rejection:');
                 if (!notes) return;
+                
+                rejectBtn.disabled = true;
+                rejectBtn.style.opacity = '0.6';
+                rejectBtn.textContent = '⏳ Rejecting...';
                 
                 fetch(`/v1/projects/${CONFIG.projectId}/assignments/approver-completion/${exampleId}/reject/`, {
                     method: 'POST',
@@ -817,15 +869,53 @@
                     body: JSON.stringify({ review_notes: notes })
                 }).then(r => {
                     if (r.ok) {
-                        alert('✗ Rejected');
-                        container.querySelector('.reject-btn').disabled = true;
+                        rejectBtn.textContent = '✗ Rejected';
+                        rejectBtn.style.background = '#E57373';
+                        approveBtn.disabled = true;
+                        approveBtn.style.opacity = '0.3';
+                    } else {
+                        rejectBtn.textContent = '❌ Failed';
+                        rejectBtn.disabled = false;
+                        rejectBtn.style.opacity = '1';
                     }
+                }).catch(e => {
+                    console.error('[Monlam Approve] Error:', e);
+                    rejectBtn.textContent = '❌ Error';
+                    rejectBtn.disabled = false;
+                    rejectBtn.style.opacity = '1';
                 });
             };
             
-            document.body.appendChild(container);
-            console.log('[Monlam Approve] Buttons added');
-        });
+            // Strategy 1: Insert after toolbar
+            const toolbar = document.querySelector('.v-toolbar, header');
+            if (toolbar && toolbar.parentNode) {
+                toolbar.parentNode.insertBefore(container, toolbar.nextSibling);
+                console.log('[Monlam Approve] Buttons added (after toolbar)');
+                return true;
+            }
+            
+            // Strategy 2: Insert at top of main
+            const main = document.querySelector('main, .v-main__wrap, .v-content__wrap');
+            if (main && main.firstChild) {
+                main.insertBefore(container, main.firstChild);
+                console.log('[Monlam Approve] Buttons added (top of main)');
+                return true;
+            }
+            
+            // Strategy 3: Append to main
+            if (main) {
+                main.appendChild(container);
+                console.log('[Monlam Approve] Buttons added (in main)');
+                return true;
+            }
+            
+            return false;
+        }
+        
+        // Try multiple times with increasing delay
+        setTimeout(() => injectButtons(), 500);
+        setTimeout(() => injectButtons(), 1000);
+        setTimeout(() => injectButtons(), 2000);
     }
     
     function getCsrfToken() {
