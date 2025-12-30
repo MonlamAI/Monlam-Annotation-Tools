@@ -71,10 +71,10 @@ RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/
 # ============================================
 # FRONTEND ENHANCEMENTS: AUDIO LOOP & COMPLETION UI
 # ============================================
-# Copy scripts to static/_nuxt directory (where Doccano serves static JS)
-COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/client/dist/static/_nuxt/
-COPY patches/frontend/enhance-members-progress.js /doccano/backend/client/dist/static/_nuxt/
-COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist/static/_nuxt/
+# Copy scripts to staticfiles/_nuxt directory (Django serves /static/ from here)
+COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/staticfiles/_nuxt/
+COPY patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
+COPY patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
 
 # ============================================
 # FRONTEND PATCHES
@@ -128,9 +128,9 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
     chown -R doccano:doccano /doccano/backend/assignment && \
-    chown doccano:doccano /doccano/backend/client/dist/static/_nuxt/audio-loop-enhanced.js && \
-    chown doccano:doccano /doccano/backend/client/dist/static/_nuxt/enhance-members-progress.js && \
-    chown doccano:doccano /doccano/backend/client/dist/static/_nuxt/dataset-completion-columns.js
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/audio-loop-enhanced.js && \
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
 
 # ============================================
 # RUN MIGRATIONS
