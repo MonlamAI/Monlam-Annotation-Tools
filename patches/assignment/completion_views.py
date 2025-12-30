@@ -78,23 +78,48 @@ class CompletionMatrixViewSet(viewsets.ViewSet):
         Project Managers see all, others see filtered based on permissions.
         """
         project = self.get_project(project_id)
-        matrix = CompletionMatrix(project)
         
-        # Check if user is Project Manager
-        is_manager = ProjectManagerMixin.is_project_manager(request.user, project)
-        
-        if is_manager:
-            # Project Manager sees all annotators
-            data = matrix.get_annotator_matrix()
-        else:
-            # Regular users only see their own data
-            data = [
-                annotator_data
-                for annotator_data in matrix.get_annotator_matrix()
-                if annotator_data['annotator_id'] == request.user.id
-            ]
-        
-        return Response(data)
+        try:
+            # Get assignments grouped by annotator
+            from .models_separate import Assignment
+            from django.db.models import Count, Q
+            
+            # Get all unique annotators with their assignment counts
+            annotator_data = Assignment.objects.filter(
+                project=project,
+                is_active=True
+            ).values(
+                'assigned_to__id',
+                'assigned_to__username'
+            ).annotate(
+                assigned_count=Count('id'),
+                completed_count=Count('id', filter=Q(status='completed')),
+                submitted_count=Count('id', filter=Q(status='submitted'))
+            )
+            
+            # Format the data
+            data = []
+            for item in annotator_data:
+                if not item['assigned_to__id']:
+                    continue
+                assigned = item['assigned_count']
+                completed = item['completed_count'] + item['submitted_count']
+                data.append({
+                    'user_id': item['assigned_to__id'],
+                    'username': item['assigned_to__username'],
+                    'assigned_count': assigned,
+                    'completed_count': completed,
+                    'completion_rate': round((completed / assigned * 100), 1) if assigned > 0 else 0
+                })
+            
+            return Response(data)
+            
+        except Exception as e:
+            # Fallback: return empty list on error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching annotator matrix: {e}")
+            return Response([])
     
     @action(detail=False, methods=['get'])
     def approvers(self, request, project_id):

@@ -646,13 +646,13 @@
                 document.querySelectorAll('tbody tr:not([data-monlam-col])').forEach(row => {
                     row.setAttribute('data-monlam-col', 'true');
                     
-                    const link = row.querySelector('a[href*="/projects/"]');
-                    if (!link) return;
+                    // Get example ID from Cell 1 (ID column)
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length < 2) return;
                     
-                    const match = link.href.match(/\/projects\/\d+\/(\d+)/);
-                    if (!match) return;
+                    const exampleId = cells[1].textContent.trim();
+                    if (!exampleId || !/^\d+$/.test(exampleId)) return;
                     
-                    const exampleId = match[1];
                     const assignment = assignmentData[exampleId];
                     
                     const td = document.createElement('td');
