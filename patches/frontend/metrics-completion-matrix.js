@@ -34,18 +34,36 @@
     
     /**
      * Fetch completion matrix data
+     * Uses separate API calls for summary, annotators, and approvers
+     * These endpoints are available to all project members
      */
     async function fetchCompletionData(projectId) {
         try {
-            // Fetch full matrix (includes annotators, approvers, and summary)
-            const response = await fetch(`/v1/projects/${projectId}/assignments/completion-matrix/`);
-            if (response.ok) {
-                const data = await response.json();
-                console.log('[Monlam] Completion matrix data fetched:', data);
-                return data;
-            } else {
-                console.error('[Monlam] Failed to fetch completion data:', response.status, response.statusText);
+            // Fetch all three endpoints in parallel
+            const [summaryRes, annotatorsRes, approversRes] = await Promise.all([
+                fetch(`/v1/projects/${projectId}/assignments/completion-matrix/summary/`),
+                fetch(`/v1/projects/${projectId}/assignments/completion-matrix/annotators/`),
+                fetch(`/v1/projects/${projectId}/assignments/completion-matrix/approvers/`)
+            ]);
+            
+            if (!summaryRes.ok) {
+                console.error('[Monlam] Summary API failed:', summaryRes.status);
+                return null;
             }
+            
+            const summary = await summaryRes.json();
+            const annotators = annotatorsRes.ok ? await annotatorsRes.json() : [];
+            const approvers = approversRes.ok ? await approversRes.json() : [];
+            
+            const data = {
+                project_id: projectId,
+                summary: summary,
+                annotators: annotators,
+                approvers: approvers
+            };
+            
+            console.log('[Monlam] Completion matrix data fetched:', data);
+            return data;
         } catch (error) {
             console.error('[Monlam] Error fetching completion data:', error);
         }
