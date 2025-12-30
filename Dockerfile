@@ -69,14 +69,6 @@ COPY patches/assignment /doccano/backend/assignment
 RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/base.py || true
 
 # ============================================
-# FRONTEND ENHANCEMENTS: AUDIO LOOP & COMPLETION UI
-# ============================================
-# Copy JavaScript files to staticfiles/_nuxt (Django serves /static/_nuxt/ from here)
-COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/staticfiles/_nuxt/
-COPY patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
-COPY patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
-
-# ============================================
 # FRONTEND PATCHES
 # ============================================
 
@@ -123,10 +115,7 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
-    chown -R doccano:doccano /doccano/backend/assignment && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/audio-loop-enhanced.js && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
+    chown -R doccano:doccano /doccano/backend/assignment
 
 # ============================================
 # RUN MIGRATIONS
@@ -134,6 +123,19 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # Run migrations for assignment and completion tracking
 RUN python manage.py makemigrations assignment || true && \
     python manage.py migrate assignment || true
+
+# ============================================
+# COPY MONLAM JS FILES AND COMPRESS THEM
+# ============================================
+# Copy JS files to staticfiles
+COPY --chown=doccano:doccano patches/frontend/audio-loop-enhanced.js /doccano/backend/staticfiles/_nuxt/
+COPY --chown=doccano:doccano patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
+COPY --chown=doccano:doccano patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
+
+# Compress files for WhiteNoise (it requires .gz versions)
+RUN gzip -k -f /doccano/backend/staticfiles/_nuxt/audio-loop-enhanced.js && \
+    gzip -k -f /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
+    gzip -k -f /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
 
 USER doccano
 WORKDIR /doccano/backend
