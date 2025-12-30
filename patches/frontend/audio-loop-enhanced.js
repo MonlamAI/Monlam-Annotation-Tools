@@ -22,44 +22,12 @@
     let loopEnabled = localStorage.getItem(STORAGE_KEY) !== 'false'; // Default: true
     
     /**
-     * Get or create loop toggle button
+     * Get or create loop toggle button (HIDDEN - loop always on by default)
      */
     function getOrCreateLoopButton(audioElement) {
-        const audioParent = audioElement.parentElement;
-        if (!audioParent) return null;
-        
-        // Check if button already exists
-        let button = audioParent.querySelector('.monlam-loop-toggle');
-        if (button) return button;
-        
-        // Create new button
-        button = document.createElement('button');
-        button.className = 'monlam-loop-toggle';
-        button.innerHTML = loopEnabled ? '🔁 Loop ON' : '🔁 Loop OFF';
-        button.title = 'Toggle audio loop (Keyboard: L)';
-        button.style.cssText = `
-            margin-left: 10px;
-            padding: 5px 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: ${loopEnabled ? '#4CAF50' : '#f0f0f0'};
-            color: ${loopEnabled ? 'white' : '#333'};
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.3s ease;
-        `;
-        
-        // Add click handler
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleLoop();
-        });
-        
-        // Insert after audio element
-        audioElement.parentNode.insertBefore(button, audioElement.nextSibling);
-        
-        return button;
+        // Button removed - loop is always on by default
+        // Users can still toggle with L key if needed
+        return null;
     }
     
     /**

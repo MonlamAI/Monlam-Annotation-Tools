@@ -1,12 +1,25 @@
 /**
  * Simple Audio Loop - Auto-loop audio without UI
  * Silently enables loop on all audio elements
+ * ONLY on annotation pages (not dataset list)
  */
 
 (function() {
     'use strict';
     
     console.log('[Monlam] Simple Audio Loop Patch loaded');
+    
+    /**
+     * Check if we're on an annotation page
+     */
+    function isAnnotationPage() {
+        const path = window.location.pathname;
+        // Only run on annotation pages, NOT on /dataset or /members or /metrics
+        const isAnnotation = path.includes('/annotation') || 
+                            (path.match(/\/projects\/\d+$/) && !path.includes('/dataset') && !path.includes('/members') && !path.includes('/metrics'));
+        console.log('[Monlam] Is annotation page?', isAnnotation, 'Path:', path);
+        return isAnnotation;
+    }
     
     /**
      * Apply loop and auto-play to audio element
@@ -85,6 +98,12 @@
      * Initialize
      */
     function init() {
+        // Only run on annotation pages
+        if (!isAnnotationPage()) {
+            console.log('[Monlam] Not on annotation page, skipping audio loop');
+            return;
+        }
+        
         // Apply to existing audio
         applyToAll();
         
@@ -92,9 +111,13 @@
         watchForNewAudio();
         
         // Re-apply periodically (in case Vue recreates elements)
-        setInterval(applyToAll, 1000);
+        setInterval(() => {
+            if (isAnnotationPage()) {
+                applyToAll();
+            }
+        }, 1000);
         
-        console.log('[Monlam] Audio loop initialized (silent mode)');
+        console.log('[Monlam] Audio loop initialized (silent mode) - annotation page only');
     }
     
     // Wait for page load

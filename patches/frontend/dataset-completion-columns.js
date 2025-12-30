@@ -39,7 +39,7 @@
         }
         
         try {
-            const response = await fetch(`/v1/projects/${projectId}/assignments/comprehensive-examples/`);
+            const response = await fetch(`/v1/projects/${projectId}/assignments/examples-comprehensive/`);
             if (response.ok) {
                 const data = await response.json();
                 console.log('[Monlam] Comprehensive example data fetched:', data.length, 'examples');
