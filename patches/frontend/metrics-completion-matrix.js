@@ -37,7 +37,8 @@
      */
     async function fetchCompletionData(projectId) {
         try {
-            const response = await fetch(`/v1/projects/${projectId}/assignments/completion-matrix/summary/`);
+            // Fetch full matrix (includes annotators, approvers, and summary)
+            const response = await fetch(`/v1/projects/${projectId}/assignments/completion-matrix/`);
             if (response.ok) {
                 const data = await response.json();
                 console.log('[Monlam] Completion matrix data fetched:', data);
@@ -62,19 +63,19 @@
                     <h1 style="margin: 0 0 24px 0; font-size: 32px; font-weight: bold;">📊 Completion Matrix</h1>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
                         <div style="background: rgba(255,255,255,0.2); padding: 20px; border-radius: 8px; backdrop-filter: blur(10px);">
-                            <div style="font-size: 36px; font-weight: bold;">${data.project_summary.total_examples}</div>
+                            <div style="font-size: 36px; font-weight: bold;">${data.summary.total_examples}</div>
                             <div style="font-size: 14px; opacity: 0.9;">Total Examples</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.2); padding: 20px; border-radius: 8px; backdrop-filter: blur(10px);">
-                            <div style="font-size: 36px; font-weight: bold;">${data.project_summary.completed_examples}</div>
+                            <div style="font-size: 36px; font-weight: bold;">${data.summary.completed_examples}</div>
                             <div style="font-size: 14px; opacity: 0.9;">Completed</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.2); padding: 20px; border-radius: 8px; backdrop-filter: blur(10px);">
-                            <div style="font-size: 36px; font-weight: bold;">${data.project_summary.in_progress_examples}</div>
-                            <div style="font-size: 14px; opacity: 0.9;">In Progress</div>
+                            <div style="font-size: 36px; font-weight: bold;">${data.summary.assigned_examples}</div>
+                            <div style="font-size: 14px; opacity: 0.9;">Assigned</div>
                         </div>
                         <div style="background: rgba(255,255,255,0.2); padding: 20px; border-radius: 8px; backdrop-filter: blur(10px);">
-                            <div style="font-size: 36px; font-weight: bold;">${data.project_summary.overall_completion_rate.toFixed(1)}%</div>
+                            <div style="font-size: 36px; font-weight: bold;">${data.summary.completion_rate.toFixed(1)}%</div>
                             <div style="font-size: 14px; opacity: 0.9;">Overall Completion</div>
                         </div>
                     </div>
