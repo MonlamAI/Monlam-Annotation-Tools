@@ -564,9 +564,17 @@
     }
     
     // FEATURE 1: AUDIO AUTO-LOOP
+    let audioObserver = null; // Store observer to disconnect it later
+    
     function enableAudioLoop() {
         const path = window.location.pathname;
         const isAnnotationPage = path.includes('/speech-to-text') || path.match(/\/projects\/\d+\/\d+$/);
+        
+        // Disconnect previous observer if exists
+        if (audioObserver) {
+            audioObserver.disconnect();
+            audioObserver = null;
+        }
         
         if (!isAnnotationPage) {
             console.log('[Monlam Audio] Not on annotation page');
@@ -576,6 +584,7 @@
         console.log('[Monlam Audio] Enabling audio loop...');
         
         function applyLoop(audio) {
+            // Only apply to audio on annotation pages
             if (!audio.hasAttribute('data-monlam-loop')) {
                 audio.loop = true;
                 audio.setAttribute('data-monlam-loop', 'true');
@@ -601,10 +610,11 @@
             audioElements.forEach(applyLoop);
         });
         
-        const observer = new MutationObserver(() => {
+        // Only set up observer on annotation pages
+        audioObserver = new MutationObserver(() => {
             document.querySelectorAll('audio:not([data-monlam-loop])').forEach(applyLoop);
         });
-        observer.observe(document.body, { childList: true, subtree: true });
+        audioObserver.observe(document.body, { childList: true, subtree: true });
     }
     
     // FEATURE 2: DATASET COLUMNS
