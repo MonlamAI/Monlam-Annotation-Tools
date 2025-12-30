@@ -71,8 +71,8 @@ COPY patches/assignment /doccano/backend/assignment
 # Register the assignment app in settings
 RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/base.py || true
 
-# Use custom WhiteNoise storage with proper MIME types
-RUN sed -i 's|STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"|STATICFILES_STORAGE = "config.whitenoise_config.MonlamWhiteNoiseStorage"|' /doccano/backend/config/settings/base.py
+# Add MIME type configuration at the VERY START of base.py (before any imports)
+RUN sed -i '1i # Monlam: Configure MIME types for JavaScript files BEFORE WhiteNoise loads\nimport mimetypes\nmimetypes.add_type("application/javascript", ".js", True)\n' /doccano/backend/config/settings/base.py
 
 # ============================================
 # FRONTEND PATCHES
