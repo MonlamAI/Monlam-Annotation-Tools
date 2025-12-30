@@ -71,21 +71,10 @@ RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/
 # ============================================
 # FRONTEND ENHANCEMENTS: AUDIO LOOP & COMPLETION UI
 # ============================================
-# Copy scripts to ALL possible static locations to ensure Django finds them
-# Location 1: client/dist/static/_nuxt (where built frontend files are)
-COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/client/dist/static/_nuxt/
-COPY patches/frontend/enhance-members-progress.js /doccano/backend/client/dist/static/_nuxt/
-COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist/static/_nuxt/
-
-# Location 2: staticfiles/_nuxt (Django collectstatic location)
+# Copy JavaScript files to staticfiles/_nuxt (Django serves /static/_nuxt/ from here)
 COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/staticfiles/_nuxt/
 COPY patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
 COPY patches/frontend/dataset-completion-columns.js /doccano/backend/staticfiles/_nuxt/
-
-# Location 3: client/dist/_nuxt (alternative frontend build location)
-COPY patches/frontend/audio-loop-enhanced.js /doccano/backend/client/dist/_nuxt/
-COPY patches/frontend/enhance-members-progress.js /doccano/backend/client/dist/_nuxt/
-COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist/_nuxt/
 
 # ============================================
 # FRONTEND PATCHES
@@ -97,13 +86,9 @@ COPY patches/frontend/dataset-completion-columns.js /doccano/backend/client/dist
 # - Monlam branding colors
 # - Review button styling (Red O / Green Check)
 # - GitHub button hidden
-# - Audio loop script for STT projects
+# - Monlam enhancement script tags (audio loop, completion tracking UI)
 COPY patches/frontend/index.html /doccano/backend/client/dist/index.html
 COPY patches/frontend/200.html /doccano/backend/client/dist/200.html
-
-# Add enhancement scripts to index.html (inject before closing body tag)
-RUN sed -i 's|</body>|  <!-- Monlam Enhancements -->\n  <script src="/static/_nuxt/audio-loop-enhanced.js"></script>\n  <script src="/static/_nuxt/enhance-members-progress.js"></script>\n  <script src="/static/_nuxt/dataset-completion-columns.js"></script>\n</body>|' /doccano/backend/client/dist/index.html && \
-    sed -i 's|</body>|  <!-- Monlam Enhancements -->\n  <script src="/static/_nuxt/audio-loop-enhanced.js"></script>\n  <script src="/static/_nuxt/enhance-members-progress.js"></script>\n  <script src="/static/_nuxt/dataset-completion-columns.js"></script>\n</body>|' /doccano/backend/client/dist/200.html
 
 # ============================================
 # DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
@@ -139,9 +124,9 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
     chown -R doccano:doccano /doccano/backend/assignment && \
-    chown doccano:doccano /doccano/backend/client/dist/static/_nuxt/*.js && \
-    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/*.js && \
-    chown doccano:doccano /doccano/backend/client/dist/_nuxt/*.js || true
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/audio-loop-enhanced.js && \
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
+    chown doccano:doccano /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
 
 # ============================================
 # RUN MIGRATIONS
