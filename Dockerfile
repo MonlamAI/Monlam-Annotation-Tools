@@ -140,21 +140,11 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # Or use the manual migration command documented in README
 
 # ============================================
-# COPY MONLAM JS FILES AND COMPRESS THEM
+# MONLAM FEATURES NOW INLINE IN INDEX.HTML
 # ============================================
-# Copy JS files to staticfiles
-COPY --chown=doccano:doccano patches/frontend/audio-loop-simple.js /doccano/backend/staticfiles/_nuxt/
-COPY --chown=doccano:doccano patches/frontend/enhance-members-progress.js /doccano/backend/staticfiles/_nuxt/
-COPY --chown=doccano:doccano patches/frontend/dataset-completion-columns-simple.js /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js
-COPY --chown=doccano:doccano patches/frontend/metrics-completion-matrix.js /doccano/backend/staticfiles/_nuxt/
-COPY --chown=doccano:doccano patches/frontend/approve-reject-buttons.js /doccano/backend/staticfiles/_nuxt/
-
-# Compress files for WhiteNoise (it requires .gz versions)
-RUN gzip -k -f /doccano/backend/staticfiles/_nuxt/audio-loop-simple.js && \
-    gzip -k -f /doccano/backend/staticfiles/_nuxt/enhance-members-progress.js && \
-    gzip -k -f /doccano/backend/staticfiles/_nuxt/dataset-completion-columns.js && \
-    gzip -k -f /doccano/backend/staticfiles/_nuxt/metrics-completion-matrix.js && \
-    gzip -k -f /doccano/backend/staticfiles/_nuxt/approve-reject-buttons.js
+# All features (audio loop, dataset columns, metrics matrix, approve buttons)
+# are now embedded directly in index.html and 200.html as inline scripts.
+# This ensures they execute reliably without external file loading issues.
 
 USER doccano
 WORKDIR /doccano/backend

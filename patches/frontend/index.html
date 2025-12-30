@@ -521,12 +521,359 @@
   <script src="/static/_nuxt/132fcbd.js"></script>
   <script src="/static/_nuxt/50aa8ea.js"></script>
   <script src="/static/_nuxt/bd0aa1f.js"></script>
-  <!-- Monlam Enhancements -->
-  <script src="/static/_nuxt/audio-loop-simple.js?v=20251230c"></script>
-  <script src="/static/_nuxt/enhance-members-progress.js?v=20251230c"></script>
-  <script src="/static/_nuxt/dataset-completion-columns.js?v=20251230c"></script>
-  <script src="/static/_nuxt/metrics-completion-matrix.js?v=FIXED1"></script>
-  <script src="/static/_nuxt/approve-reject-buttons.js?v=20251230c"></script>
+  
+  <!-- Monlam Features - Inline for Maximum Reliability -->
+  <script>
+(function() {
+    'use strict';
+    
+    console.log('[Monlam Inline] Features loading...');
+    
+    const CONFIG = {
+        maxRetries: 50,
+        retryDelay: 200,
+        projectId: null
+    };
+    
+    // UTILITIES
+    function getProjectId() {
+        const match = window.location.pathname.match(/\/projects\/(\d+)/);
+        return match ? match[1] : null;
+    }
+    
+    function waitForElement(selector, callback, retries = 0) {
+        const element = document.querySelector(selector);
+        if (element) {
+            console.log(`[Monlam] Found element: ${selector}`);
+            callback(element);
+        } else if (retries < CONFIG.maxRetries) {
+            setTimeout(() => waitForElement(selector, callback, retries + 1), CONFIG.retryDelay);
+        } else {
+            console.log(`[Monlam] Timeout waiting for: ${selector}`);
+        }
+    }
+    
+    function waitForElements(selector, callback, retries = 0) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+            console.log(`[Monlam] Found ${elements.length} elements: ${selector}`);
+            callback(elements);
+        } else if (retries < CONFIG.maxRetries) {
+            setTimeout(() => waitForElements(selector, callback, retries + 1), CONFIG.retryDelay);
+        }
+    }
+    
+    // FEATURE 1: AUDIO AUTO-LOOP
+    function enableAudioLoop() {
+        const path = window.location.pathname;
+        const isAnnotationPage = path.includes('/speech-to-text') || path.match(/\/projects\/\d+\/\d+$/);
+        
+        if (!isAnnotationPage) {
+            console.log('[Monlam Audio] Not on annotation page');
+            return;
+        }
+        
+        console.log('[Monlam Audio] Enabling audio loop...');
+        
+        function applyLoop(audio) {
+            if (!audio.hasAttribute('data-monlam-loop')) {
+                audio.loop = true;
+                audio.setAttribute('data-monlam-loop', 'true');
+                
+                if (audio.readyState >= 2) {
+                    audio.play().catch(e => {
+                        console.log('[Monlam Audio] Auto-play blocked, waiting for interaction');
+                        document.addEventListener('click', () => audio.play(), { once: true });
+                    });
+                } else {
+                    audio.addEventListener('canplay', () => {
+                        audio.play().catch(e => {
+                            document.addEventListener('click', () => audio.play(), { once: true });
+                        });
+                    }, { once: true });
+                }
+                
+                console.log('[Monlam Audio] Loop enabled');
+            }
+        }
+        
+        waitForElements('audio', (audioElements) => {
+            audioElements.forEach(applyLoop);
+        });
+        
+        const observer = new MutationObserver(() => {
+            document.querySelectorAll('audio:not([data-monlam-loop])').forEach(applyLoop);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+    
+    // FEATURE 2: DATASET COLUMNS
+    function addDatasetColumns() {
+        const isDatasetPage = window.location.pathname.includes('/dataset');
+        if (!isDatasetPage) return;
+        
+        console.log('[Monlam Dataset] Adding completion columns...');
+        CONFIG.projectId = getProjectId();
+        
+        let assignmentData = {};
+        
+        fetch(`/v1/projects/${CONFIG.projectId}/assignments/`)
+            .then(r => r.json())
+            .then(data => {
+                const assignments = data.results || data;
+                assignments.forEach(a => {
+                    assignmentData[a.example_id] = a;
+                });
+                console.log('[Monlam Dataset] Loaded', Object.keys(assignmentData).length, 'assignments');
+                injectColumns();
+            })
+            .catch(e => console.error('[Monlam Dataset] Failed:', e));
+        
+        function injectColumns() {
+            waitForElement('thead tr', (headerRow) => {
+                if (headerRow.querySelector('.monlam-col')) return;
+                
+                const th = document.createElement('th');
+                th.className = 'monlam-col text-start';
+                th.innerHTML = '<span style="font-weight: 600;">👤 Assigned To</span>';
+                th.style.cssText = 'padding: 12px; background: #f5f5f5;';
+                headerRow.appendChild(th);
+                
+                console.log('[Monlam Dataset] Header added');
+            });
+            
+            const observer = new MutationObserver(() => {
+                document.querySelectorAll('tbody tr:not([data-monlam-col])').forEach(row => {
+                    row.setAttribute('data-monlam-col', 'true');
+                    
+                    const link = row.querySelector('a[href*="/projects/"]');
+                    if (!link) return;
+                    
+                    const match = link.href.match(/\/projects\/\d+\/(\d+)/);
+                    if (!match) return;
+                    
+                    const exampleId = match[1];
+                    const assignment = assignmentData[exampleId];
+                    
+                    const td = document.createElement('td');
+                    td.className = 'monlam-col text-start';
+                    td.style.cssText = 'padding: 12px;';
+                    
+                    if (assignment) {
+                        td.innerHTML = `
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                <span style="background: #2196F3; color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; display: inline-block; width: fit-content;">
+                                    📋 ${assignment.status}
+                                </span>
+                                <span style="font-size: 10px; color: #666;">${assignment.assigned_to_username || 'N/A'}</span>
+                            </div>
+                        `;
+                    } else {
+                        td.innerHTML = '<span style="color: #999; font-size: 12px;">Not assigned</span>';
+                    }
+                    
+                    row.appendChild(td);
+                });
+            });
+            
+            waitForElement('tbody', (tbody) => {
+                observer.observe(tbody, { childList: true, subtree: true });
+                observer.disconnect();
+                observer.observe(tbody, { childList: true, subtree: true });
+            });
+        }
+    }
+    
+    // FEATURE 3: METRICS MATRIX
+    function addMetricsMatrix() {
+        const isMetricsPage = window.location.pathname.endsWith('/metrics');
+        if (!isMetricsPage) return;
+        
+        console.log('[Monlam Metrics] Adding completion matrix...');
+        CONFIG.projectId = getProjectId();
+        
+        Promise.all([
+            fetch(`/v1/projects/${CONFIG.projectId}/assignments/completion-matrix/summary/`).then(r => r.json()),
+            fetch(`/v1/projects/${CONFIG.projectId}/assignments/completion-matrix/annotators/`).then(r => r.json()),
+        ]).then(([summary, annotators]) => {
+            console.log('[Monlam Metrics] Data fetched:', summary, annotators);
+            injectMatrix(summary, annotators);
+        }).catch(e => console.error('[Monlam Metrics] Failed:', e));
+        
+        function injectMatrix(summary, annotators) {
+            waitForElement('main', (main) => {
+                if (main.querySelector('.monlam-metrics')) return;
+                
+                const section = document.createElement('div');
+                section.className = 'monlam-metrics';
+                section.style.cssText = 'margin: 20px; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);';
+                
+                section.innerHTML = `
+                    <h2 style="margin-bottom: 20px; color: #1976D2;">📊 Project Completion Tracking</h2>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 30px;">
+                        <div style="background: #E3F2FD; padding: 16px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Total Examples</div>
+                            <div style="font-size: 32px; font-weight: bold; color: #1976D2;">${summary.total_examples}</div>
+                        </div>
+                        <div style="background: #E8F5E9; padding: 16px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Assigned</div>
+                            <div style="font-size: 32px; font-weight: bold; color: #4CAF50;">${summary.assigned_examples}</div>
+                        </div>
+                        <div style="background: #FFF3E0; padding: 16px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Completed</div>
+                            <div style="font-size: 32px; font-weight: bold; color: #FF9800;">${summary.completed_examples}</div>
+                        </div>
+                        <div style="background: #F3E5F5; padding: 16px; border-radius: 8px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Approved</div>
+                            <div style="font-size: 32px; font-weight: bold; color: #9C27B0;">${summary.approved_examples}</div>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-bottom: 16px;">Annotators Progress</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f5f5f5;">
+                                <th style="padding: 12px; text-align: left;">User</th>
+                                <th style="padding: 12px; text-align: center;">Assigned</th>
+                                <th style="padding: 12px; text-align: center;">Completed</th>
+                                <th style="padding: 12px; text-align: center;">Progress</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${annotators.map(a => `
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 12px;">${a.username}</td>
+                                    <td style="padding: 12px; text-align: center;">${a.assigned_count}</td>
+                                    <td style="padding: 12px; text-align: center;">${a.completed_count}</td>
+                                    <td style="padding: 12px;">
+                                        <div style="background: #eee; border-radius: 4px; overflow: hidden; height: 20px;">
+                                            <div style="background: #4CAF50; height: 100%; width: ${a.completion_rate}%;"></div>
+                                        </div>
+                                        <span style="font-size: 11px; color: #666;">${a.completion_rate}%</span>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                main.appendChild(section);
+                console.log('[Monlam Metrics] Matrix injected');
+            });
+        }
+    }
+    
+    // FEATURE 4: APPROVE/REJECT BUTTONS
+    function addApproveButtons() {
+        const path = window.location.pathname;
+        const isAnnotationPage = path.includes('/speech-to-text') || path.match(/\/projects\/\d+\/\d+$/);
+        
+        if (!isAnnotationPage) return;
+        
+        console.log('[Monlam Approve] Adding buttons...');
+        CONFIG.projectId = getProjectId();
+        
+        const match = path.match(/\/projects\/\d+\/(\d+)/);
+        if (!match) return;
+        const exampleId = match[1];
+        
+        waitForElement('main', (main) => {
+            if (main.querySelector('.monlam-approve-btns')) return;
+            
+            const container = document.createElement('div');
+            container.className = 'monlam-approve-btns';
+            container.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 1000; display: flex; gap: 12px;';
+            
+            container.innerHTML = `
+                <button class="approve-btn" style="background: #4CAF50; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(76,175,80,0.3);">
+                    ✓ Approve
+                </button>
+                <button class="reject-btn" style="background: #F44336; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(244,67,54,0.3);">
+                    ✗ Reject
+                </button>
+            `;
+            
+            container.querySelector('.approve-btn').onclick = () => {
+                fetch(`/v1/projects/${CONFIG.projectId}/assignments/approver-completion/${exampleId}/approve/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+                    body: JSON.stringify({ review_notes: '' })
+                }).then(r => {
+                    if (r.ok) {
+                        alert('✅ Approved!');
+                        container.querySelector('.approve-btn').disabled = true;
+                    }
+                });
+            };
+            
+            container.querySelector('.reject-btn').onclick = () => {
+                const notes = prompt('Rejection reason:');
+                if (!notes) return;
+                
+                fetch(`/v1/projects/${CONFIG.projectId}/assignments/approver-completion/${exampleId}/reject/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+                    body: JSON.stringify({ review_notes: notes })
+                }).then(r => {
+                    if (r.ok) {
+                        alert('✗ Rejected');
+                        container.querySelector('.reject-btn').disabled = true;
+                    }
+                });
+            };
+            
+            document.body.appendChild(container);
+            console.log('[Monlam Approve] Buttons added');
+        });
+    }
+    
+    function getCsrfToken() {
+        const name = 'csrftoken';
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [key, value] = cookie.trim().split('=');
+            if (key === name) return decodeURIComponent(value);
+        }
+        return '';
+    }
+    
+    // INITIALIZATION
+    function init() {
+        console.log('[Monlam] Initializing features...');
+        console.log('[Monlam] Current path:', window.location.pathname);
+        
+        setTimeout(() => {
+            enableAudioLoop();
+            addDatasetColumns();
+            addMetricsMatrix();
+            addApproveButtons();
+        }, 1000);
+        
+        let lastPath = window.location.pathname;
+        setInterval(() => {
+            if (window.location.pathname !== lastPath) {
+                lastPath = window.location.pathname;
+                console.log('[Monlam] Navigation detected:', lastPath);
+                setTimeout(() => {
+                    enableAudioLoop();
+                    addDatasetColumns();
+                    addMetricsMatrix();
+                    addApproveButtons();
+                }, 500);
+            }
+        }, 500);
+    }
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+    
+    console.log('[Monlam Inline] Features script loaded');
+})();
+  </script>
 </body>
 
 </html>
