@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ('projects', '0001_initial'),
         ('examples', '0001_initial'),
-        ('assignment', '0004_remove_annotatorcompletionstatus_unique_annotator_completion_and_more'),
+        ('assignment', '0003_example_locking'),
     ]
 
     operations = [
