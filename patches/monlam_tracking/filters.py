@@ -118,15 +118,25 @@ def register_visibility_filter():
         if 'DEFAULT_FILTER_BACKENDS' not in settings.REST_FRAMEWORK:
             settings.REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS'] = []
         
+        # Convert tuple to list if necessary (Django sometimes uses tuples)
+        if isinstance(settings.REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS'], tuple):
+            settings.REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS'] = list(
+                settings.REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS']
+            )
+        
         filter_class = 'monlam_tracking.filters.AnnotationVisibilityFilter'
         
         if filter_class not in settings.REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS']:
             settings.REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS'].append(filter_class)
             print(f'[Monlam Filter] ✅ Added {filter_class} to DRF backends')
+        else:
+            print(f'[Monlam Filter] ✅ Filter already registered')
         
         return True
         
     except Exception as e:
         print(f'[Monlam Filter] ⚠️ Registration failed: {e}')
+        import traceback
+        traceback.print_exc()
         return False
 
