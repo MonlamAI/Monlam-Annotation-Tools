@@ -1383,6 +1383,117 @@
         }
     }
     
+    // FEATURE: ENHANCE DATASET TABLE WITH ASSIGNMENT COLUMNS
+    async function enhanceDatasetTable() {
+        // Check if we're on dataset page
+        if (!window.location.pathname.includes('/dataset')) {
+            return;
+        }
+        
+        const projectId = getProjectId();
+        if (!projectId) {
+            console.log('[Monlam Dataset] No project ID found');
+            return;
+        }
+        
+        console.log('[Monlam Dataset] Enhancing dataset table for project', projectId);
+        
+        try {
+            // Fetch assignments
+            const assignResp = await fetch(`/v1/projects/${projectId}/assignments/?limit=1000`);
+            if (!assignResp.ok) {
+                console.log('[Monlam Dataset] Could not fetch assignments');
+                return;
+            }
+            const assignData = await assignResp.json();
+            const assignmentMap = {};
+            (assignData.results || []).forEach(a => {
+                assignmentMap[a.example] = a;
+            });
+            
+            // Fetch users
+            const userResp = await fetch(`/v1/projects/${projectId}/members`);
+            const userData = userResp.ok ? await userResp.json() : { results: [] };
+            const userMap = {};
+            (userData.results || []).forEach(m => {
+                userMap[m.user] = m.username;
+            });
+            
+            console.log('[Monlam Dataset] Loaded', Object.keys(assignmentMap).length, 'assignments');
+            
+            // Wait for table to appear
+            setTimeout(() => {
+                // Add headers
+                const headerRow = document.querySelector('thead tr');
+                if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
+                    ['Annotated By', 'Reviewed By', 'Status'].forEach(text => {
+                        const th = document.createElement('th');
+                        th.textContent = text;
+                        th.className = 'monlam-status-header';
+                        th.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0;';
+                        headerRow.appendChild(th);
+                    });
+                    console.log('[Monlam Dataset] ✅ Headers added');
+                }
+                
+                // Add data cells
+                const dataRows = document.querySelectorAll('tbody tr');
+                dataRows.forEach(row => {
+                    if (row.querySelector('.monlam-status-cell')) return; // Already added
+                    
+                    // Extract example ID (first cell usually contains ID)
+                    const firstCell = row.querySelector('td:first-child');
+                    if (!firstCell) return;
+                    
+                    const idMatch = firstCell.textContent.match(/(\d+)/);
+                    if (!idMatch) return;
+                    
+                    const exampleId = parseInt(idMatch[1]);
+                    const assignment = assignmentMap[exampleId];
+                    
+                    // Get values
+                    const annotatedBy = assignment?.assigned_to ? (userMap[assignment.assigned_to] || `User ${assignment.assigned_to}`) : '—';
+                    const reviewedBy = assignment?.reviewed_by ? (userMap[assignment.reviewed_by] || `User ${assignment.reviewed_by}`) : '—';
+                    const status = assignment?.status || 'unassigned';
+                    
+                    // Status badge colors
+                    const statusColors = {
+                        'assigned': '#9e9e9e',
+                        'in_progress': '#2196f3',
+                        'submitted': '#ff9800',
+                        'approved': '#4caf50',
+                        'rejected': '#f44336',
+                        'unassigned': '#e0e0e0'
+                    };
+                    const color = statusColors[status] || '#e0e0e0';
+                    const textColor = status === 'unassigned' ? '#666' : 'white';
+                    
+                    // Create cells
+                    [
+                        { text: annotatedBy, class: 'monlam-annotated-cell' },
+                        { text: reviewedBy, class: 'monlam-reviewed-cell' },
+                        { html: `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`, class: 'monlam-status-cell' }
+                    ].forEach(cell => {
+                        const td = document.createElement('td');
+                        td.className = cell.class;
+                        td.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0;';
+                        if (cell.html) {
+                            td.innerHTML = cell.html;
+                        } else {
+                            td.textContent = cell.text;
+                        }
+                        row.appendChild(td);
+                    });
+                });
+                
+                console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');
+            }, 2000); // Wait for Vue to render table
+            
+        } catch (error) {
+            console.error('[Monlam Dataset] Error enhancing table:', error);
+        }
+    }
+    
     function init() {
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
@@ -1401,7 +1512,7 @@
         
         setTimeout(() => {
             enableAudioLoop();
-            addDatasetColumns();
+            enhanceDatasetTable(); // NEW: Add assignment columns to dataset table
             addMetricsMatrix();
             // TEMPORARILY DISABLED: addApproveButtons();
             // Approve buttons are interfering with annotation interface
@@ -1417,9 +1528,8 @@
                 checkAndRedirect(); // Check on every navigation
                 setTimeout(() => {
                     enableAudioLoop();
-                    addDatasetColumns();
+                    enhanceDatasetTable(); // Re-enhance dataset table on navigation
                     addMetricsMatrix();
-                    addApproveButtons();
                 }, 500);
             }
         }, 500);
