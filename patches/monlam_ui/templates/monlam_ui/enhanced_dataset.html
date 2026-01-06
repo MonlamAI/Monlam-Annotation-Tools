@@ -304,15 +304,15 @@
                 }
             },
             goToAnnotation(item) {
-                // Simplified: Just navigate to the speech-to-text interface
-                // Doccano will handle loading the examples
-                const url = `/projects/{{ project_id }}/speech-to-text`;
+                // Navigate to Doccano's standard dataset page
+                // User can then use the "Start Annotation" button there
+                // (Or we'll auto-trigger it in a future update)
                 
-                console.log(`📍 Navigating to annotation interface for example ${item.id}`);
-                console.log(`   URL: ${url}`);
+                console.log(`📍 Navigating to dataset page for project {{ project_id }}`);
+                console.log(`   Target example: ${item.id}`);
                 
-                // Navigate to the annotation page
-                window.location.href = url;
+                // Go to standard Doccano dataset page
+                window.location.href = `/projects/{{ project_id }}/dataset`;
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;
