@@ -718,9 +718,336 @@
     // This was for the old /monlam/{id}/completion/ custom page
     // No longer needed since we're not redirecting to custom pages
     
-    // Removed: getExampleIdFromPage(), addApproveButtons(), getCsrfToken(), isProjectAdmin()
-    // These were for the approve/reject buttons that were interfering with annotation interface
-    // Will be re-implemented properly in a future update
+    // FEATURE: APPROVE/REJECT BUTTONS FOR REVIEWERS
+    async function addApproveRejectButtons() {
+        const path = window.location.pathname;
+        const isAnnotationPage = path.includes('/speech-to-text') || 
+                                  path.includes('/sequence-labeling') ||
+                                  path.includes('/document-classification') ||
+                                  path.includes('/seq2seq') ||
+                                  path.includes('/intent-detection-and-slot-filling') ||
+                                  path.includes('/image-classification') ||
+                                  path.includes('/bounding-box') ||
+                                  path.includes('/segmentation') ||
+                                  path.includes('/image-captioning');
+        
+        if (!isAnnotationPage) return;
+        
+        console.log('[Monlam Approve] On annotation page, checking user role...');
+        
+        try {
+            // Get current user info
+            const userResp = await fetch('/v1/me');
+            if (!userResp.ok) return;
+            const currentUser = await userResp.json();
+            
+            // Get project ID
+            const projectMatch = path.match(/\/projects\/(\d+)/);
+            if (!projectMatch) return;
+            const projectId = projectMatch[1];
+            
+            // Get project members to check role
+            const membersResp = await fetch(`/v1/projects/${projectId}/members`);
+            if (!membersResp.ok) return;
+            const membersData = await membersResp.json();
+            const members = membersData.results || [];
+            
+            // Find current user's role
+            const currentMember = members.find(m => m.user === currentUser.id);
+            const role = currentMember ? currentMember.role : null;
+            
+            console.log('[Monlam Approve] User role:', role);
+            
+            // Only show for approvers and project_managers
+            if (role !== 'approver' && role !== 'project_manager') {
+                console.log('[Monlam Approve] Not an approver/PM, skipping buttons');
+                return;
+            }
+            
+            // Get example ID from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const pageParam = urlParams.get('page');
+            
+            // Wait for the main content area to appear
+            waitForElement('main', (mainElement) => {
+                if (document.querySelector('.monlam-approve-buttons')) {
+                    console.log('[Monlam Approve] Buttons already exist');
+                    return;
+                }
+                
+                // Get current example ID from the page
+                function getCurrentExampleId() {
+                    // Method 1: Check Vue app state
+                    if (window.$nuxt && window.$nuxt.$store && window.$nuxt.$store.state) {
+                        const state = window.$nuxt.$store.state;
+                        // Check various possible locations in the state
+                        if (state.example && state.example.id) {
+                            console.log('[Monlam Approve] Found example ID in $nuxt.$store.state.example:', state.example.id);
+                            return state.example.id;
+                        }
+                        if (state.examples && state.examples.current && state.examples.current.id) {
+                            console.log('[Monlam Approve] Found example ID in $nuxt.$store.state.examples.current:', state.examples.current.id);
+                            return state.examples.current.id;
+                        }
+                    }
+                    
+                    // Method 2: Check __NUXT__ (server-side rendered state)
+                    if (window.__NUXT__ && window.__NUXT__.state) {
+                        const state = window.__NUXT__.state;
+                        if (state.example && state.example.id) {
+                            console.log('[Monlam Approve] Found example ID in __NUXT__.state.example:', state.example.id);
+                            return state.example.id;
+                        }
+                    }
+                    
+                    // Method 3: Look for data attributes in DOM
+                    const exampleEl = document.querySelector('[data-example-id]');
+                    if (exampleEl) {
+                        const id = exampleEl.getAttribute('data-example-id');
+                        console.log('[Monlam Approve] Found example ID in DOM attribute:', id);
+                        return id;
+                    }
+                    
+                    // Method 4: Parse from API calls in network tab (last resort)
+                    // Check if there's a recent fetch to examples API
+                    if (window.performance) {
+                        const entries = performance.getEntriesByType('resource');
+                        const exampleApiCalls = entries.filter(e => e.name.includes('/examples/'));
+                        if (exampleApiCalls.length > 0) {
+                            const lastCall = exampleApiCalls[exampleApiCalls.length - 1];
+                            const match = lastCall.name.match(/\/examples\/(\d+)/);
+                            if (match) {
+                                console.log('[Monlam Approve] Found example ID from API call:', match[1]);
+                                return match[1];
+                            }
+                        }
+                    }
+                    
+                    console.warn('[Monlam Approve] Could not find example ID');
+                    return null;
+                }
+                
+                // Create buttons container
+                const buttonsContainer = document.createElement('div');
+                buttonsContainer.className = 'monlam-approve-buttons';
+                buttonsContainer.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    display: flex;
+                    gap: 12px;
+                    z-index: 1000;
+                    padding: 12px;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                `;
+                
+                // Approve button
+                const approveBtn = document.createElement('button');
+                approveBtn.textContent = '✓ Approve';
+                approveBtn.className = 'monlam-approve-btn';
+                approveBtn.style.cssText = `
+                    padding: 10px 20px;
+                    background: #4caf50;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                `;
+                approveBtn.onmouseover = () => approveBtn.style.background = '#45a049';
+                approveBtn.onmouseout = () => approveBtn.style.background = '#4caf50';
+                
+                // Reject button
+                const rejectBtn = document.createElement('button');
+                rejectBtn.textContent = '✗ Reject';
+                rejectBtn.className = 'monlam-reject-btn';
+                rejectBtn.style.cssText = `
+                    padding: 10px 20px;
+                    background: #f44336;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                `;
+                rejectBtn.onmouseover = () => rejectBtn.style.background = '#da190b';
+                rejectBtn.onmouseout = () => rejectBtn.style.background = '#f44336';
+                
+                // Status display
+                const statusDisplay = document.createElement('div');
+                statusDisplay.className = 'monlam-status-display';
+                statusDisplay.style.cssText = `
+                    padding: 10px 16px;
+                    background: #e3f2fd;
+                    border-radius: 6px;
+                    font-size: 13px;
+                    color: #1976d2;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                `;
+                statusDisplay.innerHTML = '<span style="font-weight: 600;">Status:</span><span class="status-text">Loading...</span>';
+                
+                // Get CSRF token
+                function getCsrfToken() {
+                    const token = document.querySelector('[name=csrfmiddlewaretoken]');
+                    return token ? token.value : '';
+                }
+                
+                // Update status display
+                async function updateStatus() {
+                    const exampleId = getCurrentExampleId();
+                    if (!exampleId) {
+                        statusDisplay.querySelector('.status-text').textContent = 'No example loaded';
+                        return;
+                    }
+                    
+                    try {
+                        const resp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/status/`);
+                        const data = await resp.json();
+                        
+                        const statusText = statusDisplay.querySelector('.status-text');
+                        statusText.textContent = data.status.toUpperCase();
+                        
+                        // Color code status
+                        const statusColors = {
+                            'pending': '#9e9e9e',
+                            'in_progress': '#2196f3',
+                            'submitted': '#ff9800',
+                            'approved': '#4caf50',
+                            'rejected': '#f44336'
+                        };
+                        statusDisplay.style.background = statusColors[data.status] ? statusColors[data.status] + '20' : '#e3f2fd';
+                        statusDisplay.style.color = statusColors[data.status] || '#1976d2';
+                        
+                        // Show annotator info
+                        if (data.annotated_by) {
+                            statusDisplay.querySelector('.status-text').textContent = 
+                                `${data.status.toUpperCase()} by ${data.annotated_by}`;
+                        }
+                    } catch (error) {
+                        console.error('[Monlam Approve] Error fetching status:', error);
+                        statusDisplay.querySelector('.status-text').textContent = 'Error loading status';
+                    }
+                }
+                
+                // Approve handler
+                approveBtn.onclick = async () => {
+                    const exampleId = getCurrentExampleId();
+                    if (!exampleId) {
+                        alert('Cannot find example ID. Please ensure an example is loaded.');
+                        return;
+                    }
+                    
+                    const notes = prompt('Approval notes (optional):');
+                    if (notes === null) return; // User cancelled
+                    
+                    try {
+                        approveBtn.disabled = true;
+                        approveBtn.textContent = 'Approving...';
+                        
+                        const resp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/approve/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCsrfToken()
+                            },
+                            body: JSON.stringify({ review_notes: notes })
+                        });
+                        
+                        const data = await resp.json();
+                        
+                        if (resp.ok) {
+                            alert('✅ Example approved successfully!');
+                            updateStatus();
+                        } else {
+                            alert('❌ Error: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        alert('❌ Network error: ' + error.message);
+                    } finally {
+                        approveBtn.disabled = false;
+                        approveBtn.textContent = '✓ Approve';
+                    }
+                };
+                
+                // Reject handler
+                rejectBtn.onclick = async () => {
+                    const exampleId = getCurrentExampleId();
+                    if (!exampleId) {
+                        alert('Cannot find example ID. Please ensure an example is loaded.');
+                        return;
+                    }
+                    
+                    const notes = prompt('Rejection reason (required):');
+                    if (!notes) {
+                        alert('Rejection reason is required.');
+                        return;
+                    }
+                    
+                    try {
+                        rejectBtn.disabled = true;
+                        rejectBtn.textContent = 'Rejecting...';
+                        
+                        const resp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/reject/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': getCsrfToken()
+                            },
+                            body: JSON.stringify({ review_notes: notes })
+                        });
+                        
+                        const data = await resp.json();
+                        
+                        if (resp.ok) {
+                            alert('✅ Example rejected. Annotator will see it again for revision.');
+                            updateStatus();
+                        } else {
+                            alert('❌ Error: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        alert('❌ Network error: ' + error.message);
+                    } finally {
+                        rejectBtn.disabled = false;
+                        rejectBtn.textContent = '✗ Reject';
+                    }
+                };
+                
+                // Add buttons to container
+                buttonsContainer.appendChild(statusDisplay);
+                buttonsContainer.appendChild(approveBtn);
+                buttonsContainer.appendChild(rejectBtn);
+                
+                // Add to page
+                document.body.appendChild(buttonsContainer);
+                
+                console.log('[Monlam Approve] ✅ Buttons added');
+                
+                // Update status initially
+                setTimeout(updateStatus, 1000);
+                
+                // Update status when navigating between examples
+                let lastExampleId = getCurrentExampleId();
+                setInterval(() => {
+                    const currentExampleId = getCurrentExampleId();
+                    if (currentExampleId && currentExampleId !== lastExampleId) {
+                        lastExampleId = currentExampleId;
+                        updateStatus();
+                    }
+                }, 1000);
+            });
+            
+        } catch (error) {
+            console.error('[Monlam Approve] Error:', error);
+        }
+    }
     
     // METRICS PAGE REDIRECT ONLY
     // Redirect /projects/{id}/metrics to /monlam/{id}/completion/
@@ -984,6 +1311,7 @@
         setTimeout(() => {
             enableAudioLoop();
             enhanceDatasetTable(); // Add assignment columns to dataset table
+            addApproveRejectButtons(); // Add approve/reject buttons for reviewers
         }, 1000);
         
         // Re-enhance table on SPA navigation
@@ -995,6 +1323,7 @@
                 setTimeout(() => {
                     enableAudioLoop();
                     enhanceDatasetTable(); // Re-enhance dataset table on navigation
+                    addApproveRejectButtons(); // Re-add approve/reject buttons on navigation
                 }, 500);
             }
         }, 500);
