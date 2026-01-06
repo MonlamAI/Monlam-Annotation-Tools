@@ -99,6 +99,16 @@ RUN if ! grep -q "assignment.tracking_urls" /doccano/backend/config/urls.py; the
 # TODO: Create proper Python patch file for examples/views.py
 
 # ============================================
+# MONLAM TRACKING - VISIBILITY FILTERING APP
+# ============================================
+# Copy the Monlam Tracking app (proper Django app for visibility filtering)
+COPY patches/monlam_tracking /doccano/backend/monlam_tracking
+
+# Register the Monlam Tracking app in settings (BEFORE other apps for proper filter registration)
+RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Visibility filtering\n/" /doccano/backend/config/settings/base.py || \
+    echo "INSTALLED_APPS += ['monlam_tracking']" >> /doccano/backend/config/settings/base.py
+
+# ============================================
 # MONLAM UI - PROFESSIONAL DJANGO INTEGRATION
 # ============================================
 # Copy the Monlam UI app (Django views and templates)
@@ -172,6 +182,7 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
     chown -R doccano:doccano /doccano/backend/assignment && \
+    chown -R doccano:doccano /doccano/backend/monlam_tracking && \
     chown -R doccano:doccano /doccano/backend/monlam_ui
 
 # ============================================
