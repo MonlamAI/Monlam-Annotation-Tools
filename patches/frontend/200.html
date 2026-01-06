@@ -1343,6 +1343,46 @@
         }
     }
     
+    // AUTO-START ANNOTATION (from project home)
+    function autoStartAnnotation() {
+        const shouldAutoStart = localStorage.getItem('monlam_auto_start_annotation');
+        
+        if (shouldAutoStart === 'true') {
+            console.log('[Monlam] Auto-start annotation requested');
+            
+            // Clear flag
+            localStorage.removeItem('monlam_auto_start_annotation');
+            
+            // Check if we're on project home page
+            const isProjectHome = window.location.pathname.match(/^\/projects\/\d+\/?$/);
+            
+            if (!isProjectHome) {
+                console.log('[Monlam] Not on project home, skipping auto-start');
+                return;
+            }
+            
+            console.log('[Monlam] Looking for "Start Annotation" button...');
+            
+            // Wait for Vue to render, then find and click button
+            setTimeout(() => {
+                const allButtons = document.querySelectorAll('button, a.v-btn, .v-btn');
+                
+                for (const btn of allButtons) {
+                    const btnText = btn.textContent.trim().toLowerCase();
+                    if (btnText.includes('start annotation') || 
+                        btnText.includes('annotate') ||
+                        btnText.includes('མཆན་འགོད')) {
+                        console.log('[Monlam] ✅ Found "Start Annotation" button, clicking...');
+                        btn.click();
+                        return;
+                    }
+                }
+                
+                console.log('[Monlam] ⚠️ Could not find "Start Annotation" button');
+            }, 2000); // Give Vue 2 seconds to render
+        }
+    }
+    
     function init() {
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
@@ -1352,6 +1392,9 @@
         
         // Check if we need to redirect
         checkAndRedirect();
+        
+        // Check if we should auto-start annotation
+        autoStartAnnotation();
         
         // Check if we should auto-annotate a specific example
         autoAnnotateExample();

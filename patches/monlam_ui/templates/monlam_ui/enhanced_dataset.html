@@ -304,32 +304,21 @@
                 }
             },
             goToAnnotation(item) {
-                // Navigate to the specific example's annotation page
-                // Doccano uses pagination: page 0 = examples 0-9, page 1 = examples 10-19, etc.
+                // WORKAROUND: Direct navigation breaks Vue Router
+                // Solution: Navigate to project page, auto-click "Start Annotation"
                 
-                console.log(`📍 Navigating to annotate example ${item.id}`);
+                console.log(`📍 Want to annotate example ${item.id}`);
                 
-                // Find the index of this example in the current examples array
-                const exampleIndex = this.filteredExamples.findIndex(ex => ex.id === item.id);
+                // Store target example info for future use
+                localStorage.setItem('monlam_target_example_id', item.id);
+                localStorage.setItem('monlam_target_example_index', this.filteredExamples.findIndex(ex => ex.id === item.id));
+                localStorage.setItem('monlam_auto_start_annotation', 'true');
                 
-                if (exampleIndex === -1) {
-                    console.error('Could not find example index');
-                    // Fallback: just go to annotation interface
-                    window.location.href = `/projects/{{ project_id }}/{{ project_type }}`;
-                    return;
-                }
+                console.log('   Navigating to project page, will auto-start annotation');
                 
-                // Calculate page number (Doccano shows 10 examples per page)
-                const pageNumber = Math.floor(exampleIndex / 10);
-                
-                // Construct URL with page parameter
-                const annotationUrl = `/projects/{{ project_id }}/{{ project_type }}?page=${pageNumber}&q=&isChecked=`;
-                
-                console.log(`   Example index: ${exampleIndex}, Page: ${pageNumber}`);
-                console.log(`   URL: ${annotationUrl}`);
-                
-                // Navigate to that specific page
-                window.location.href = annotationUrl;
+                // Navigate to project home (where Start Annotation button is)
+                // This keeps us in Doccano's Vue SPA
+                window.location.href = `/projects/{{ project_id }}/`;
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;
