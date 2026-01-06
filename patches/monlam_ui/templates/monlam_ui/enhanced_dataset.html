@@ -304,17 +304,18 @@
                 }
             },
             goToAnnotation(item) {
-                // Navigate to annotation page with auto-trigger flag
-                // We'll use localStorage to signal that we want to auto-start annotation
+                // For approvers/PMs who need to review specific examples,
+                // we need to navigate to the standard dataset page and auto-click
+                // the Annotate button for this specific example
                 
                 console.log(`📍 Preparing to annotate example ${item.id}`);
                 
-                // Store flag in localStorage so the annotation page knows to auto-start
-                localStorage.setItem('monlam_auto_start_annotation', 'true');
-                localStorage.setItem('monlam_target_example_id', item.id);
+                // Store the target example ID
+                localStorage.setItem('monlam_auto_annotate_example_id', item.id);
+                localStorage.setItem('monlam_auto_annotate_trigger', 'true');
                 
-                // Navigate to project home, which has the Start Annotation button
-                window.location.href = `/projects/{{ project_id }}`;
+                // Navigate to standard dataset page (which has working Annotate buttons)
+                window.location.href = `/projects/{{ project_id }}/dataset`;
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;

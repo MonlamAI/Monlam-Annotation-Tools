@@ -1198,61 +1198,86 @@
         }
     }
     
-    // AUTO-START ANNOTATION (when coming from enhanced dataset)
-    function autoStartAnnotation() {
-        const shouldAutoStart = localStorage.getItem('monlam_auto_start_annotation');
+    // AUTO-ANNOTATE SPECIFIC EXAMPLE (when coming from enhanced dataset)
+    function autoAnnotateExample() {
+        const shouldAutoAnnotate = localStorage.getItem('monlam_auto_annotate_trigger');
         
-        if (shouldAutoStart === 'true') {
-            console.log('[Monlam] Auto-start annotation requested');
+        if (shouldAutoAnnotate === 'true') {
+            const targetExampleId = localStorage.getItem('monlam_auto_annotate_example_id');
             
-            // Clear the flag immediately
-            localStorage.removeItem('monlam_auto_start_annotation');
-            const targetExampleId = localStorage.getItem('monlam_target_example_id');
-            localStorage.removeItem('monlam_target_example_id');
+            console.log(`[Monlam] Auto-annotate requested for example ${targetExampleId}`);
             
-            console.log('[Monlam] Looking for "Start Annotation" button...');
+            // Clear flags immediately
+            localStorage.removeItem('monlam_auto_annotate_trigger');
+            localStorage.removeItem('monlam_auto_annotate_example_id');
             
-            // Wait for DOM to be ready, then look for the button
-            setTimeout(() => {
-                // Look for the button with different possible selectors
-                const selectors = [
-                    'button:contains("Start Annotation")',
-                    'button:contains("Annotate")', 
-                    '[data-test="start-annotation"]',
-                    '.v-btn:contains("Annotate")',
-                    'a[href*="speech-to-text"]'
-                ];
+            // Check if we're on the dataset page
+            const isDatasetPage = window.location.pathname.includes('/dataset');
+            
+            if (!isDatasetPage) {
+                console.log('[Monlam] Not on dataset page, skipping auto-annotate');
+                return;
+            }
+            
+            console.log('[Monlam] On dataset page, looking for example', targetExampleId);
+            
+            // Wait for Vue to render the table
+            let attempts = 0;
+            const maxAttempts = 20;
+            
+            const findAndClickAnnotateButton = () => {
+                attempts++;
+                console.log(`[Monlam] Attempt ${attempts}/${maxAttempts} to find example row...`);
                 
-                let button = null;
-                
-                // Try to find button by text content
+                // Look for the example in the table
+                // The dataset table shows example IDs or we can search by row
                 const allButtons = document.querySelectorAll('button, a.v-btn, .v-btn');
-                for (const btn of allButtons) {
-                    const text = btn.textContent.trim().toLowerCase();
-                    if (text.includes('start annotation') || 
-                        text.includes('annotate') || 
-                        text.includes('annotation')) {
-                        button = btn;
-                        console.log('[Monlam] Found button:', btn.textContent);
-                        break;
+                
+                // Try to find the correct row and its Annotate button
+                // Strategy: Look for rows in the table and find the one with matching ID
+                const tableRows = document.querySelectorAll('tr, .v-data-table__wrapper tbody tr');
+                
+                let foundButton = null;
+                
+                for (const row of tableRows) {
+                    const rowText = row.textContent;
+                    // Check if this row contains the target example ID
+                    if (rowText.includes(targetExampleId)) {
+                        console.log('[Monlam] Found row for example', targetExampleId);
+                        // Find Annotate button in this row
+                        const rowButtons = row.querySelectorAll('button, a.v-btn, .v-btn');
+                        for (const btn of rowButtons) {
+                            const btnText = btn.textContent.trim().toLowerCase();
+                            if (btnText.includes('annotate') || btnText.includes('མཆན་འགོད')) {
+                                foundButton = btn;
+                                break;
+                            }
+                        }
+                        if (foundButton) break;
                     }
                 }
                 
-                if (button) {
-                    console.log('[Monlam] ✅ Auto-clicking "Start Annotation" button!');
-                    button.click();
-                } else {
-                    console.log('[Monlam] ⚠️ Could not find "Start Annotation" button');
-                    console.log('[Monlam] Will try alternative navigation...');
-                    
-                    // Alternative: Navigate directly to annotation interface
-                    const projectId = window.location.pathname.match(/\/projects\/(\d+)/)?.[1];
-                    if (projectId) {
-                        console.log('[Monlam] Navigating to annotation interface directly');
-                        window.location.href = `/projects/${projectId}/speech-to-text`;
-                    }
+                if (foundButton) {
+                    console.log('[Monlam] ✅ Found Annotate button for example', targetExampleId);
+                    console.log('[Monlam] Auto-clicking button...');
+                    foundButton.click();
+                    return true;
                 }
-            }, 1500); // Give Vue time to render
+                
+                // If not found and we haven't exceeded max attempts, try again
+                if (attempts < maxAttempts) {
+                    console.log('[Monlam] Button not found yet, retrying in 500ms...');
+                    setTimeout(findAndClickAnnotateButton, 500);
+                } else {
+                    console.log('[Monlam] ⚠️ Could not find Annotate button after', maxAttempts, 'attempts');
+                    console.log('[Monlam] User will need to click manually or scroll to find the example');
+                }
+                
+                return false;
+            };
+            
+            // Start searching after initial delay
+            setTimeout(findAndClickAnnotateButton, 1500);
         }
     }
     
@@ -1266,8 +1291,8 @@
         // Check if we need to redirect
         checkAndRedirect();
         
-        // Check if we should auto-start annotation
-        autoStartAnnotation();
+        // Check if we should auto-annotate a specific example
+        autoAnnotateExample();
         
         setTimeout(() => {
             enableAudioLoop();
