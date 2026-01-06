@@ -1,276 +1,284 @@
-{% extends "monlam_ui/base.html" %}
-
-{% block title %}Completion Dashboard - {{ project.name }} - Monlam Tools{% endblock %}
-
-{% block content %}
-<div id="dashboard-app">
-    <v-row>
-        <v-col cols="12">
-            <v-card>
-                <v-card-title>
-                    <v-icon left color="primary">mdi-chart-box</v-icon>
-                    Project Completion Dashboard: {{ project.name }}
-                </v-card-title>
-                <v-card-subtitle>Track annotator progress and approval status</v-card-subtitle>
-            </v-card>
-        </v-col>
-    </v-row>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Completion Dashboard - {{ project.name }}</title>
     
-    <!-- Loading State -->
-    <v-row v-if="loading">
-        <v-col cols="12" class="text-center">
-            <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-            <p class="mt-4">Loading completion data...</p>
-        </v-col>
-    </v-row>
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@5.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
     
-    <!-- Error State -->
-    <v-row v-if="error">
-        <v-col cols="12">
-            <v-alert type="error" prominent>
-                <v-row align="center">
-                    <v-col class="grow">
-                        [[ error ]]
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Roboto', sans-serif; }
+        .page-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .page-header h1 { margin: 0; font-size: 28px; font-weight: 500; }
+        .page-header p { margin: 8px 0 0 0; opacity: 0.9; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="page-header">
+        <h1>📈 Completion Dashboard</h1>
+        <p>Project: {{ project.name }} (ID: {{ project_id }})</p>
+    </div>
+
+    <!-- Vue App -->
+    <div id="app">
+        <v-app>
+            <v-container fluid class="pa-4">
+                <!-- Summary Cards -->
+                <v-row v-if="!loading && !error">
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card color="blue lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.total_examples || 0 ]]</div>
+                                <div class="text-center text--secondary">Total Examples</div>
+                            </v-card-text>
+                        </v-card>
                     </v-col>
-                    <v-col class="shrink">
-                        <v-btn @click="loadData">Retry</v-btn>
+                    
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card color="green lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.assigned || 0 ]]</div>
+                                <div class="text-center text--secondary">Assigned</div>
+                                <div class="text-center text-caption">
+                                    [[ calculatePercentage(stats.summary.assigned, stats.summary.total_examples) ]]%
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card color="orange lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.submitted || 0 ]]</div>
+                                <div class="text-center text--secondary">Submitted</div>
+                                <div class="text-center text-caption">
+                                    [[ calculatePercentage(stats.summary.submitted, stats.summary.assigned) ]]%
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card color="purple lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.approved || 0 ]]</div>
+                                <div class="text-center text--secondary">Approved</div>
+                                <div class="text-center text-caption">
+                                    [[ calculatePercentage(stats.summary.approved, stats.summary.submitted) ]]%
+                                </div>
+                            </v-card-text>
+                        </v-card>
                     </v-col>
                 </v-row>
-            </v-alert>
-        </v-col>
-    </v-row>
-    
-    <!-- Summary Cards -->
-    <v-row v-if="!loading && !error">
-        <v-col cols="12" sm="6" md="3">
-            <v-card color="blue lighten-5">
-                <v-card-text>
-                    <div class="text-h4 text-center">[[ stats.summary.total_examples ]]</div>
-                    <div class="text-center text--secondary">Total Examples</div>
-                </v-card-text>
-            </v-card>
-        </v-col>
-        
-        <v-col cols="12" sm="6" md="3">
-            <v-card color="green lighten-5">
-                <v-card-text>
-                    <div class="text-h4 text-center">[[ stats.summary.assigned ]]</div>
-                    <div class="text-center text--secondary">Assigned</div>
-                    <div class="text-center text-caption">
-                        [[ calculatePercentage(stats.summary.assigned, stats.summary.total_examples) ]]%
-                    </div>
-                </v-card-text>
-            </v-card>
-        </v-col>
-        
-        <v-col cols="12" sm="6" md="3">
-            <v-card color="orange lighten-5">
-                <v-card-text>
-                    <div class="text-h4 text-center">[[ stats.summary.submitted ]]</div>
-                    <div class="text-center text--secondary">Submitted</div>
-                    <div class="text-center text-caption">
-                        [[ calculatePercentage(stats.summary.submitted, stats.summary.assigned) ]]%
-                    </div>
-                </v-card-text>
-            </v-card>
-        </v-col>
-        
-        <v-col cols="12" sm="6" md="3">
-            <v-card color="purple lighten-5">
-                <v-card-text>
-                    <div class="text-h4 text-center">[[ stats.summary.approved ]]</div>
-                    <div class="text-center text--secondary">Approved</div>
-                    <div class="text-center text-caption">
-                        [[ calculatePercentage(stats.summary.approved, stats.summary.submitted) ]]%
-                    </div>
-                </v-card-text>
-            </v-card>
-        </v-col>
-    </v-row>
-    
-    <!-- Annotators Table -->
-    <v-row v-if="!loading && !error">
-        <v-col cols="12">
-            <v-card>
-                <v-card-title>
-                    <v-icon left>mdi-account-edit</v-icon>
-                    Annotator Progress
-                </v-card-title>
-                <v-data-table
-                    :headers="annotatorHeaders"
-                    :items="stats.annotators"
-                    :items-per-page="10"
-                    class="elevation-1"
-                >
-                    <template v-slot:item.assigned_to__username="{ item }">
-                        <v-chip small color="primary" text-color="white">
-                            [[ item.assigned_to__username ]]
-                        </v-chip>
-                    </template>
-                    
-                    <template v-slot:item.progress="{ item }">
-                        <v-progress-linear
-                            :value="calculatePercentage(item.completed, item.total_assigned)"
-                            height="20"
-                            color="success"
-                        >
-                            [[ calculatePercentage(item.completed, item.total_assigned) ]]%
-                        </v-progress-linear>
-                    </template>
-                    
-                    <template v-slot:item.submitted="{ item }">
-                        <v-chip small :color="item.submitted > 0 ? 'orange' : 'grey'" text-color="white">
-                            [[ item.submitted ]]
-                        </v-chip>
-                    </template>
-                    
-                    <template v-slot:item.approved="{ item }">
-                        <v-chip small :color="item.approved > 0 ? 'green' : 'grey'" text-color="white">
-                            [[ item.approved ]]
-                        </v-chip>
-                    </template>
-                    
-                    <template v-slot:item.rejected="{ item }">
-                        <v-chip small :color="item.rejected > 0 ? 'red' : 'grey'" text-color="white">
-                            [[ item.rejected ]]
-                        </v-chip>
-                    </template>
-                </v-data-table>
-            </v-card>
-        </v-col>
-    </v-row>
-    
-    <!-- Approvers Table -->
-    <v-row v-if="!loading && !error && stats.approvers.length > 0">
-        <v-col cols="12">
-            <v-card>
-                <v-card-title>
-                    <v-icon left>mdi-check-circle</v-icon>
-                    Approver Activity
-                </v-card-title>
-                <v-data-table
-                    :headers="approverHeaders"
-                    :items="stats.approvers"
-                    :items-per-page="10"
-                    class="elevation-1"
-                >
-                    <template v-slot:item.reviewed_by__username="{ item }">
-                        <v-chip small color="secondary" text-color="white">
-                            [[ item.reviewed_by__username ]]
-                        </v-chip>
-                    </template>
-                    
-                    <template v-slot:item.approved="{ item }">
-                        <v-chip small color="green" text-color="white">
-                            ✓ [[ item.approved ]]
-                        </v-chip>
-                    </template>
-                    
-                    <template v-slot:item.rejected="{ item }">
-                        <v-chip small color="red" text-color="white">
-                            ✗ [[ item.rejected ]]
-                        </v-chip>
-                    </template>
-                </v-data-table>
-            </v-card>
-        </v-col>
-    </v-row>
-    
-    <!-- Quick Actions -->
-    <v-row v-if="!loading && !error">
-        <v-col cols="12">
-            <v-card>
-                <v-card-title>Quick Actions</v-card-title>
-                <v-card-actions>
-                    <v-btn color="primary" @click="goToDataset">
-                        <v-icon left>mdi-table</v-icon>
-                        View Dataset
-                    </v-btn>
-                    <v-btn color="secondary" @click="goToProject">
-                        <v-icon left>mdi-folder</v-icon>
-                        Back to Project
-                    </v-btn>
-                    <v-spacer></v-spacer>
-                    <v-btn color="info" @click="loadData">
-                        <v-icon left>mdi-refresh</v-icon>
-                        Refresh
-                    </v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-col>
-    </v-row>
-</div>
-{% endblock %}
+                
+                <!-- Loading State -->
+                <v-row v-if="loading">
+                    <v-col cols="12" class="text-center">
+                        <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+                        <p class="mt-4">Loading completion data...</p>
+                    </v-col>
+                </v-row>
+                
+                <!-- Error State -->
+                <v-alert v-if="error" type="error" prominent class="mt-4">
+                    <v-row align="center">
+                        <v-col class="grow">[[ error ]]</v-col>
+                        <v-col class="shrink">
+                            <v-btn @click="loadData">Retry</v-btn>
+                        </v-col>
+                    </v-row>
+                </v-alert>
+                
+                <!-- Annotators Table -->
+                <v-row v-if="!loading && !error" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title class="blue darken-1 white--text">
+                                <v-icon left dark>mdi-account-edit</v-icon>
+                                Annotator Progress
+                            </v-card-title>
+                            <v-data-table
+                                :headers="annotatorHeaders"
+                                :items="stats.annotators"
+                                :items-per-page="10"
+                                class="elevation-1"
+                            >
+                                <template v-slot:item.assigned_to__username="{ item }">
+                                    <v-chip small color="primary" dark>
+                                        <v-icon small left>mdi-account</v-icon>
+                                        [[ item.assigned_to__username ]]
+                                    </v-chip>
+                                </template>
+                                
+                                <template v-slot:item.progress="{ item }">
+                                    <v-progress-linear
+                                        :value="calculatePercentage(item.completed, item.total_assigned)"
+                                        height="20"
+                                        color="success"
+                                    >
+                                        [[ calculatePercentage(item.completed, item.total_assigned) ]]%
+                                    </v-progress-linear>
+                                </template>
+                                
+                                <template v-slot:item.submitted="{ item }">
+                                    <v-chip small :color="item.submitted > 0 ? 'orange' : 'grey'" dark>
+                                        [[ item.submitted ]]
+                                    </v-chip>
+                                </template>
+                                
+                                <template v-slot:item.approved="{ item }">
+                                    <v-chip small :color="item.approved > 0 ? 'green' : 'grey'" dark>
+                                        [[ item.approved ]]
+                                    </v-chip>
+                                </template>
+                                
+                                <template v-slot:item.rejected="{ item }">
+                                    <v-chip small :color="item.rejected > 0 ? 'red' : 'grey'" dark>
+                                        [[ item.rejected ]]
+                                    </v-chip>
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+                
+                <!-- Approvers Table -->
+                <v-row v-if="!loading && !error && stats.approvers && stats.approvers.length > 0" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title class="secondary white--text">
+                                <v-icon left dark>mdi-check-circle</v-icon>
+                                Approver Activity
+                            </v-card-title>
+                            <v-data-table
+                                :headers="approverHeaders"
+                                :items="stats.approvers"
+                                :items-per-page="10"
+                                class="elevation-1"
+                            >
+                                <template v-slot:item.reviewed_by__username="{ item }">
+                                    <v-chip small color="secondary" dark>
+                                        <v-icon small left>mdi-shield-check</v-icon>
+                                        [[ item.reviewed_by__username ]]
+                                    </v-chip>
+                                </template>
+                                
+                                <template v-slot:item.approved="{ item }">
+                                    <v-chip small color="green" dark>
+                                        ✓ [[ item.approved ]]
+                                    </v-chip>
+                                </template>
+                                
+                                <template v-slot:item.rejected="{ item }">
+                                    <v-chip small color="red" dark>
+                                        ✗ [[ item.rejected ]]
+                                    </v-chip>
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+                
+                <!-- Quick Actions -->
+                <v-row v-if="!loading && !error" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title>Quick Actions</v-card-title>
+                            <v-card-actions>
+                                <v-btn color="primary" :href="'/monlam/{{ project_id }}/dataset-enhanced/'">
+                                    <v-icon left>mdi-table</v-icon>
+                                    Enhanced Dataset
+                                </v-btn>
+                                <v-btn color="secondary" :href="'/projects/{{ project_id }}/'">
+                                    <v-icon left>mdi-folder</v-icon>
+                                    Project Home
+                                </v-btn>
+                                <v-spacer></v-spacer>
+                                <v-btn color="info" @click="loadData">
+                                    <v-icon left>mdi-refresh</v-icon>
+                                    Refresh
+                                </v-btn>
+                            </v-card-actions>
+                        </v-card>
+                    </v-col>
+                </v-row>
+            </v-container>
+        </v-app>
+    </div>
 
-{% block extra_js %}
-<script>
-new Vue({
-    el: '#dashboard-app',
-    delimiters: ['[[', ']]'],
-    vuetify: new Vuetify({
-        theme: {
-            themes: {
-                light: {
-                    primary: '#B8963E',
-                    secondary: '#1a1a2e',
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+    new Vue({
+        el: '#app',
+        delimiters: ['[[', ']]'],
+        vuetify: new Vuetify({
+            theme: {
+                themes: {
+                    light: {
+                        primary: '#1976d2',
+                        secondary: '#424242',
+                    },
                 },
             },
+        }),
+        data: {
+            loading: true,
+            error: null,
+            stats: {
+                summary: {},
+                annotators: [],
+                approvers: [],
+            },
+            annotatorHeaders: [
+                { text: 'Annotator', value: 'assigned_to__username', sortable: true },
+                { text: 'Total Assigned', value: 'total_assigned', sortable: true },
+                { text: 'Completed', value: 'completed', sortable: true },
+                { text: 'Submitted', value: 'submitted', sortable: true },
+                { text: 'Approved', value: 'approved', sortable: true },
+                { text: 'Rejected', value: 'rejected', sortable: true },
+                { text: 'Progress', value: 'progress', sortable: false },
+            ],
+            approverHeaders: [
+                { text: 'Approver', value: 'reviewed_by__username', sortable: true },
+                { text: 'Total Reviewed', value: 'total_reviewed', sortable: true },
+                { text: 'Approved', value: 'approved', sortable: true },
+                { text: 'Rejected', value: 'rejected', sortable: true },
+            ],
         },
-    }),
-    data: {
-        loading: true,
-        error: null,
-        stats: {
-            summary: {},
-            annotators: [],
-            approvers: [],
+        mounted() {
+            console.log('✅ Completion Dashboard mounted!');
+            this.loadData();
         },
-        annotatorHeaders: [
-            { text: 'Annotator', value: 'assigned_to__username', sortable: true },
-            { text: 'Total Assigned', value: 'total_assigned', sortable: true },
-            { text: 'Completed', value: 'completed', sortable: true },
-            { text: 'Submitted', value: 'submitted', sortable: true },
-            { text: 'Approved', value: 'approved', sortable: true },
-            { text: 'Rejected', value: 'rejected', sortable: true },
-            { text: 'Progress', value: 'progress', sortable: false },
-        ],
-        approverHeaders: [
-            { text: 'Approver', value: 'reviewed_by__username', sortable: true },
-            { text: 'Total Reviewed', value: 'total_reviewed', sortable: true },
-            { text: 'Approved', value: 'approved', sortable: true },
-            { text: 'Rejected', value: 'rejected', sortable: true },
-        ],
-    },
-    mounted() {
-        this.loadData();
-    },
-    methods: {
-        async loadData() {
-            this.loading = true;
-            this.error = null;
-            
-            try {
-                const response = await axios.get('/monlam/{{ project_id }}/api/completion-stats/');
-                this.stats = response.data;
-            } catch (err) {
-                console.error('Failed to load completion stats:', err);
-                this.error = 'Failed to load completion data. Please try again.';
-            } finally {
-                this.loading = false;
-            }
+        methods: {
+            async loadData() {
+                this.loading = true;
+                this.error = null;
+                console.log('📥 Loading completion stats...');
+                
+                try {
+                    const response = await axios.get('/monlam/{{ project_id }}/api/completion-stats/');
+                    this.stats = response.data;
+                    console.log('✅ Loaded stats:', this.stats);
+                } catch (err) {
+                    console.error('❌ Failed to load:', err);
+                    this.error = 'Failed to load completion data: ' + (err.response?.data?.detail || err.message);
+                } finally {
+                    this.loading = false;
+                }
+            },
+            calculatePercentage(value, total) {
+                if (!total || total === 0) return 0;
+                return Math.round((value / total) * 100);
+            },
         },
-        calculatePercentage(value, total) {
-            if (!total || total === 0) return 0;
-            return Math.round((value / total) * 100);
-        },
-        goToDataset() {
-            window.location.href = `/projects/{{ project_id }}/dataset`;
-        },
-        goToProject() {
-            window.location.href = `/projects/{{ project_id }}`;
-        },
-    },
-});
-</script>
-{% endblock %}
+    });
+    </script>
+</body>
+</html>
 
