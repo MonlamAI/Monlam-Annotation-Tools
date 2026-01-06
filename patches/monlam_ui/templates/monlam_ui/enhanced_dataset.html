@@ -183,7 +183,7 @@
                                     <v-btn 
                                         small 
                                         :color="item.assignment && item.assignment.status === 'submitted' ? 'orange' : 'primary'"
-                                        :href="'/projects/{{ project_id }}/speech-to-text?page=' + item.id"
+                                        :href="'/projects/{{ project_id }}/speech-to-text'"
                                     >
                                         <v-icon small left>mdi-pencil</v-icon>
                                         [[ item.assignment && item.assignment.status === 'submitted' ? 'Review' : 'Annotate' ]]
