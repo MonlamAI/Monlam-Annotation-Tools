@@ -8,7 +8,12 @@
 # - JSONL import with external URLs for STT and Image Classification
 # - Pre-filled labels for annotation review workflow
 # - Review button styling (Red O / Green Check)
-# - Approve/Reject buttons for reviewers (saves to database)
+# - Simple annotation tracking (who annotated, who reviewed)
+# - Example visibility filtering (annotated examples hidden from others)
+# - Example locking (prevents simultaneous edits)
+# - Approve/Reject buttons on annotation page (saves to database)
+# - Auto-advance after approve/reject
+# - Dataset columns show tracking data from PostgreSQL
 
 FROM doccano/doccano:1.8.4
 
@@ -75,6 +80,19 @@ RUN echo "INSTALLED_APPS += ['assignment']" >> /doccano/backend/config/settings/
 # Add the assignment URL pattern to urlpatterns
 RUN if ! grep -q "assignment.urls" /doccano/backend/config/urls.py; then \
         sed -i "s|urlpatterns = \[|urlpatterns = [\n    # Monlam: Assignment and Completion Tracking APIs\n    path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),|" /doccano/backend/config/urls.py; \
+    fi
+
+# Integrate tracking URLs (for simple tracking system)
+RUN if ! grep -q "assignment.tracking_urls" /doccano/backend/config/urls.py; then \
+        sed -i "s|path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),|path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),\n    # Monlam: Simple Tracking API (approve/reject, visibility)\n    path('v1/projects/<int:project_id>/tracking/', include('assignment.tracking_urls')),|" /doccano/backend/config/urls.py; \
+    fi
+
+# Apply visibility filtering to examples viewset
+# This ensures annotators only see their own examples and unannotated ones
+RUN if ! grep -q "SimpleExampleFilterMixin" /doccano/backend/examples/views.py; then \
+        sed -i '1i from assignment.simple_filtering import SimpleExampleFilterMixin' /doccano/backend/examples/views.py && \
+        sed -i 's/class ExampleListAPI(/class ExampleListAPI(SimpleExampleFilterMixin, /g' /doccano/backend/examples/views.py && \
+        sed -i 's/class ExampleDetailAPI(/class ExampleDetailAPI(SimpleExampleFilterMixin, /g' /doccano/backend/examples/views.py; \
     fi
 
 # ============================================
@@ -160,6 +178,11 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # After deployment, run ONCE via Render Shell:
 #   python manage.py migrate assignment --noinput
 # 
+# This will create:
+# - assignment_assignment table (legacy)
+# - annotation_tracking table (NEW - simple tracking system)
+#   Tracks: who annotated, who reviewed, status, locking
+# 
 # Or use the manual migration command documented in README
 
 # ============================================
@@ -172,8 +195,18 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # - Completion dashboard, enhanced dataset, annotation approval
 # - Production-grade, maintainable, upgradeable
 #
-# Legacy inline scripts in index.html/200.html are deprecated.
-# New features use proper Django/Vue architecture in monlam_ui app.
+# Simple Tracking System (assignment/simple_tracking.py):
+# - First-come-first-serve annotation (no complex assignments)
+# - Example visibility filtering (hide annotated examples from others)
+# - Example locking (5-minute lock to prevent conflicts)
+# - Approve/reject workflow with database tracking
+# - Dataset columns show tracking data (4th & 5th columns)
+#
+# Frontend enhancements in index.html/200.html:
+# - Audio auto-loop (annotation pages only)
+# - Dataset table enhancement (assignment columns)
+# - Metrics page redirect (works on first click)
+# - Approve/reject buttons (underneath label box)
 
 USER doccano
 WORKDIR /doccano/backend
