@@ -304,21 +304,24 @@
                 }
             },
             goToAnnotation(item) {
-                // WORKAROUND: Direct navigation breaks Vue Router
-                // Solution: Navigate to project page, auto-click "Start Annotation"
+                // HYBRID APPROACH (Option B):
+                // Enhanced dataset = Django view (current tab)
+                // Annotation = Doccano Vue SPA (new tab with fresh context)
                 
-                console.log(`📍 Want to annotate example ${item.id}`);
+                const exampleIndex = this.filteredExamples.findIndex(ex => ex.id === item.id);
+                const pageNumber = Math.floor(exampleIndex / 10);
                 
-                // Store target example info for future use
-                localStorage.setItem('monlam_target_example_id', item.id);
-                localStorage.setItem('monlam_target_example_index', this.filteredExamples.findIndex(ex => ex.id === item.id));
-                localStorage.setItem('monlam_auto_start_annotation', 'true');
+                console.log(`📍 Opening annotation for example ${item.id}`);
+                console.log(`   Index: ${exampleIndex}, Page: ${pageNumber}`);
                 
-                console.log('   Navigating to project page, will auto-start annotation');
+                // Open annotation interface in NEW TAB
+                // New tab = fresh page load = Vue initializes correctly
+                const url = `/projects/{{ project_id }}/{{ project_type }}?page=${pageNumber}&q=&isChecked=`;
                 
-                // Navigate to project home (where Start Annotation button is)
-                // This keeps us in Doccano's Vue SPA
-                window.location.href = `/projects/{{ project_id }}/`;
+                console.log(`   URL: ${url}`);
+                console.log(`   Opening in new tab...`);
+                
+                window.open(url, '_blank');
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;
