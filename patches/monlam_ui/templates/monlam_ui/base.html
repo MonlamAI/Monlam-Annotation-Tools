@@ -1,0 +1,129 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Monlam Tools{% endblock %}</title>
+    
+    <!-- Vuetify CSS (same as Doccano) -->
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@5.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+    
+    <!-- Monlam Font -->
+    <style>
+        @font-face {
+            font-family: 'MonlamTBslim';
+            src: url('{% static "fonts/MonlamTBslim.woff2" %}') format('woff2'),
+                 url('{% static "fonts/MonlamTBslim.woff" %}') format('woff'),
+                 url('{% static "fonts/MonlamTBslim.ttf" %}') format('truetype');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
+        
+        * {
+            font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+            line-height: 1.8 !important;
+        }
+        
+        :root {
+            --monlam-gold: #B8963E;
+            --monlam-navy: #1a1a2e;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div id="app">
+        <v-app>
+            <!-- Monlam Header -->
+            <v-app-bar app color="var(--monlam-navy)" dark>
+                <v-toolbar-title>
+                    <a href="/" style="color: white; text-decoration: none;">
+                        <v-icon left>mdi-home</v-icon>
+                        Monlam Tools
+                    </a>
+                </v-toolbar-title>
+                
+                <v-spacer></v-spacer>
+                
+                {% if user.is_authenticated %}
+                    <v-btn text @click="goToProjects">
+                        <v-icon left>mdi-folder-multiple</v-icon>
+                        Projects
+                    </v-btn>
+                    
+                    <v-menu offset-y>
+                        <template v-slot:activator="{ on, attrs }">
+                            <v-btn text v-bind="attrs" v-on="on">
+                                <v-icon left>mdi-account</v-icon>
+                                {{ user.username }}
+                            </v-btn>
+                        </template>
+                        <v-list>
+                            <v-list-item @click="logout">
+                                <v-list-item-title>
+                                    <v-icon left>mdi-logout</v-icon>
+                                    Logout
+                                </v-list-item-title>
+                            </v-list-item>
+                        </v-list>
+                    </v-menu>
+                {% else %}
+                    <v-btn text href="/auth/login/">
+                        <v-icon left>mdi-login</v-icon>
+                        Login
+                    </v-btn>
+                {% endif %}
+            </v-app-bar>
+            
+            <!-- Main Content -->
+            <v-main>
+                <v-container fluid>
+                    {% block content %}{% endblock %}
+                </v-container>
+            </v-main>
+        </v-app>
+    </div>
+    
+    <!-- Vue & Vuetify JS -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            vuetify: new Vuetify({
+                theme: {
+                    themes: {
+                        light: {
+                            primary: '#B8963E',
+                            secondary: '#1a1a2e',
+                        },
+                    },
+                },
+            }),
+            data: {
+                user: {
+                    is_authenticated: {{ user.is_authenticated|yesno:"true,false" }},
+                    username: '{{ user.username }}',
+                },
+            },
+            methods: {
+                goToProjects() {
+                    window.location.href = '/projects';
+                },
+                logout() {
+                    window.location.href = '/auth/logout/';
+                },
+            },
+        });
+    </script>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
+

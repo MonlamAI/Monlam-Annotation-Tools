@@ -1,0 +1,425 @@
+{% extends "monlam_ui/base.html" %}
+
+{% block title %}Annotate Example {{ example_id }} - {{ project.name }} - Monlam Tools{% endblock %}
+
+{% block extra_css %}
+<style>
+    .approval-chain-card {
+        margin-bottom: 20px;
+        border-left: 4px solid var(--monlam-gold);
+    }
+    
+    .audio-player {
+        width: 100%;
+        max-width: 600px;
+    }
+    
+    .annotation-content {
+        background: #f5f5f5;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 20px 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="annotation-app">
+    <!-- Approval Status Chain -->
+    <v-row v-if="assignment">
+        <v-col cols="12">
+            <v-card class="approval-chain-card">
+                <v-card-title>
+                    <v-icon left color="primary">mdi-timeline-check</v-icon>
+                    Approval Status Chain
+                </v-card-title>
+                <v-card-text>
+                    <v-row>
+                        <!-- Annotator Status -->
+                        <v-col cols="12" md="6">
+                            <div class="text-subtitle-2 mb-2">
+                                <v-icon small>mdi-account-edit</v-icon>
+                                Annotator
+                            </div>
+                            <v-chip
+                                :color="getStatusColor(assignment.status)"
+                                text-color="white"
+                                class="mb-2"
+                            >
+                                <v-icon small left>[[ getStatusIcon(assignment.status) ]]</v-icon>
+                                [[ assignment.status.replace('_', ' ').toUpperCase() ]]
+                            </v-chip>
+                            <div class="text-caption">
+                                By: [[ assignment.assigned_to_username || 'Unknown' ]]
+                            </div>
+                            <div v-if="assignment.submitted_at" class="text-caption text--secondary">
+                                Submitted: [[ formatDate(assignment.submitted_at) ]]
+                            </div>
+                        </v-col>
+                        
+                        <!-- Approver Status -->
+                        <v-col cols="12" md="6">
+                            <div class="text-subtitle-2 mb-2">
+                                <v-icon small>mdi-check-circle</v-icon>
+                                Approver
+                            </div>
+                            <v-chip
+                                :color="getApprovalColor(assignment.status)"
+                                text-color="white"
+                                class="mb-2"
+                            >
+                                <v-icon small left>[[ getApprovalIcon(assignment.status) ]]</v-icon>
+                                [[ getApprovalText(assignment.status) ]]
+                            </v-chip>
+                            <div class="text-caption">
+                                By: [[ assignment.reviewed_by_username || 'Not reviewed' ]]
+                            </div>
+                            <div v-if="assignment.reviewed_at" class="text-caption text--secondary">
+                                Reviewed: [[ formatDate(assignment.reviewed_at) ]]
+                            </div>
+                            <div v-if="assignment.review_notes" class="text-caption mt-2">
+                                <v-icon x-small>mdi-note-text</v-icon>
+                                Notes: [[ assignment.review_notes ]]
+                            </div>
+                        </v-col>
+                    </v-row>
+                </v-card-text>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Review Actions (for approvers/project managers) -->
+    <v-row v-if="canApprove && assignment && assignment.status === 'submitted'">
+        <v-col cols="12">
+            <v-card>
+                <v-card-title>
+                    <v-icon left>mdi-gavel</v-icon>
+                    Review Actions
+                </v-card-title>
+                <v-card-text>
+                    <v-alert type="info" text dense class="mb-4">
+                        This example is ready for review. Please check the annotation below and approve or reject.
+                    </v-alert>
+                    <v-row>
+                        <v-col cols="12" sm="6">
+                            <v-btn
+                                block
+                                large
+                                color="success"
+                                :loading="approving"
+                                :disabled="approving || rejecting"
+                                @click="approveExample"
+                            >
+                                <v-icon left>mdi-check-circle</v-icon>
+                                Approve
+                            </v-btn>
+                        </v-col>
+                        <v-col cols="12" sm="6">
+                            <v-btn
+                                block
+                                large
+                                color="error"
+                                :loading="rejecting"
+                                :disabled="approving || rejecting"
+                                @click="showRejectDialog"
+                            >
+                                <v-icon left>mdi-close-circle</v-icon>
+                                Reject
+                            </v-btn>
+                        </v-col>
+                    </v-row>
+                </v-card-text>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Audio Player (for STT projects) -->
+    <v-row v-if="example.filename && example.filename.includes('.wav')">
+        <v-col cols="12">
+            <v-card>
+                <v-card-title>
+                    <v-icon left>mdi-volume-high</v-icon>
+                    Audio
+                </v-card-title>
+                <v-card-text>
+                    <audio
+                        ref="audioPlayer"
+                        :src="example.filename"
+                        controls
+                        loop
+                        class="audio-player"
+                        @play="audioPlaying = true"
+                        @pause="audioPlaying = false"
+                    ></audio>
+                    <div class="mt-2 text-caption text--secondary">
+                        <v-icon x-small>mdi-information</v-icon>
+                        Audio will loop automatically
+                    </div>
+                </v-card-text>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Annotation Content -->
+    <v-row>
+        <v-col cols="12">
+            <v-card>
+                <v-card-title>
+                    <v-icon left>mdi-pencil</v-icon>
+                    Annotation
+                </v-card-title>
+                <v-card-text>
+                    <div class="annotation-content">
+                        <p class="text-h6 mb-4">Example #[[ example.id ]]</p>
+                        
+                        <div v-if="example.text">
+                            <div class="text-subtitle-2 mb-2">Text:</div>
+                            <p>[[ example.text ]]</p>
+                        </div>
+                        
+                        <div v-if="example.meta" class="mt-4">
+                            <div class="text-subtitle-2 mb-2">Metadata:</div>
+                            <pre style="background: white; padding: 10px; border-radius: 4px; overflow-x: auto;">[[ JSON.stringify(example.meta, null, 2) ]]</pre>
+                        </div>
+                        
+                        <v-divider class="my-4"></v-divider>
+                        
+                        <v-btn
+                            color="primary"
+                            :href="`/projects/{{ project_id }}/examples/${example.id}`"
+                            target="_blank"
+                        >
+                            <v-icon left>mdi-open-in-new</v-icon>
+                            Open in Doccano Annotation Interface
+                        </v-btn>
+                    </div>
+                </v-card-text>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Navigation -->
+    <v-row>
+        <v-col cols="12">
+            <v-card>
+                <v-card-actions>
+                    <v-btn color="secondary" @click="goToDataset">
+                        <v-icon left>mdi-table</v-icon>
+                        Back to Dataset
+                    </v-btn>
+                    <v-spacer></v-spacer>
+                    <v-btn color="primary" @click="goToCompletion">
+                        <v-icon left>mdi-chart-box</v-icon>
+                        Completion Dashboard
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Reject Dialog -->
+    <v-dialog v-model="rejectDialog" max-width="500">
+        <v-card>
+            <v-card-title>Reject Annotation</v-card-title>
+            <v-card-text>
+                <v-textarea
+                    v-model="rejectNotes"
+                    label="Reason for rejection (required)"
+                    placeholder="Please provide feedback for the annotator..."
+                    rows="4"
+                    outlined
+                    :rules="[v => !!v || 'Reason is required']"
+                ></v-textarea>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer></v-spacer>
+                <v-btn text @click="rejectDialog = false">Cancel</v-btn>
+                <v-btn
+                    color="error"
+                    :disabled="!rejectNotes"
+                    :loading="rejecting"
+                    @click="rejectExample"
+                >
+                    Reject
+                </v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+    
+    <!-- Success Snackbar -->
+    <v-snackbar v-model="snackbar" :color="snackbarColor" :timeout="3000" top>
+        [[ snackbarText ]]
+        <template v-slot:action="{ attrs }">
+            <v-btn text v-bind="attrs" @click="snackbar = false">Close</v-btn>
+        </template>
+    </v-snackbar>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+new Vue({
+    el: '#annotation-app',
+    delimiters: ['[[', ']]'],
+    vuetify: new Vuetify({
+        theme: {
+            themes: {
+                light: {
+                    primary: '#B8963E',
+                    secondary: '#1a1a2e',
+                },
+            },
+        },
+    }),
+    data: {
+        example: {{ example|safe }} || {},
+        assignment: {{ assignment|safe }} || null,
+        canApprove: {% if user.is_superuser %}true{% else %}false{% endif %}, // TODO: Check actual role
+        approving: false,
+        rejecting: false,
+        rejectDialog: false,
+        rejectNotes: '',
+        audioPlaying: false,
+        snackbar: false,
+        snackbarText: '',
+        snackbarColor: 'success',
+    },
+    mounted() {
+        // Auto-play audio if it's an STT project
+        this.$nextTick(() => {
+            if (this.$refs.audioPlayer) {
+                this.$refs.audioPlayer.play().catch(e => {
+                    console.log('Auto-play blocked, waiting for user interaction');
+                });
+            }
+        });
+    },
+    methods: {
+        getStatusColor(status) {
+            const colors = {
+                'assigned': 'grey',
+                'in_progress': 'blue',
+                'submitted': 'orange',
+                'approved': 'green',
+                'rejected': 'red'
+            };
+            return colors[status] || 'grey';
+        },
+        getStatusIcon(status) {
+            const icons = {
+                'assigned': 'mdi-clock-outline',
+                'in_progress': 'mdi-progress-clock',
+                'submitted': 'mdi-file-upload',
+                'approved': 'mdi-check-circle',
+                'rejected': 'mdi-close-circle'
+            };
+            return icons[status] || 'mdi-help-circle';
+        },
+        getApprovalColor(status) {
+            if (status === 'approved') return 'green';
+            if (status === 'rejected') return 'red';
+            if (status === 'submitted') return 'orange';
+            return 'grey';
+        },
+        getApprovalIcon(status) {
+            if (status === 'approved') return 'mdi-check-circle';
+            if (status === 'rejected') return 'mdi-close-circle';
+            if (status === 'submitted') return 'mdi-clock-alert';
+            return 'mdi-clock-outline';
+        },
+        getApprovalText(status) {
+            if (status === 'approved') return 'APPROVED';
+            if (status === 'rejected') return 'REJECTED';
+            if (status === 'submitted') return 'PENDING REVIEW';
+            return 'NOT SUBMITTED';
+        },
+        formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        },
+        async approveExample() {
+            if (!confirm('Are you sure you want to approve this annotation?')) {
+                return;
+            }
+            
+            this.approving = true;
+            
+            try {
+                const response = await axios.post(
+                    `/v1/projects/{{ project_id }}/assignments/approver-completion/{{ example_id }}/approve/`,
+                    { review_notes: '' },
+                    { headers: { 'X-CSRFToken': this.getCsrfToken() } }
+                );
+                
+                this.snackbarText = '✅ Annotation approved successfully!';
+                this.snackbarColor = 'success';
+                this.snackbar = true;
+                
+                // Reload page after 1 second
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } catch (err) {
+                console.error('Failed to approve:', err);
+                this.snackbarText = '❌ Failed to approve. Please try again.';
+                this.snackbarColor = 'error';
+                this.snackbar = true;
+                this.approving = false;
+            }
+        },
+        showRejectDialog() {
+            this.rejectNotes = '';
+            this.rejectDialog = true;
+        },
+        async rejectExample() {
+            if (!this.rejectNotes) {
+                return;
+            }
+            
+            this.rejecting = true;
+            
+            try {
+                const response = await axios.post(
+                    `/v1/projects/{{ project_id }}/assignments/approver-completion/{{ example_id }}/reject/`,
+                    { review_notes: this.rejectNotes },
+                    { headers: { 'X-CSRFToken': this.getCsrfToken() } }
+                );
+                
+                this.rejectDialog = false;
+                this.snackbarText = '✗ Annotation rejected with feedback.';
+                this.snackbarColor = 'warning';
+                this.snackbar = true;
+                
+                // Reload page after 1 second
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } catch (err) {
+                console.error('Failed to reject:', err);
+                this.snackbarText = '❌ Failed to reject. Please try again.';
+                this.snackbarColor = 'error';
+                this.snackbar = true;
+                this.rejecting = false;
+            }
+        },
+        getCsrfToken() {
+            const name = 'csrftoken';
+            const cookies = document.cookie.split(';');
+            for (let cookie of cookies) {
+                const [key, value] = cookie.trim().split('=');
+                if (key === name) return decodeURIComponent(value);
+            }
+            return '';
+        },
+        goToDataset() {
+            window.location.href = '/monlam/{{ project_id }}/dataset-enhanced/';
+        },
+        goToCompletion() {
+            window.location.href = '/monlam/{{ project_id }}/completion/';
+        },
+    },
+});
+</script>
+{% endblock %}
+

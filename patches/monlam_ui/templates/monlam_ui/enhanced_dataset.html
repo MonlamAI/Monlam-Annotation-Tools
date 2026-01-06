@@ -1,0 +1,270 @@
+{% extends "monlam_ui/base.html" %}
+
+{% block title %}Dataset - {{ project.name }} - Monlam Tools{% endblock %}
+
+{% block content %}
+<div id="dataset-app">
+    <v-row>
+        <v-col cols="12">
+            <v-card>
+                <v-card-title>
+                    <v-icon left color="primary">mdi-table</v-icon>
+                    Dataset: {{ project.name }}
+                    <v-spacer></v-spacer>
+                    <v-text-field
+                        v-model="search"
+                        append-icon="mdi-magnify"
+                        label="Search"
+                        single-line
+                        hide-details
+                        class="mr-4"
+                        style="max-width: 300px;"
+                    ></v-text-field>
+                    <v-btn color="primary" @click="loadData">
+                        <v-icon left>mdi-refresh</v-icon>
+                        Refresh
+                    </v-btn>
+                </v-card-title>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Loading State -->
+    <v-row v-if="loading">
+        <v-col cols="12" class="text-center">
+            <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+            <p class="mt-4">Loading dataset...</p>
+        </v-col>
+    </v-row>
+    
+    <!-- Error State -->
+    <v-row v-if="error">
+        <v-col cols="12">
+            <v-alert type="error" prominent>
+                <v-row align="center">
+                    <v-col class="grow">[[ error ]]</v-col>
+                    <v-col class="shrink">
+                        <v-btn @click="loadData">Retry</v-btn>
+                    </v-col>
+                </v-row>
+            </v-alert>
+        </v-col>
+    </v-row>
+    
+    <!-- Dataset Table -->
+    <v-row v-if="!loading && !error">
+        <v-col cols="12">
+            <v-card>
+                <v-data-table
+                    :headers="headers"
+                    :items="examples"
+                    :search="search"
+                    :items-per-page="25"
+                    :footer-props="{
+                        'items-per-page-options': [10, 25, 50, 100]
+                    }"
+                    class="elevation-1"
+                >
+                    <!-- Example ID Column -->
+                    <template v-slot:item.id="{ item }">
+                        <v-chip small color="grey lighten-2">
+                            [[ item.id ]]
+                        </v-chip>
+                    </template>
+                    
+                    <!-- Text/Audio Column -->
+                    <template v-slot:item.text="{ item }">
+                        <div v-if="item.filename && item.filename.includes('.wav')">
+                            <audio :src="item.filename" controls style="max-width: 300px; height: 30px;"></audio>
+                        </div>
+                        <div v-else-if="item.text">
+                            [[ item.text.substring(0, 100) ]][[ item.text.length > 100 ? '...' : '' ]]
+                        </div>
+                        <span v-else class="text--secondary">No content</span>
+                    </template>
+                    
+                    <!-- Assigned To Column -->
+                    <template v-slot:item.assigned_to="{ item }">
+                        <div v-if="item.assignment">
+                            <v-chip small color="primary" text-color="white">
+                                <v-icon small left>mdi-account</v-icon>
+                                [[ item.assignment.assigned_to_username ]]
+                            </v-chip>
+                        </div>
+                        <v-chip v-else small color="grey" text-color="white">
+                            Not assigned
+                        </v-chip>
+                    </template>
+                    
+                    <!-- Status Column -->
+                    <template v-slot:item.status="{ item }">
+                        <v-chip
+                            v-if="item.assignment"
+                            small
+                            :color="getStatusColor(item.assignment.status)"
+                            text-color="white"
+                        >
+                            <v-icon small left>[[ getStatusIcon(item.assignment.status) ]]</v-icon>
+                            [[ item.assignment.status.replace('_', ' ').toUpperCase() ]]
+                        </v-chip>
+                        <v-chip v-else small color="grey lighten-2">
+                            Not started
+                        </v-chip>
+                    </template>
+                    
+                    <!-- Approver Column -->
+                    <template v-slot:item.approver="{ item }">
+                        <div v-if="item.assignment && item.assignment.reviewed_by_username">
+                            <v-chip small color="secondary" text-color="white">
+                                <v-icon small left>mdi-check-circle</v-icon>
+                                [[ item.assignment.reviewed_by_username ]]
+                            </v-chip>
+                            <div class="text-caption mt-1">
+                                [[ formatDate(item.assignment.reviewed_at) ]]
+                            </div>
+                        </div>
+                        <v-chip v-else small color="grey lighten-2">
+                            Not reviewed
+                        </v-chip>
+                    </template>
+                    
+                    <!-- Actions Column -->
+                    <template v-slot:item.actions="{ item }">
+                        <v-btn
+                            small
+                            color="primary"
+                            :href="`/projects/{{ project_id }}/examples/${item.id}`"
+                            target="_blank"
+                        >
+                            <v-icon small left>mdi-pencil</v-icon>
+                            Annotate
+                        </v-btn>
+                    </template>
+                </v-data-table>
+            </v-card>
+        </v-col>
+    </v-row>
+    
+    <!-- Quick Actions -->
+    <v-row v-if="!loading && !error">
+        <v-col cols="12">
+            <v-card>
+                <v-card-actions>
+                    <v-btn color="primary" @click="goToCompletion">
+                        <v-icon left>mdi-chart-box</v-icon>
+                        Completion Dashboard
+                    </v-btn>
+                    <v-btn color="secondary" @click="goToProject">
+                        <v-icon left>mdi-folder</v-icon>
+                        Back to Project
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-col>
+    </v-row>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+new Vue({
+    el: '#dataset-app',
+    delimiters: ['[[', ']]'],
+    vuetify: new Vuetify({
+        theme: {
+            themes: {
+                light: {
+                    primary: '#B8963E',
+                    secondary: '#1a1a2e',
+                },
+            },
+        },
+    }),
+    data: {
+        loading: true,
+        error: null,
+        search: '',
+        examples: [],
+        assignments: {},
+        headers: [
+            { text: 'ID', value: 'id', sortable: true, width: '80px' },
+            { text: 'Content', value: 'text', sortable: false },
+            { text: 'Assigned To', value: 'assigned_to', sortable: true },
+            { text: 'Status', value: 'status', sortable: true },
+            { text: 'Approver', value: 'approver', sortable: true },
+            { text: 'Actions', value: 'actions', sortable: false, width: '120px' },
+        ],
+    },
+    mounted() {
+        this.loadData();
+    },
+    methods: {
+        async loadData() {
+            this.loading = true;
+            this.error = null;
+            
+            try {
+                // Load examples
+                const examplesResponse = await axios.get('/v1/projects/{{ project_id }}/examples?limit=1000');
+                const examples = examplesResponse.data.results || [];
+                
+                // Load assignments
+                const assignmentsResponse = await axios.get('/monlam/{{ project_id }}/api/dataset-assignments/');
+                const assignments = assignmentsResponse.data.results || [];
+                
+                // Create assignment lookup by example_id
+                const assignmentMap = {};
+                assignments.forEach(a => {
+                    assignmentMap[a.example_id] = a;
+                });
+                
+                // Merge assignment data into examples
+                this.examples = examples.map(ex => ({
+                    ...ex,
+                    assignment: assignmentMap[ex.id] || null
+                }));
+                
+                console.log('Loaded', this.examples.length, 'examples with assignments');
+            } catch (err) {
+                console.error('Failed to load dataset:', err);
+                this.error = 'Failed to load dataset. Please try again.';
+            } finally {
+                this.loading = false;
+            }
+        },
+        getStatusColor(status) {
+            const colors = {
+                'assigned': 'grey',
+                'in_progress': 'blue',
+                'submitted': 'orange',
+                'approved': 'green',
+                'rejected': 'red'
+            };
+            return colors[status] || 'grey';
+        },
+        getStatusIcon(status) {
+            const icons = {
+                'assigned': 'mdi-clock-outline',
+                'in_progress': 'mdi-progress-clock',
+                'submitted': 'mdi-file-upload',
+                'approved': 'mdi-check-circle',
+                'rejected': 'mdi-close-circle'
+            };
+            return icons[status] || 'mdi-help-circle';
+        },
+        formatDate(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        },
+        goToCompletion() {
+            window.location.href = '/monlam/{{ project_id }}/completion/';
+        },
+        goToProject() {
+            window.location.href = '/projects/{{ project_id }}';
+        },
+    },
+});
+</script>
+{% endblock %}
+

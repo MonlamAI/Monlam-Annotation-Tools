@@ -77,6 +77,20 @@ RUN if ! grep -q "assignment.urls" /doccano/backend/config/urls.py; then \
         sed -i "s|urlpatterns = \[|urlpatterns = [\n    # Monlam: Assignment and Completion Tracking APIs\n    path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),|" /doccano/backend/config/urls.py; \
     fi
 
+# ============================================
+# MONLAM UI - PROFESSIONAL DJANGO INTEGRATION
+# ============================================
+# Copy the Monlam UI app (Django views and templates)
+COPY patches/monlam_ui /doccano/backend/monlam_ui
+
+# Register the Monlam UI app in settings
+RUN echo "INSTALLED_APPS += ['monlam_ui']" >> /doccano/backend/config/settings/base.py || true
+
+# Integrate Monlam UI URLs into main urls.py
+RUN if ! grep -q "monlam_ui.urls" /doccano/backend/config/urls.py; then \
+        sed -i "s|urlpatterns = \[|urlpatterns = [\n    # Monlam: Enhanced UI for Completion Tracking\n    path('monlam/', include('monlam_ui.urls')),|" /doccano/backend/config/urls.py; \
+    fi
+
 # Add MIME type configuration at the VERY START of base.py (before any imports)
 RUN sed -i '1i # Monlam: Configure MIME types for JavaScript files BEFORE WhiteNoise loads\nimport mimetypes\nmimetypes.add_type("application/javascript", ".js", True)\n' /doccano/backend/config/settings/base.py
 
@@ -128,7 +142,8 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
-    chown -R doccano:doccano /doccano/backend/assignment
+    chown -R doccano:doccano /doccano/backend/assignment && \
+    chown -R doccano:doccano /doccano/backend/monlam_ui
 
 # ============================================
 # MIGRATIONS NOTE
@@ -140,11 +155,17 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # Or use the manual migration command documented in README
 
 # ============================================
-# MONLAM FEATURES NOW INLINE IN INDEX.HTML
+# MONLAM FEATURES ARCHITECTURE
 # ============================================
-# All features (audio loop, dataset columns, metrics matrix, approve buttons)
-# are now embedded directly in index.html and 200.html as inline scripts.
-# This ensures they execute reliably without external file loading issues.
+# Monlam UI provides a professional Django app integration:
+# - Native Django views (not HTML injection)
+# - Vue.js + Vuetify templates
+# - RESTful APIs for data
+# - Completion dashboard, enhanced dataset, annotation approval
+# - Production-grade, maintainable, upgradeable
+#
+# Legacy inline scripts in index.html/200.html are deprecated.
+# New features use proper Django/Vue architecture in monlam_ui app.
 
 USER doccano
 WORKDIR /doccano/backend
