@@ -183,7 +183,7 @@
                                     <v-btn 
                                         small 
                                         :color="item.assignment && item.assignment.status === 'submitted' ? 'orange' : 'primary'"
-                                        :href="'/projects/{{ project_id }}/speech-to-text'"
+                                        @click="goToAnnotation(item)"
                                     >
                                         <v-icon small left>mdi-pencil</v-icon>
                                         [[ item.assignment && item.assignment.status === 'submitted' ? 'Review' : 'Annotate' ]]
@@ -277,7 +277,7 @@
                 console.log('📥 Loading data...');
                 
                 try {
-                    const examplesResp = await axios.get('/v1/projects/{{ project_id }}/examples?limit=100');
+                    const examplesResp = await axios.get('/v1/projects/{{ project_id }}/examples?limit=1000');
                     const examples = examplesResp.data.results || [];
                     console.log('✅ Loaded', examples.length, 'examples');
                     
@@ -302,6 +302,22 @@
                 } finally {
                     this.loading = false;
                 }
+            },
+            goToAnnotation(item) {
+                // Find the index of this example in the full list
+                const exampleIndex = this.examples.findIndex(ex => ex.id === item.id);
+                
+                // Calculate page number (assuming 10 examples per page, which is Doccano's default)
+                const itemsPerPage = 10;
+                const pageNumber = Math.floor(exampleIndex / itemsPerPage);
+                
+                // Build URL with page parameter
+                const url = `/projects/{{ project_id }}/speech-to-text?page=${pageNumber}&q=&isChecked=`;
+                
+                console.log(`📍 Navigating to example ${item.id} at index ${exampleIndex} on page ${pageNumber}`);
+                
+                // Navigate to the annotation page
+                window.location.href = url;
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;
