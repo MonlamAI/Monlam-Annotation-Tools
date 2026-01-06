@@ -1150,7 +1150,14 @@
                 const projectId = match[1];
                 const page = match[2];
                 
-                // EXCEPTION: Don't redirect dataset page for project admins
+                // EXCEPTION 1: Don't redirect if this is auto-annotate navigation
+                // (coming from enhanced dataset to annotate specific example)
+                if (page === 'dataset' && localStorage.getItem('monlam_auto_annotate_trigger') === 'true') {
+                    console.log('[Monlam] Auto-annotate in progress, skipping dataset redirect');
+                    return; // Let navigation proceed to dataset page
+                }
+                
+                // EXCEPTION 2: Don't redirect dataset page for project admins
                 // (they need upload/download buttons on original page)
                 if (page === 'dataset' && isProjectAdmin()) {
                     console.log('[Monlam] Project admin detected, skipping dataset redirect');
@@ -1183,7 +1190,14 @@
             const projectId = match[1];
             const page = match[2];
             
-            // EXCEPTION: Don't redirect dataset page for project admins
+            // EXCEPTION 1: Don't redirect if this is auto-annotate navigation
+            // (coming from enhanced dataset to annotate specific example)
+            if (page === 'dataset' && localStorage.getItem('monlam_auto_annotate_trigger') === 'true') {
+                console.log('[Monlam] Auto-annotate in progress, skipping automatic redirect');
+                return;
+            }
+            
+            // EXCEPTION 2: Don't redirect dataset page for project admins
             if (page === 'dataset' && isProjectAdmin()) {
                 console.log('[Monlam] Project admin detected, skipping automatic redirect');
                 return;
