@@ -304,17 +304,12 @@
                 }
             },
             goToAnnotation(item) {
-                // Find the index of this example in the full list
-                const exampleIndex = this.examples.findIndex(ex => ex.id === item.id);
+                // Simplified: Just navigate to the speech-to-text interface
+                // Doccano will handle loading the examples
+                const url = `/projects/{{ project_id }}/speech-to-text`;
                 
-                // Calculate page number (assuming 10 examples per page, which is Doccano's default)
-                const itemsPerPage = 10;
-                const pageNumber = Math.floor(exampleIndex / itemsPerPage);
-                
-                // Build URL with page parameter
-                const url = `/projects/{{ project_id }}/speech-to-text?page=${pageNumber}&q=&isChecked=`;
-                
-                console.log(`📍 Navigating to example ${item.id} at index ${exampleIndex} on page ${pageNumber}`);
+                console.log(`📍 Navigating to annotation interface for example ${item.id}`);
+                console.log(`   URL: ${url}`);
                 
                 // Navigate to the annotation page
                 window.location.href = url;
