@@ -1081,6 +1081,26 @@
     }
     
     // INITIALIZATION
+    // Check if user is project admin
+    function isProjectAdmin() {
+        // Check if user has admin/owner role
+        // Look for admin indicators in the page
+        const userMenu = document.querySelector('[data-test="user-menu"], .navbar-item');
+        if (userMenu && userMenu.textContent.includes('Admin')) return true;
+        
+        // Check URL params
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('admin') === 'true') return true;
+        
+        // Check localStorage for role info
+        try {
+            const userRole = localStorage.getItem('userRole');
+            if (userRole === 'admin' || userRole === 'project_admin') return true;
+        } catch(e) {}
+        
+        return false;
+    }
+    
     // Intercept menu clicks for redirect
     function interceptMenuClicks() {
         console.log('[Monlam] Setting up menu intercept...');
@@ -1096,12 +1116,19 @@
             // Check if it's a dataset or metrics link
             const match = href.match(/\/projects\/(\d+)\/(dataset|metrics)/);
             if (match) {
+                const projectId = match[1];
+                const page = match[2];
+                
+                // EXCEPTION: Don't redirect dataset page for project admins
+                // (they need upload/download buttons on original page)
+                if (page === 'dataset' && isProjectAdmin()) {
+                    console.log('[Monlam] Project admin detected, skipping dataset redirect');
+                    return; // Let Vue handle it normally
+                }
+                
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
-                
-                const projectId = match[1];
-                const page = match[2];
                 
                 const redirectUrl = page === 'dataset' 
                     ? `/monlam/${projectId}/dataset-enhanced/`
@@ -1124,6 +1151,12 @@
         if (match) {
             const projectId = match[1];
             const page = match[2];
+            
+            // EXCEPTION: Don't redirect dataset page for project admins
+            if (page === 'dataset' && isProjectAdmin()) {
+                console.log('[Monlam] Project admin detected, skipping automatic redirect');
+                return;
+            }
             
             const redirectUrl = page === 'dataset' 
                 ? `/monlam/${projectId}/dataset-enhanced/`

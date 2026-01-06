@@ -18,8 +18,18 @@
 <body>
     <!-- Header -->
     <div class="page-header">
-        <h1>📊 Enhanced Dataset View</h1>
-        <p>Project: {{ project.name }} (ID: {{ project_id }})</p>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>📊 Enhanced Dataset View</h1>
+                <p>Project: {{ project.name }} (ID: {{ project_id }})</p>
+            </div>
+            <div>
+                <a href="/projects/{{ project_id }}/" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">🏠</span>
+                    <span>Back to Project</span>
+                </a>
+            </div>
+        </div>
     </div>
 
     <!-- Vue App -->
@@ -173,7 +183,7 @@
                                     <v-btn 
                                         small 
                                         :color="item.assignment && item.assignment.status === 'submitted' ? 'orange' : 'primary'"
-                                        :href="'/projects/{{ project_id }}/examples/' + item.id"
+                                        :href="'/projects/{{ project_id }}/speech-to-text?page=' + item.id"
                                     >
                                         <v-icon small left>mdi-pencil</v-icon>
                                         [[ item.assignment && item.assignment.status === 'submitted' ? 'Review' : 'Annotate' ]]
