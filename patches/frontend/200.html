@@ -1212,7 +1212,9 @@
             enableAudioLoop();
             addDatasetColumns();
             addMetricsMatrix();
-            addApproveButtons();
+            // TEMPORARILY DISABLED: addApproveButtons();
+            // Approve buttons are interfering with annotation interface
+            // Will fix properly later
             checkAndRedirect(); // Check again after Vue loads
         }, 1000);
         

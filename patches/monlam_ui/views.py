@@ -14,14 +14,46 @@ from django.db.models import Count, Q
 
 from django.views import View
 from django.shortcuts import redirect
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
 
 class DatasetRedirectView(View):
     """
     Redirect standard dataset page to enhanced dataset view.
     Intercepts /projects/{id}/dataset and redirects to /monlam/{id}/dataset-enhanced/
+    
+    EXCEPTION: Project Admins (role=3) are NOT redirected - they need
+    the original dataset page for upload/download functionality.
     """
     def get(self, request, project_id):
+        # Check if user is a Project Admin for this project
+        try:
+            from projects.models import Project
+            from roles.models import RoleMember
+            
+            PROJECT_ADMIN_ROLE = 3  # Doccano's Project Admin role ID
+            
+            # Check if user is project admin
+            is_admin = RoleMember.objects.filter(
+                project_id=project_id,
+                member_id=request.user.id,
+                role_id=PROJECT_ADMIN_ROLE
+            ).exists()
+            
+            if is_admin:
+                # Project Admins should NOT be redirected
+                # Return None to let the request continue to Doccano's original view
+                # We can't directly call Doccano's view, so we'll raise an exception
+                # that signals "let the original view handle this"
+                from django.http import Http404
+                raise Http404("Let original view handle this")
+            
+        except Exception as e:
+            # If anything goes wrong, redirect to enhanced view (safer default)
+            print(f"[Monlam] Error checking admin role: {e}")
+        
+        # Non-admins: redirect to enhanced view
         return redirect(f'/monlam/{project_id}/dataset-enhanced/')
 
 

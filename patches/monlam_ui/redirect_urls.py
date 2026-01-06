@@ -16,20 +16,15 @@ Usage in config/urls.py:
 from django.urls import path
 from .views import DatasetRedirectView, MetricsRedirectView
 
-# These patterns intercept Doccano's default URLs
+# SERVER-SIDE REDIRECTS DISABLED
+# Reason: Server-side redirects can't "pass through" to Doccano's original views
+#         This breaks Project Admins who need the original dataset page
+#
+# Solution: Client-side redirects ONLY (in index.html)
+#          Client-side can check user roles and decide whether to redirect
+#
 redirect_patterns = [
-    # Redirect /projects/{id}/dataset → /monlam/{id}/dataset-enhanced/
-    path(
-        'projects/<int:project_id>/dataset',
-        DatasetRedirectView.as_view(),
-        name='monlam-dataset-redirect'
-    ),
-    
-    # Redirect /projects/{id}/metrics → /monlam/{id}/completion/
-    path(
-        'projects/<int:project_id>/metrics',
-        MetricsRedirectView.as_view(),
-        name='monlam-metrics-redirect'
-    ),
+    # Empty list - no server-side redirects
+    # All redirects handled by JavaScript in patches/frontend/index.html
 ]
 
