@@ -794,6 +794,27 @@
         }
     }
     
+    // Get example ID from Doccano's Vue app state or DOM
+    function getExampleIdFromPage() {
+        // Try 1: Get from Vue app's $route query params
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageParam = urlParams.get('page');
+        
+        // Try 2: Look for example ID in the DOM (Doccano displays it somewhere)
+        const exampleText = document.body.textContent;
+        const idMatch = exampleText.match(/ID[:\s]+(\d+)/i) || 
+                       exampleText.match(/Example[:\s]+(\d+)/i) ||
+                       exampleText.match(/#(\d+)/);
+        if (idMatch) {
+            console.log('[Monlam Approve] Found example ID in DOM:', idMatch[1]);
+            return idMatch[1];
+        }
+        
+        // Try 3: Get from API responses (listen to network)
+        // This will be populated when example data loads
+        return null;
+    }
+    
     // FEATURE 4: APPROVE/REJECT BUTTONS
     function addApproveButtons() {
         const path = window.location.pathname;
@@ -807,12 +828,22 @@
         console.log('[Monlam Approve] Detected annotation page:', path);
         CONFIG.projectId = getProjectId();
         
-        const match = path.match(/\/projects\/\d+\/(\d+)/);
-        if (!match) {
-            console.log('[Monlam Approve] Could not extract example ID from path');
+        // Try to get example ID from path first
+        const pathMatch = path.match(/\/projects\/\d+\/(\d+)/);
+        let exampleId = pathMatch ? pathMatch[1] : null;
+        
+        // If not in path, try to get from page content
+        if (!exampleId) {
+            exampleId = getExampleIdFromPage();
+        }
+        
+        if (!exampleId) {
+            console.log('[Monlam Approve] Could not determine example ID, will retry...');
+            // Retry after DOM updates
+            setTimeout(addApproveButtons, 2000);
             return;
         }
-        const exampleId = match[1];
+        
         console.log('[Monlam Approve] Example ID:', exampleId, 'Project ID:', CONFIG.projectId);
         
         // Try multiple injection strategies
