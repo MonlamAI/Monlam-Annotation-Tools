@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monlam Tools - {{ project.name }}</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@5.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Roboto', sans-serif; background: #f5f5f5; }
+        .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 60px 20px; text-align: center; }
+        .hero h1 { margin: 0; font-size: 48px; font-weight: 700; }
+        .hero p { margin: 16px 0 0 0; font-size: 20px; opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>📊 Monlam Tools</h1>
+        <p>{{ project.name }} - Advanced Features</p>
+    </div>
+
+    <div id="app">
+        <v-app>
+            <v-container class="mt-8">
+                <v-row>
+                    <!-- Enhanced Dataset -->
+                    <v-col cols="12" md="6">
+                        <v-card hover height="100%" class="d-flex flex-column">
+                            <v-card-title class="text-h5 primary white--text">
+                                <v-icon left large dark>mdi-table-edit</v-icon>
+                                📊 གཞི་གྲངས། Enhanced Dataset
+                            </v-card-title>
+                            <v-card-text class="flex-grow-1">
+                                <h3 class="mb-3">What you'll see:</h3>
+                                <ul>
+                                    <li>📊 Status summary dashboard</li>
+                                    <li>🟠 Orange badges for submissions</li>
+                                    <li>🟣 Purple badges for PM review</li>
+                                    <li>🟢 Green badges for final approval</li>
+                                    <li>👤 Assigned user for each example</li>
+                                    <li>✓ Role-based approval indicators</li>
+                                </ul>
+                                <v-alert type="info" dense class="mt-3">
+                                    <strong>For:</strong> All roles (Annotators, Approvers, Project Managers)
+                                </v-alert>
+                            </v-card-text>
+                            <v-card-actions>
+                                <v-btn 
+                                    color="primary" 
+                                    large 
+                                    block
+                                    :href="'/monlam/{{ project_id }}/dataset-enhanced/'"
+                                >
+                                    <v-icon left>mdi-arrow-right-circle</v-icon>
+                                    Open Enhanced Dataset
+                                </v-btn>
+                            </v-card-actions>
+                        </v-card>
+                    </v-col>
+
+                    <!-- Completion Dashboard -->
+                    <v-col cols="12" md="6">
+                        <v-card hover height="100%" class="d-flex flex-column">
+                            <v-card-title class="text-h5 secondary white--text">
+                                <v-icon left large dark>mdi-chart-box</v-icon>
+                                📈 Completion Dashboard
+                            </v-card-title>
+                            <v-card-text class="flex-grow-1">
+                                <h3 class="mb-3">What you'll see:</h3>
+                                <ul>
+                                    <li>📊 Project statistics</li>
+                                    <li>👥 Per-annotator progress</li>
+                                    <li>✓ Per-approver activity</li>
+                                    <li>📈 Completion rates</li>
+                                    <li>📋 Assignment matrix</li>
+                                </ul>
+                                <v-alert type="warning" dense class="mt-3">
+                                    <strong>For:</strong> Project Managers & Admins
+                                </v-alert>
+                            </v-card-text>
+                            <v-card-actions>
+                                <v-btn 
+                                    color="secondary" 
+                                    large 
+                                    block
+                                    :href="'/monlam/{{ project_id }}/completion/'"
+                                >
+                                    <v-icon left>mdi-arrow-right-circle</v-icon>
+                                    Open Dashboard
+                                </v-btn>
+                            </v-card-actions>
+                        </v-card>
+                    </v-col>
+
+                    <!-- Standard Doccano -->
+                    <v-col cols="12" md="6">
+                        <v-card hover height="100%" class="d-flex flex-column">
+                            <v-card-title class="text-h5 grey darken-2 white--text">
+                                <v-icon left large dark>mdi-folder</v-icon>
+                                📁 Standard Project View
+                            </v-card-title>
+                            <v-card-text class="flex-grow-1">
+                                <h3 class="mb-3">Doccano standard features:</h3>
+                                <ul>
+                                    <li>📝 Annotation interface</li>
+                                    <li>📊 Standard dataset view</li>
+                                    <li>👥 Project members</li>
+                                    <li>⚙️ Project settings</li>
+                                    <li>📤 Export data</li>
+                                </ul>
+                            </v-card-text>
+                            <v-card-actions>
+                                <v-btn 
+                                    color="grey darken-2" 
+                                    large 
+                                    block
+                                    :href="'/projects/{{ project_id }}/'"
+                                >
+                                    <v-icon left>mdi-arrow-right-circle</v-icon>
+                                    Go to Project
+                                </v-btn>
+                            </v-card-actions>
+                        </v-card>
+                    </v-col>
+
+                    <!-- Quick Links -->
+                    <v-col cols="12" md="6">
+                        <v-card hover height="100%" class="d-flex flex-column">
+                            <v-card-title class="text-h5 green darken-1 white--text">
+                                <v-icon left large dark>mdi-link-variant</v-icon>
+                                🔗 Quick Links
+                            </v-card-title>
+                            <v-card-text class="flex-grow-1">
+                                <v-list>
+                                    <v-list-item :href="'/projects/{{ project_id }}/dataset'">
+                                        <v-list-item-icon>
+                                            <v-icon>mdi-table</v-icon>
+                                        </v-list-item-icon>
+                                        <v-list-item-content>
+                                            <v-list-item-title>Standard Dataset</v-list-item-title>
+                                        </v-list-item-content>
+                                    </v-list-item>
+
+                                    <v-list-item :href="'/projects/{{ project_id }}/members'">
+                                        <v-list-item-icon>
+                                            <v-icon>mdi-account-group</v-icon>
+                                        </v-list-item-icon>
+                                        <v-list-item-content>
+                                            <v-list-item-title>Project Members</v-list-item-title>
+                                        </v-list-item-content>
+                                    </v-list-item>
+
+                                    <v-list-item :href="'/projects/{{ project_id }}/metrics'">
+                                        <v-list-item-icon>
+                                            <v-icon>mdi-chart-line</v-icon>
+                                        </v-list-item-icon>
+                                        <v-list-item-content>
+                                            <v-list-item-title>Metrics</v-list-item-title>
+                                        </v-list-item-content>
+                                    </v-list-item>
+
+                                    <v-list-item :href="'/projects'">
+                                        <v-list-item-icon>
+                                            <v-icon>mdi-folder-multiple</v-icon>
+                                        </v-list-item-icon>
+                                        <v-list-item-content>
+                                            <v-list-item-title>All Projects</v-list-item-title>
+                                        </v-list-item-content>
+                                    </v-list-item>
+                                </v-list>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Help Section -->
+                <v-row class="mt-4">
+                    <v-col cols="12">
+                        <v-card>
+                            <v-card-title class="blue-grey darken-3 white--text">
+                                <v-icon left dark>mdi-help-circle</v-icon>
+                                📚 Quick Guide
+                            </v-card-title>
+                            <v-card-text>
+                                <v-row>
+                                    <v-col cols="12" md="4">
+                                        <h3>👤 Annotators:</h3>
+                                        <p>Use <strong>Enhanced Dataset</strong> to see your assigned examples and their status.</p>
+                                    </v-col>
+                                    <v-col cols="12" md="4">
+                                        <h3>✓ Approvers:</h3>
+                                        <p>Use <strong>Enhanced Dataset</strong> and look for 🟠 orange badges = "Needs Review"</p>
+                                    </v-col>
+                                    <v-col cols="12" md="4">
+                                        <h3>👑 Project Managers:</h3>
+                                        <p>Use <strong>Completion Dashboard</strong> for overview, and 🟣 purple badges for PM review.</p>
+                                    </v-col>
+                                </v-row>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+            </v-container>
+        </v-app>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+
+    <script>
+    new Vue({
+        el: '#app',
+        vuetify: new Vuetify(),
+    });
+    </script>
+</body>
+</html>
+

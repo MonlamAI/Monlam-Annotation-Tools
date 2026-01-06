@@ -13,6 +13,32 @@ from django.db.models import Count, Q
 
 
 @login_required
+def project_landing(request, project_id):
+    """
+    Landing page for Monlam custom features.
+    Shows cards linking to:
+    - Enhanced Dataset View
+    - Completion Dashboard
+    - Standard Project
+    """
+    from projects.models import Project
+    
+    project = get_object_or_404(Project, pk=project_id)
+    
+    # Check access
+    if not request.user.is_superuser:
+        if not project.members.filter(id=request.user.id).exists():
+            return render(request, '403.html', status=403)
+    
+    context = {
+        'project': project,
+        'project_id': project_id,
+    }
+    
+    return render(request, 'monlam_ui/project_landing.html', context)
+
+
+@login_required
 def completion_dashboard(request, project_id):
     """
     Completion Dashboard for Project Managers

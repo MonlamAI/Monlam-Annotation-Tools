@@ -11,6 +11,13 @@ from . import views
 app_name = 'monlam_ui'
 
 urlpatterns = [
+    # Project Landing Page (Main entry point)
+    path(
+        '<int:project_id>/',
+        views.project_landing,
+        name='project-landing'
+    ),
+    
     # Completion Dashboard (Project Manager view)
     path(
         '<int:project_id>/completion/',
