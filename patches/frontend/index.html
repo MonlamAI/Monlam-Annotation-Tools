@@ -782,20 +782,46 @@
             
             // Wait for table to appear
             setTimeout(() => {
-                // Add headers
+                // Add headers at positions 4, 5, 6 (after ID, Text, Created)
                 const headerRow = document.querySelector('thead tr');
                 if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
-                    ['Annotated By', 'Reviewed By', 'Status'].forEach(text => {
-                        const th = document.createElement('th');
-                        th.textContent = text;
-                        th.className = 'monlam-status-header';
-                        th.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0;';
-                        headerRow.appendChild(th);
-                    });
-                    console.log('[Monlam Dataset] ✅ Headers added');
+                    const headers = headerRow.querySelectorAll('th');
+                    
+                    // Insert after 3rd column if possible, otherwise append
+                    const insertAfter = headers.length >= 3 ? headers[2] : headers[headers.length - 1];
+                    
+                    // Create headers
+                    const annotatedHeader = document.createElement('th');
+                    annotatedHeader.textContent = 'Annotated By';
+                    annotatedHeader.className = 'monlam-status-header monlam-annotated-header';
+                    annotatedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0;';
+                    
+                    const reviewedHeader = document.createElement('th');
+                    reviewedHeader.textContent = 'Reviewed By';
+                    reviewedHeader.className = 'monlam-status-header monlam-reviewed-header';
+                    reviewedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0;';
+                    
+                    const statusHeader = document.createElement('th');
+                    statusHeader.textContent = 'Status';
+                    statusHeader.className = 'monlam-status-header monlam-status-col-header';
+                    statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0;';
+                    
+                    // Insert in order (positions 4, 5, 6)
+                    if (headers.length >= 3) {
+                        insertAfter.insertAdjacentElement('afterend', annotatedHeader);
+                        annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
+                        reviewedHeader.insertAdjacentElement('afterend', statusHeader);
+                        console.log('[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6');
+                    } else {
+                        // Fallback: append at end
+                        headerRow.appendChild(annotatedHeader);
+                        headerRow.appendChild(reviewedHeader);
+                        headerRow.appendChild(statusHeader);
+                        console.log('[Monlam Dataset] ✅ Headers appended (less than 3 columns)');
+                    }
                 }
                 
-                // Add data cells
+                // Add data cells at positions 4, 5, 6
                 const dataRows = document.querySelectorAll('tbody tr');
                 dataRows.forEach(row => {
                     if (row.querySelector('.monlam-status-cell')) return; // Already added
@@ -827,22 +853,37 @@
                     const color = statusColors[status] || '#e0e0e0';
                     const textColor = status === 'unassigned' ? '#666' : 'white';
                     
+                    // Get all cells in row
+                    const cells = row.querySelectorAll('td');
+                    const insertAfter = cells.length >= 3 ? cells[2] : cells[cells.length - 1];
+                    
                     // Create cells
-                    [
-                        { text: annotatedBy, class: 'monlam-annotated-cell' },
-                        { text: reviewedBy, class: 'monlam-reviewed-cell' },
-                        { html: `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`, class: 'monlam-status-cell' }
-                    ].forEach(cell => {
-                        const td = document.createElement('td');
-                        td.className = cell.class;
-                        td.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0;';
-                        if (cell.html) {
-                            td.innerHTML = cell.html;
-                        } else {
-                            td.textContent = cell.text;
-                        }
-                        row.appendChild(td);
-                    });
+                    const annotatedCell = document.createElement('td');
+                    annotatedCell.className = 'monlam-annotated-cell';
+                    annotatedCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0;';
+                    annotatedCell.textContent = annotatedBy;
+                    
+                    const reviewedCell = document.createElement('td');
+                    reviewedCell.className = 'monlam-reviewed-cell';
+                    reviewedCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0;';
+                    reviewedCell.textContent = reviewedBy;
+                    
+                    const statusCell = document.createElement('td');
+                    statusCell.className = 'monlam-status-cell';
+                    statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0;';
+                    statusCell.innerHTML = `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`;
+                    
+                    // Insert after 3rd cell (positions 4, 5, 6)
+                    if (cells.length >= 3) {
+                        insertAfter.insertAdjacentElement('afterend', annotatedCell);
+                        annotatedCell.insertAdjacentElement('afterend', reviewedCell);
+                        reviewedCell.insertAdjacentElement('afterend', statusCell);
+                    } else {
+                        // Fallback: append at end
+                        row.appendChild(annotatedCell);
+                        row.appendChild(reviewedCell);
+                        row.appendChild(statusCell);
+                    }
                 });
                 
                 console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');
