@@ -722,9 +722,21 @@
     // These were for the approve/reject buttons that were interfering with annotation interface
     // Will be re-implemented properly in a future update
     
-    // NO LONGER NEEDED: Dataset redirects removed
-    // We now enhance the ORIGINAL dataset table in place with assignment columns
-    // No need to redirect to /monlam/{id}/dataset-enhanced/
+    // METRICS PAGE REDIRECT ONLY
+    // Redirect /projects/{id}/metrics to /monlam/{id}/completion/
+    // (Dataset page is NOT redirected - it uses enhanced table instead)
+    function redirectMetricsPage() {
+        const path = window.location.pathname;
+        const match = path.match(/^\/projects\/(\d+)\/metrics/);
+        
+        if (match) {
+            const projectId = match[1];
+            const redirectUrl = `/monlam/${projectId}/completion/`;
+            
+            console.log('[Monlam] On metrics page, redirecting to completion dashboard:', redirectUrl);
+            window.location.replace(redirectUrl);
+        }
+    }
     
     // Removed: autoAnnotateExample() and autoStartAnnotation()
     // No longer needed since we enhance the original dataset table
@@ -844,6 +856,9 @@
     function init() {
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
+        
+        // Check if we need to redirect metrics page
+        redirectMetricsPage();
         
         setTimeout(() => {
             enableAudioLoop();
