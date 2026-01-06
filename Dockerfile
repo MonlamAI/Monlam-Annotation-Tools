@@ -91,6 +91,14 @@ RUN if ! grep -q "monlam_ui.urls" /doccano/backend/config/urls.py; then \
         sed -i "s|urlpatterns = \[|urlpatterns = [\n    # Monlam: Enhanced UI for Completion Tracking\n    path('monlam/', include('monlam_ui.urls')),|" /doccano/backend/config/urls.py; \
     fi
 
+# Add Monlam redirects for Doccano menu items (must be before Doccano's URLs)
+# This redirects /projects/{id}/dataset → /monlam/{id}/dataset-enhanced/
+# and /projects/{id}/metrics → /monlam/{id}/completion/
+RUN if ! grep -q "monlam_ui.redirect_urls" /doccano/backend/config/urls.py; then \
+        sed -i '1i from monlam_ui.redirect_urls import redirect_patterns' /doccano/backend/config/urls.py && \
+        sed -i "s|urlpatterns = \[|urlpatterns = [\n    # Monlam: Redirect standard menu items to enhanced views\n    *redirect_patterns,|" /doccano/backend/config/urls.py; \
+    fi
+
 # Add MIME type configuration at the VERY START of base.py (before any imports)
 RUN sed -i '1i # Monlam: Configure MIME types for JavaScript files BEFORE WhiteNoise loads\nimport mimetypes\nmimetypes.add_type("application/javascript", ".js", True)\n' /doccano/backend/config/settings/base.py
 

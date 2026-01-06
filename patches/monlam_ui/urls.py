@@ -11,6 +11,9 @@ from . import views
 app_name = 'monlam_ui'
 
 urlpatterns = [
+    # Redirects for Doccano menu items (registered at root level)
+    # These will be included in main urls.py before Doccano's URLs
+    
     # Project Landing Page (Main entry point)
     path(
         '<int:project_id>/',

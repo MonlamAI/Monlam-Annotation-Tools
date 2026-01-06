@@ -12,6 +12,28 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import Count, Q
 
 
+from django.views import View
+from django.shortcuts import redirect
+
+
+class DatasetRedirectView(View):
+    """
+    Redirect standard dataset page to enhanced dataset view.
+    Intercepts /projects/{id}/dataset and redirects to /monlam/{id}/dataset-enhanced/
+    """
+    def get(self, request, project_id):
+        return redirect(f'/monlam/{project_id}/dataset-enhanced/')
+
+
+class MetricsRedirectView(View):
+    """
+    Redirect standard metrics page to completion dashboard.
+    Intercepts /projects/{id}/metrics and redirects to /monlam/{project_id}/completion/
+    """
+    def get(self, request, project_id):
+        return redirect(f'/monlam/{project_id}/completion/')
+
+
 @login_required
 def project_landing(request, project_id):
     """
