@@ -1081,15 +1081,75 @@
     }
     
     // INITIALIZATION
+    // Intercept menu clicks for redirect
+    function interceptMenuClicks() {
+        console.log('[Monlam] Setting up menu intercept...');
+        
+        // Intercept clicks on links (capture phase to run before Vue)
+        document.addEventListener('click', function(e) {
+            const link = e.target.closest('a');
+            if (!link) return;
+            
+            const href = link.getAttribute('href') || link.href;
+            if (!href) return;
+            
+            // Check if it's a dataset or metrics link
+            const match = href.match(/\/projects\/(\d+)\/(dataset|metrics)/);
+            if (match) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                
+                const projectId = match[1];
+                const page = match[2];
+                
+                const redirectUrl = page === 'dataset' 
+                    ? `/monlam/${projectId}/dataset-enhanced/`
+                    : `/monlam/${projectId}/completion/`;
+                
+                console.log(`[Monlam] Intercepted ${page} click, redirecting to:`, redirectUrl);
+                window.location.href = redirectUrl;
+                return false;
+            }
+        }, true); // Use capture phase to run BEFORE Vue
+        
+        console.log('[Monlam] Menu intercept active');
+    }
+    
+    // Check if on dataset/metrics page and redirect
+    function checkAndRedirect() {
+        const path = window.location.pathname;
+        const match = path.match(/^\/projects\/(\d+)\/(dataset|metrics)/);
+        
+        if (match) {
+            const projectId = match[1];
+            const page = match[2];
+            
+            const redirectUrl = page === 'dataset' 
+                ? `/monlam/${projectId}/dataset-enhanced/`
+                : `/monlam/${projectId}/completion/`;
+            
+            console.log(`[Monlam] On ${page} page, redirecting to:`, redirectUrl);
+            window.location.replace(redirectUrl);
+        }
+    }
+    
     function init() {
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
+        
+        // Set up menu intercept FIRST
+        interceptMenuClicks();
+        
+        // Check if we need to redirect
+        checkAndRedirect();
         
         setTimeout(() => {
             enableAudioLoop();
             addDatasetColumns();
             addMetricsMatrix();
             addApproveButtons();
+            checkAndRedirect(); // Check again after Vue loads
         }, 1000);
         
         let lastPath = window.location.pathname;
@@ -1097,6 +1157,7 @@
             if (window.location.pathname !== lastPath) {
                 lastPath = window.location.pathname;
                 console.log('[Monlam] Navigation detected:', lastPath);
+                checkAndRedirect(); // Check on every navigation
                 setTimeout(() => {
                     enableAudioLoop();
                     addDatasetColumns();
