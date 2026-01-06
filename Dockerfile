@@ -87,13 +87,9 @@ RUN if ! grep -q "assignment.tracking_urls" /doccano/backend/config/urls.py; the
         sed -i "s|path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),|path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),\n    # Monlam: Simple Tracking API (approve/reject, visibility)\n    path('v1/projects/<int:project_id>/tracking/', include('assignment.tracking_urls')),|" /doccano/backend/config/urls.py; \
     fi
 
-# Apply visibility filtering to examples viewset
-# This ensures annotators only see their own examples and unannotated ones
-RUN if ! grep -q "SimpleExampleFilterMixin" /doccano/backend/examples/views.py; then \
-        sed -i '1i from assignment.simple_filtering import SimpleExampleFilterMixin' /doccano/backend/examples/views.py && \
-        sed -i 's/class ExampleListAPI(/class ExampleListAPI(SimpleExampleFilterMixin, /g' /doccano/backend/examples/views.py && \
-        sed -i 's/class ExampleDetailAPI(/class ExampleDetailAPI(SimpleExampleFilterMixin, /g' /doccano/backend/examples/views.py; \
-    fi
+# NOTE: Visibility filtering not auto-applied (requires manual patch to Doccano's views.py)
+# For now, visibility will be handled client-side via JavaScript
+# TODO: Create proper Python patch file for examples/views.py
 
 # ============================================
 # MONLAM UI - PROFESSIONAL DJANGO INTEGRATION

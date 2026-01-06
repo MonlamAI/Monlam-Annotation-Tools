@@ -792,27 +792,39 @@
         console.log('[Monlam Dataset] Enhancing dataset table for project', projectId);
         
         try {
-            // Fetch assignments
+            // Fetch current user info
+            const userResp = await fetch('/v1/me');
+            const currentUser = userResp.ok ? await userResp.json() : null;
+            const currentUserId = currentUser ? currentUser.id : null;
+            const isAdmin = currentUser ? currentUser.is_superuser : false;
+            
+            console.log('[Monlam Dataset] Current user:', currentUserId, 'Admin:', isAdmin);
+            
+            // Fetch tracking data
+            const trackingResp = await fetch(`/v1/projects/${projectId}/tracking/?limit=1000`);
+            const trackingData = trackingResp.ok ? await trackingResp.json() : { results: [] };
+            const trackingMap = {};
+            (trackingData.results || []).forEach(t => {
+                trackingMap[t.example] = t;
+            });
+            
+            // Fallback to assignments if tracking not available
             const assignResp = await fetch(`/v1/projects/${projectId}/assignments/?limit=1000`);
-            if (!assignResp.ok) {
-                console.log('[Monlam Dataset] Could not fetch assignments');
-                return;
-            }
-            const assignData = await assignResp.json();
+            const assignData = assignResp.ok ? await assignResp.json() : { results: [] };
             const assignmentMap = {};
             (assignData.results || []).forEach(a => {
                 assignmentMap[a.example] = a;
             });
             
             // Fetch users
-            const userResp = await fetch(`/v1/projects/${projectId}/members`);
-            const userData = userResp.ok ? await userResp.json() : { results: [] };
+            const membersResp = await fetch(`/v1/projects/${projectId}/members`);
+            const membersData = membersResp.ok ? await membersResp.json() : { results: [] };
             const userMap = {};
-            (userData.results || []).forEach(m => {
+            (membersData.results || []).forEach(m => {
                 userMap[m.user] = m.username;
             });
             
-            console.log('[Monlam Dataset] Loaded', Object.keys(assignmentMap).length, 'assignments');
+            console.log('[Monlam Dataset] Loaded', Object.keys(trackingMap).length, 'tracking records');
             
             // Wait for table to appear
             setTimeout(() => {
