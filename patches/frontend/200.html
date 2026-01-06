@@ -1233,7 +1233,8 @@
                 return;
             }
             
-            console.log('[Monlam] On dataset page, looking for example', targetExampleId);
+            console.log('[Monlam] On dataset page, will search for example', targetExampleId);
+            console.log('[Monlam] Strategy: Search visible examples first, then try Start Annotation as fallback');
             
             // Wait for Vue to render the table
             let attempts = 0;
@@ -1243,13 +1244,20 @@
                 attempts++;
                 console.log(`[Monlam] Attempt ${attempts}/${maxAttempts} to find example row...`);
                 
-                // Look for the example in the table
-                // The dataset table shows example IDs or we can search by row
-                const allButtons = document.querySelectorAll('button, a.v-btn, .v-btn');
-                
                 // Try to find the correct row and its Annotate button
                 // Strategy: Look for rows in the table and find the one with matching ID
                 const tableRows = document.querySelectorAll('tr, .v-data-table__wrapper tbody tr');
+                
+                console.log(`[Monlam] Found ${tableRows.length} rows in table`);
+                
+                // Debug: Log first few rows to see what IDs are visible
+                if (attempts === 1 && tableRows.length > 0) {
+                    console.log('[Monlam] Sample of visible rows:');
+                    for (let i = 0; i < Math.min(5, tableRows.length); i++) {
+                        const rowText = tableRows[i].textContent.substring(0, 100);
+                        console.log(`  Row ${i}: ${rowText}...`);
+                    }
+                }
                 
                 let foundButton = null;
                 
@@ -1257,13 +1265,19 @@
                     const rowText = row.textContent;
                     // Check if this row contains the target example ID
                     if (rowText.includes(targetExampleId)) {
-                        console.log('[Monlam] Found row for example', targetExampleId);
+                        console.log('[Monlam] ✅ Found row containing example', targetExampleId);
+                        console.log('[Monlam] Row content:', rowText.substring(0, 200));
+                        
                         // Find Annotate button in this row
-                        const rowButtons = row.querySelectorAll('button, a.v-btn, .v-btn');
+                        const rowButtons = row.querySelectorAll('button, a.v-btn, .v-btn, a');
+                        console.log(`[Monlam] Found ${rowButtons.length} buttons/links in row`);
+                        
                         for (const btn of rowButtons) {
                             const btnText = btn.textContent.trim().toLowerCase();
-                            if (btnText.includes('annotate') || btnText.includes('མཆན་འགོད')) {
+                            console.log(`[Monlam] Checking button: "${btnText}"`);
+                            if (btnText.includes('annotate') || btnText.includes('མཆན་འགོད') || btnText.includes('review')) {
                                 foundButton = btn;
+                                console.log('[Monlam] ✅ This is the Annotate button!');
                                 break;
                             }
                         }
@@ -1280,11 +1294,29 @@
                 
                 // If not found and we haven't exceeded max attempts, try again
                 if (attempts < maxAttempts) {
-                    console.log('[Monlam] Button not found yet, retrying in 500ms...');
+                    console.log('[Monlam] Example not visible in table yet, retrying in 500ms...');
                     setTimeout(findAndClickAnnotateButton, 500);
                 } else {
-                    console.log('[Monlam] ⚠️ Could not find Annotate button after', maxAttempts, 'attempts');
-                    console.log('[Monlam] User will need to click manually or scroll to find the example');
+                    console.log('[Monlam] ⚠️ Could not find example', targetExampleId, 'in table after', maxAttempts, 'attempts');
+                    console.log('[Monlam] Possible reasons:');
+                    console.log('  - Example is on a different page (pagination)');
+                    console.log('  - Table not fully loaded');
+                    console.log('  - Example ID not visible in table');
+                    
+                    // FALLBACK: Try to at least start annotation (won't go to specific example, but better than nothing)
+                    console.log('[Monlam] Fallback: Looking for "Start Annotation" button...');
+                    const allButtons = document.querySelectorAll('button, a.v-btn, .v-btn');
+                    for (const btn of allButtons) {
+                        const btnText = btn.textContent.trim().toLowerCase();
+                        if (btnText.includes('start annotation') || btnText.includes('annotate')) {
+                            console.log('[Monlam] Found Start Annotation button, clicking as fallback');
+                            btn.click();
+                            return true;
+                        }
+                    }
+                    
+                    console.log('[Monlam] ❌ Fallback also failed. User must navigate manually.');
+                    console.log('[Monlam] TIP: User can use the "Start Annotation" button or search for example', targetExampleId);
                 }
                 
                 return false;
