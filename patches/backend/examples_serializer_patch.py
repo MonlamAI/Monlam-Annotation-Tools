@@ -1,6 +1,8 @@
 """
 Patch for Doccano's Example Serializer
-Adds assignment information to example API responses
+Adds tracking information to example API responses
+
+Simple tracking system - no assignments, just tracking who did what.
 """
 
 from rest_framework import serializers
@@ -9,92 +11,81 @@ from examples.serializers import ExampleSerializer as OriginalExampleSerializer
 
 class ExampleSerializer(OriginalExampleSerializer):
     """
-    Extended Example Serializer with assignment information
+    Extended Example Serializer with annotation tracking
     """
-    annotated_by = serializers.SerializerMethodField()
-    reviewed_by = serializers.SerializerMethodField()
-    assignment_status = serializers.SerializerMethodField()
     annotated_by_username = serializers.SerializerMethodField()
     reviewed_by_username = serializers.SerializerMethodField()
+    tracking_status = serializers.SerializerMethodField()
     
     class Meta(OriginalExampleSerializer.Meta):
         fields = OriginalExampleSerializer.Meta.fields + [
-            'annotated_by',
-            'reviewed_by',
-            'assignment_status',
             'annotated_by_username',
             'reviewed_by_username',
+            'tracking_status',
         ]
     
-    def get_annotated_by(self, obj):
-        """Get the ID of the user assigned to this example"""
-        try:
-            from assignment.models import Assignment
-            assignment = Assignment.objects.filter(
-                example_id=obj.id,
-                project_id=obj.project_id
-            ).first()
-            return assignment.assigned_to_id if assignment else None
-        except Exception:
-            return None
-    
-    def get_reviewed_by(self, obj):
-        """Get the ID of the reviewer"""
-        try:
-            from assignment.models import Assignment
-            assignment = Assignment.objects.filter(
-                example_id=obj.id,
-                project_id=obj.project_id
-            ).first()
-            return assignment.reviewed_by_id if assignment else None
-        except Exception:
-            return None
-    
-    def get_assignment_status(self, obj):
-        """Get the assignment status"""
-        try:
-            from assignment.models import Assignment
-            assignment = Assignment.objects.filter(
-                example_id=obj.id,
-                project_id=obj.project_id
-            ).first()
-            return assignment.status if assignment else 'unassigned'
-        except Exception:
-            return 'unassigned'
-    
     def get_annotated_by_username(self, obj):
-        """Get the username of the assigned user"""
+        """Get the username of who annotated this example"""
         try:
-            from assignment.models import Assignment
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
+            # Try to get from prefetched data first (for efficiency)
+            if hasattr(obj, 'tracking'):
+                tracking = obj.tracking
+                if tracking and tracking.annotated_by:
+                    return tracking.annotated_by.username
+                return None
             
-            assignment = Assignment.objects.filter(
+            # Fallback: query database
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
                 example_id=obj.id,
                 project_id=obj.project_id
-            ).select_related('assigned_to').first()
+            ).select_related('annotated_by').first()
             
-            if assignment and assignment.assigned_to:
-                return assignment.assigned_to.username
+            if tracking and tracking.annotated_by:
+                return tracking.annotated_by.username
             return None
         except Exception:
             return None
     
     def get_reviewed_by_username(self, obj):
-        """Get the username of the reviewer"""
+        """Get the username of who reviewed this example"""
         try:
-            from assignment.models import Assignment
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
+            # Try to get from prefetched data first (for efficiency)
+            if hasattr(obj, 'tracking'):
+                tracking = obj.tracking
+                if tracking and tracking.reviewed_by:
+                    return tracking.reviewed_by.username
+                return None
             
-            assignment = Assignment.objects.filter(
+            # Fallback: query database
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
                 example_id=obj.id,
                 project_id=obj.project_id
             ).select_related('reviewed_by').first()
             
-            if assignment and assignment.reviewed_by:
-                return assignment.reviewed_by.username
+            if tracking and tracking.reviewed_by:
+                return tracking.reviewed_by.username
             return None
         except Exception:
             return None
+    
+    def get_tracking_status(self, obj):
+        """Get the tracking status"""
+        try:
+            # Try to get from prefetched data first (for efficiency)
+            if hasattr(obj, 'tracking'):
+                tracking = obj.tracking
+                return tracking.status if tracking else 'pending'
+            
+            # Fallback: query database
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                example_id=obj.id,
+                project_id=obj.project_id
+            ).first()
+            
+            return tracking.status if tracking else 'pending'
+        except Exception:
+            return 'pending'
 

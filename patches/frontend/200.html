@@ -734,8 +734,42 @@
             const redirectUrl = `/monlam/${projectId}/completion/`;
             
             console.log('[Monlam] On metrics page, redirecting to completion dashboard:', redirectUrl);
+            
+            // Use location.replace for immediate redirect (can't go back)
             window.location.replace(redirectUrl);
+            
+            // Also set a flag to prevent Vue from loading
+            sessionStorage.setItem('monlam_metrics_redirect', 'true');
         }
+    }
+    
+    // Intercept clicks on Metrics menu item
+    function interceptMetricsClick() {
+        document.addEventListener('click', function(e) {
+            const link = e.target.closest('a');
+            if (!link) return;
+            
+            const href = link.getAttribute('href') || link.href;
+            if (!href) return;
+            
+            // Check if it's a metrics link
+            const match = href.match(/\/projects\/(\d+)\/metrics/);
+            if (match) {
+                const projectId = match[1];
+                
+                // Prevent default navigation
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                
+                // Direct redirect
+                const redirectUrl = `/monlam/${projectId}/completion/`;
+                console.log('[Monlam] Intercepted metrics click, redirecting to:', redirectUrl);
+                window.location.href = redirectUrl;
+                
+                return false;
+            }
+        }, true); // Use capture phase to run before Vue
     }
     
     // Removed: autoAnnotateExample() and autoStartAnnotation()
@@ -898,7 +932,10 @@
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
         
-        // Check if we need to redirect metrics page
+        // Set up metrics click intercept FIRST
+        interceptMetricsClick();
+        
+        // Check if we need to redirect metrics page (if already on metrics)
         redirectMetricsPage();
         
         setTimeout(() => {
