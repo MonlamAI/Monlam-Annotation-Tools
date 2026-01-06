@@ -828,13 +828,10 @@
             
             // Wait for table to appear
             setTimeout(() => {
-                // Add headers at positions 4, 5, 6 (after ID, Text, Created)
+                // Add headers at the END (before Action column if exists)
                 const headerRow = document.querySelector('thead tr');
                 if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
-                    const headers = headerRow.querySelectorAll('th');
-                    
-                    // Insert after 3rd column if possible, otherwise append
-                    const insertAfter = headers.length >= 3 ? headers[2] : headers[headers.length - 1];
+                    const headers = Array.from(headerRow.querySelectorAll('th'));
                     
                     // Create headers
                     const annotatedHeader = document.createElement('th');
@@ -852,22 +849,25 @@
                     statusHeader.className = 'monlam-status-header monlam-status-col-header';
                     statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0;';
                     
-                    // Insert in order (positions 4, 5, 6)
-                    if (headers.length >= 3) {
-                        insertAfter.insertAdjacentElement('afterend', annotatedHeader);
-                        annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
-                        reviewedHeader.insertAdjacentElement('afterend', statusHeader);
-                        console.log('[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6');
+                    // Find the Action column (usually last)
+                    const actionHeader = headers.find(h => h.textContent.includes('Action') || h.textContent.includes('མཆན'));
+                    
+                    if (actionHeader) {
+                        // Insert before Action column
+                        actionHeader.insertAdjacentElement('beforebegin', statusHeader);
+                        statusHeader.insertAdjacentElement('beforebegin', reviewedHeader);
+                        reviewedHeader.insertAdjacentElement('beforebegin', annotatedHeader);
+                        console.log('[Monlam Dataset] ✅ Headers inserted before Action column');
                     } else {
-                        // Fallback: append at end
+                        // Append at the very end
                         headerRow.appendChild(annotatedHeader);
                         headerRow.appendChild(reviewedHeader);
                         headerRow.appendChild(statusHeader);
-                        console.log('[Monlam Dataset] ✅ Headers appended (less than 3 columns)');
+                        console.log('[Monlam Dataset] ✅ Headers appended at end');
                     }
                 }
                 
-                // Add data cells at positions 4, 5, 6
+                // Add data cells at the END (before Action column if exists)
                 const dataRows = document.querySelectorAll('tbody tr');
                 dataRows.forEach(row => {
                     if (row.querySelector('.monlam-status-cell')) return; // Already added
@@ -900,8 +900,13 @@
                     const textColor = status === 'unassigned' ? '#666' : 'white';
                     
                     // Get all cells in row
-                    const cells = row.querySelectorAll('td');
-                    const insertAfter = cells.length >= 3 ? cells[2] : cells[cells.length - 1];
+                    const cells = Array.from(row.querySelectorAll('td'));
+                    
+                    // Find the Action cell (usually has a button)
+                    const actionCell = cells.find(cell => {
+                        const button = cell.querySelector('button');
+                        return button && button.textContent.includes('Annotate');
+                    }) || cells[cells.length - 1]; // Fallback to last cell
                     
                     // Create cells
                     const annotatedCell = document.createElement('td');
@@ -919,11 +924,11 @@
                     statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0;';
                     statusCell.innerHTML = `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`;
                     
-                    // Insert after 3rd cell (positions 4, 5, 6)
-                    if (cells.length >= 3) {
-                        insertAfter.insertAdjacentElement('afterend', annotatedCell);
-                        annotatedCell.insertAdjacentElement('afterend', reviewedCell);
-                        reviewedCell.insertAdjacentElement('afterend', statusCell);
+                    // Insert before Action cell
+                    if (actionCell) {
+                        actionCell.insertAdjacentElement('beforebegin', statusCell);
+                        statusCell.insertAdjacentElement('beforebegin', reviewedCell);
+                        reviewedCell.insertAdjacentElement('beforebegin', annotatedCell);
                     } else {
                         // Fallback: append at end
                         row.appendChild(annotatedCell);
