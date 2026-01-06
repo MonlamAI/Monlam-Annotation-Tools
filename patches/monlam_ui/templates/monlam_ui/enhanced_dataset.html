@@ -304,15 +304,17 @@
                 }
             },
             goToAnnotation(item) {
-                // Navigate to Doccano's standard dataset page
-                // User can then use the "Start Annotation" button there
-                // (Or we'll auto-trigger it in a future update)
+                // Navigate to annotation page with auto-trigger flag
+                // We'll use localStorage to signal that we want to auto-start annotation
                 
-                console.log(`📍 Navigating to dataset page for project {{ project_id }}`);
-                console.log(`   Target example: ${item.id}`);
+                console.log(`📍 Preparing to annotate example ${item.id}`);
                 
-                // Go to standard Doccano dataset page
-                window.location.href = `/projects/{{ project_id }}/dataset`;
+                // Store flag in localStorage so the annotation page knows to auto-start
+                localStorage.setItem('monlam_auto_start_annotation', 'true');
+                localStorage.setItem('monlam_target_example_id', item.id);
+                
+                // Navigate to project home, which has the Start Annotation button
+                window.location.href = `/projects/{{ project_id }}`;
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;

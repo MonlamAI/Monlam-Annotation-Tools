@@ -1198,6 +1198,64 @@
         }
     }
     
+    // AUTO-START ANNOTATION (when coming from enhanced dataset)
+    function autoStartAnnotation() {
+        const shouldAutoStart = localStorage.getItem('monlam_auto_start_annotation');
+        
+        if (shouldAutoStart === 'true') {
+            console.log('[Monlam] Auto-start annotation requested');
+            
+            // Clear the flag immediately
+            localStorage.removeItem('monlam_auto_start_annotation');
+            const targetExampleId = localStorage.getItem('monlam_target_example_id');
+            localStorage.removeItem('monlam_target_example_id');
+            
+            console.log('[Monlam] Looking for "Start Annotation" button...');
+            
+            // Wait for DOM to be ready, then look for the button
+            setTimeout(() => {
+                // Look for the button with different possible selectors
+                const selectors = [
+                    'button:contains("Start Annotation")',
+                    'button:contains("Annotate")', 
+                    '[data-test="start-annotation"]',
+                    '.v-btn:contains("Annotate")',
+                    'a[href*="speech-to-text"]'
+                ];
+                
+                let button = null;
+                
+                // Try to find button by text content
+                const allButtons = document.querySelectorAll('button, a.v-btn, .v-btn');
+                for (const btn of allButtons) {
+                    const text = btn.textContent.trim().toLowerCase();
+                    if (text.includes('start annotation') || 
+                        text.includes('annotate') || 
+                        text.includes('annotation')) {
+                        button = btn;
+                        console.log('[Monlam] Found button:', btn.textContent);
+                        break;
+                    }
+                }
+                
+                if (button) {
+                    console.log('[Monlam] ✅ Auto-clicking "Start Annotation" button!');
+                    button.click();
+                } else {
+                    console.log('[Monlam] ⚠️ Could not find "Start Annotation" button');
+                    console.log('[Monlam] Will try alternative navigation...');
+                    
+                    // Alternative: Navigate directly to annotation interface
+                    const projectId = window.location.pathname.match(/\/projects\/(\d+)/)?.[1];
+                    if (projectId) {
+                        console.log('[Monlam] Navigating to annotation interface directly');
+                        window.location.href = `/projects/${projectId}/speech-to-text`;
+                    }
+                }
+            }, 1500); // Give Vue time to render
+        }
+    }
+    
     function init() {
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
@@ -1207,6 +1265,9 @@
         
         // Check if we need to redirect
         checkAndRedirect();
+        
+        // Check if we should auto-start annotation
+        autoStartAnnotation();
         
         setTimeout(() => {
             enableAudioLoop();
