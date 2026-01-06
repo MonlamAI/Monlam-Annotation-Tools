@@ -141,8 +141,25 @@ def enhanced_dataset(request, project_id):
         if not project.members.filter(id=request.user.id).exists():
             return render(request, '403.html', status=403)
     
-    # Get project type for URL construction
-    project_type = project.project_type
+    # Get project type and convert to URL format
+    # Database has: Speech2text, SequenceLabeling, etc.
+    # URL needs: speech-to-text, sequence-labeling, etc.
+    project_type_raw = project.project_type
+    
+    # Convert to URL-friendly format
+    type_mapping = {
+        'Speech2text': 'speech-to-text',
+        'DocumentClassification': 'document-classification',
+        'SequenceLabeling': 'sequence-labeling',
+        'Seq2seq': 'sequence-to-sequence',
+        'IntentDetectionAndSlotFilling': 'intent-detection-and-slot-filling',
+        'ImageClassification': 'image-classification',
+        'ImageCaptioning': 'image-captioning',
+        'BoundingBox': 'bounding-box',
+        'Segmentation': 'segmentation',
+    }
+    
+    project_type = type_mapping.get(project_type_raw, project_type_raw.lower())
     
     context = {
         'project': project,
