@@ -743,8 +743,9 @@
         }
     }
     
-    // Intercept clicks on Metrics menu item
+    // Intercept clicks on Metrics menu item (AGGRESSIVE MODE)
     function interceptMetricsClick() {
+        // Method 1: Capture phase event listener
         document.addEventListener('click', function(e) {
             const link = e.target.closest('a');
             if (!link) return;
@@ -770,6 +771,30 @@
                 return false;
             }
         }, true); // Use capture phase to run before Vue
+        
+        // Method 2: Monitor for metrics links and add direct onclick
+        setInterval(() => {
+            document.querySelectorAll('a[href*="/metrics"]').forEach(link => {
+                if (link.getAttribute('data-monlam-intercept')) return; // Already processed
+                
+                const href = link.getAttribute('href') || link.href;
+                const match = href.match(/\/projects\/(\d+)\/metrics/);
+                if (match) {
+                    const projectId = match[1];
+                    link.setAttribute('data-monlam-intercept', 'true');
+                    
+                    // Override onclick directly
+                    link.onclick = function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const redirectUrl = `/monlam/${projectId}/completion/`;
+                        console.log('[Monlam] Metrics link clicked, redirecting to:', redirectUrl);
+                        window.location.href = redirectUrl;
+                        return false;
+                    };
+                }
+            });
+        }, 500);
     }
     
     // Removed: autoAnnotateExample() and autoStartAnnotation()
@@ -800,34 +825,24 @@
             
             console.log('[Monlam Dataset] Current user:', currentUserId, 'Admin:', isAdmin);
             
-            // Fetch tracking data
-            const trackingResp = await fetch(`/v1/projects/${projectId}/tracking/?limit=1000`);
-            const trackingData = trackingResp.ok ? await trackingResp.json() : { results: [] };
+            // Fetch examples with embedded tracking data from serializer
+            const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000`);
+            const examplesData = examplesResp.ok ? await examplesResp.json() : { results: [] };
+            
+            // Build a map of example_id -> tracking data
             const trackingMap = {};
-            (trackingData.results || []).forEach(t => {
-                trackingMap[t.example] = t;
-            });
-            
-            // Fallback to assignments if tracking not available
-            const assignResp = await fetch(`/v1/projects/${projectId}/assignments/?limit=1000`);
-            const assignData = assignResp.ok ? await assignResp.json() : { results: [] };
-            const assignmentMap = {};
-            (assignData.results || []).forEach(a => {
-                assignmentMap[a.example] = a;
-            });
-            
-            // Fetch users
-            const membersResp = await fetch(`/v1/projects/${projectId}/members`);
-            const membersData = membersResp.ok ? await membersResp.json() : { results: [] };
-            const userMap = {};
-            (membersData.results || []).forEach(m => {
-                userMap[m.user] = m.username;
+            (examplesData.results || []).forEach(ex => {
+                trackingMap[ex.id] = {
+                    annotated_by: ex.annotated_by || null,
+                    reviewed_by: ex.reviewed_by || null,
+                    status: ex.assignment_status || 'pending'
+                };
             });
             
             console.log('[Monlam Dataset] Loaded', Object.keys(trackingMap).length, 'tracking records');
             
-            // Wait for table to appear
-            setTimeout(() => {
+            // Function to enhance table (can be called multiple times)
+            function enhanceTable() {
                 // Add headers at positions 4, 5, 6 (after first 3 columns)
                 const headerRow = document.querySelector('thead tr');
                 if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
@@ -879,24 +894,23 @@
                     if (!idMatch) return;
                     
                     const exampleId = parseInt(idMatch[1]);
-                    const assignment = assignmentMap[exampleId];
+                    const tracking = trackingMap[exampleId];
                     
-                    // Get values
-                    const annotatedBy = assignment?.assigned_to ? (userMap[assignment.assigned_to] || `User ${assignment.assigned_to}`) : '—';
-                    const reviewedBy = assignment?.reviewed_by ? (userMap[assignment.reviewed_by] || `User ${assignment.reviewed_by}`) : '—';
-                    const status = assignment?.status || 'unassigned';
+                    // Get values from tracking data (comes from EnhancedExampleSerializer)
+                    const annotatedBy = tracking?.annotated_by || '—';
+                    const reviewedBy = tracking?.reviewed_by || '—';
+                    const status = tracking?.status || 'pending';
                     
-                    // Status badge colors
+                    // Status badge colors (matching AnnotationTracking statuses)
                     const statusColors = {
-                        'assigned': '#9e9e9e',
+                        'pending': '#e0e0e0',
                         'in_progress': '#2196f3',
                         'submitted': '#ff9800',
                         'approved': '#4caf50',
-                        'rejected': '#f44336',
-                        'unassigned': '#e0e0e0'
+                        'rejected': '#f44336'
                     };
                     const color = statusColors[status] || '#e0e0e0';
-                    const textColor = status === 'unassigned' ? '#666' : 'white';
+                    const textColor = (status === 'pending') ? '#666' : 'white';
                     
                     // Get all cells in row
                     const cells = Array.from(row.querySelectorAll('td'));
@@ -933,7 +947,24 @@
                 });
                 
                 console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');
-            }, 2000); // Wait for Vue to render table
+            }
+            
+            // Call enhanceTable multiple times to ensure it catches the table
+            setTimeout(enhanceTable, 1000);
+            setTimeout(enhanceTable, 2000);
+            setTimeout(enhanceTable, 3000);
+            
+            // Also set up observer to re-enhance when table changes
+            const observer = new MutationObserver(() => {
+                const tbody = document.querySelector('tbody');
+                if (tbody && !tbody.hasAttribute('data-monlam-observed')) {
+                    tbody.setAttribute('data-monlam-observed', 'true');
+                    enhanceTable();
+                }
+            });
+            
+            // Observe the whole document for table appearance
+            observer.observe(document.body, { childList: true, subtree: true });
             
         } catch (error) {
             console.error('[Monlam Dataset] Error enhancing table:', error);
