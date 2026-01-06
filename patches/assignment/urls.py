@@ -13,6 +13,7 @@ from .completion_views import (
     ApproverCompletionViewSet
 )
 from .comprehensive_example_api import ComprehensiveExampleViewSet
+from .example_filtering import ExampleLockingViewSet
 
 urlpatterns = [
     # ===== Assignment URLs =====
@@ -113,5 +114,19 @@ urlpatterns = [
     path('examples-comprehensive/export-csv/', 
          ComprehensiveExampleViewSet.as_view({'get': 'export_csv'}), 
          name='examples-comprehensive-export'),
+    
+    # ===== Example Locking =====
+    # Lock/unlock examples to prevent simultaneous editing
+    path('examples/<int:example_id>/lock/', 
+         ExampleLockingViewSet.as_view({'post': 'lock'}), 
+         name='example-lock'),
+    
+    path('examples/<int:example_id>/unlock/', 
+         ExampleLockingViewSet.as_view({'post': 'unlock'}), 
+         name='example-unlock'),
+    
+    path('examples/<int:example_id>/lock-status/', 
+         ExampleLockingViewSet.as_view({'get': 'lock_status'}), 
+         name='example-lock-status'),
 ]
 
