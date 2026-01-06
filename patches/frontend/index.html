@@ -1221,15 +1221,17 @@
             
             console.log(`[Monlam] Auto-annotate requested for example ${targetExampleId}`);
             
-            // Clear flags immediately
-            localStorage.removeItem('monlam_auto_annotate_trigger');
-            localStorage.removeItem('monlam_auto_annotate_example_id');
+            // DON'T clear flags yet! Keep them so checkAndRedirect() knows to skip redirect
+            // We'll clear them after we succeed or give up
             
             // Check if we're on the dataset page
             const isDatasetPage = window.location.pathname.includes('/dataset');
             
             if (!isDatasetPage) {
                 console.log('[Monlam] Not on dataset page, skipping auto-annotate');
+                // Clear flags before returning
+                localStorage.removeItem('monlam_auto_annotate_trigger');
+                localStorage.removeItem('monlam_auto_annotate_example_id');
                 return;
             }
             
@@ -1288,6 +1290,11 @@
                 if (foundButton) {
                     console.log('[Monlam] ✅ Found Annotate button for example', targetExampleId);
                     console.log('[Monlam] Auto-clicking button...');
+                    
+                    // Clear flags NOW (we found it and clicked it)
+                    localStorage.removeItem('monlam_auto_annotate_trigger');
+                    localStorage.removeItem('monlam_auto_annotate_example_id');
+                    
                     foundButton.click();
                     return true;
                 }
@@ -1310,6 +1317,11 @@
                         const btnText = btn.textContent.trim().toLowerCase();
                         if (btnText.includes('start annotation') || btnText.includes('annotate')) {
                             console.log('[Monlam] Found Start Annotation button, clicking as fallback');
+                            
+                            // Clear flags before clicking fallback
+                            localStorage.removeItem('monlam_auto_annotate_trigger');
+                            localStorage.removeItem('monlam_auto_annotate_example_id');
+                            
                             btn.click();
                             return true;
                         }
@@ -1317,6 +1329,10 @@
                     
                     console.log('[Monlam] ❌ Fallback also failed. User must navigate manually.');
                     console.log('[Monlam] TIP: User can use the "Start Annotation" button or search for example', targetExampleId);
+                    
+                    // Clear flags since we've given up
+                    localStorage.removeItem('monlam_auto_annotate_trigger');
+                    localStorage.removeItem('monlam_auto_annotate_example_id');
                 }
                 
                 return false;
