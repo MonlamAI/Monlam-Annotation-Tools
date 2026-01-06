@@ -80,9 +80,15 @@
                             </v-chip>
                         </v-col>
                         <v-col cols="6" md="2">
-                            <v-chip class="ma-1" color="green" text-color="white" large>
-                                <v-icon left>mdi-check-circle</v-icon>
-                                Approved: [[ statusCounts.approved ]]
+                            <v-chip class="ma-1" color="purple" text-color="white" large @click="filterStatus = 'approved'; filterRole = 'approver'">
+                                <v-icon left>mdi-alert-circle</v-icon>
+                                👑 PM Review: [[ statusCounts.approved_by_approver ]]
+                            </v-chip>
+                        </v-col>
+                        <v-col cols="6" md="2">
+                            <v-chip class="ma-1" color="green darken-1" text-color="white" large>
+                                <v-icon left>mdi-check-all</v-icon>
+                                ✅ Final: [[ statusCounts.approved_by_pm ]]
                             </v-chip>
                         </v-col>
                         <v-col cols="6" md="2">
@@ -102,15 +108,21 @@
                     <v-row>
                         <v-col cols="12">
                             <v-alert v-if="statusCounts.submitted > 0" type="warning" dense border="left">
-                                <strong>Action Required:</strong> [[ statusCounts.submitted ]] example(s) submitted and awaiting your review!
-                                <v-btn small color="orange" dark class="ml-3" @click="filterStatus = 'submitted'">
+                                <strong>Action Required (Approvers):</strong> [[ statusCounts.submitted ]] example(s) submitted and awaiting approver review!
+                                <v-btn small color="orange" dark class="ml-3" @click="filterStatus = 'submitted'; filterRole = null">
+                                    Review Now →
+                                </v-btn>
+                            </v-alert>
+                            <v-alert v-if="statusCounts.approved_by_approver > 0" type="info" dense border="left">
+                                <strong>Action Required (Project Manager):</strong> [[ statusCounts.approved_by_approver ]] example(s) approved by approver and awaiting PM final review!
+                                <v-btn small color="purple" dark class="ml-3" @click="filterStatus = 'approved'; filterRole = 'approver'">
                                     Review Now →
                                 </v-btn>
                             </v-alert>
                             <v-alert v-if="statusCounts.rejected > 0" type="error" dense border="left">
                                 <strong>Attention:</strong> [[ statusCounts.rejected ]] example(s) rejected and need to be fixed.
                             </v-alert>
-                            <v-alert v-if="statusCounts.submitted === 0 && statusCounts.rejected === 0" type="success" dense border="left">
+                            <v-alert v-if="statusCounts.submitted === 0 && statusCounts.approved_by_approver === 0 && statusCounts.rejected === 0" type="success" dense border="left">
                                 ✅ No pending reviews! All caught up.
                             </v-alert>
                         </v-col>
@@ -126,24 +138,29 @@
             <v-card>
                 <!-- Status Filter Tabs -->
                 <v-tabs v-model="filterTab" background-color="primary" dark>
-                    <v-tab @click="filterStatus = null">
+                    <v-tab @click="filterStatus = null; filterRole = null">
                         <v-icon left>mdi-view-list</v-icon>
                         All ([[ examples.length ]])
                     </v-tab>
-                    <v-tab @click="filterStatus = 'submitted'">
+                    <v-tab @click="filterStatus = 'submitted'; filterRole = null">
                         <v-icon left>mdi-file-upload</v-icon>
-                        Needs Review ([[ statusCounts.submitted ]])
+                        Needs Approver Review ([[ statusCounts.submitted ]])
                         <v-badge v-if="statusCounts.submitted > 0" color="orange" :content="statusCounts.submitted" inline></v-badge>
                     </v-tab>
-                    <v-tab @click="filterStatus = 'in_progress'">
+                    <v-tab @click="filterStatus = 'approved'; filterRole = 'approver'">
+                        <v-icon left>mdi-alert-circle</v-icon>
+                        👑 Needs PM Final Review ([[ statusCounts.approved_by_approver ]])
+                        <v-badge v-if="statusCounts.approved_by_approver > 0" color="purple" :content="statusCounts.approved_by_approver" inline></v-badge>
+                    </v-tab>
+                    <v-tab @click="filterStatus = 'approved'; filterRole = 'project_manager'">
+                        <v-icon left>mdi-check-all</v-icon>
+                        Final Approved ([[ statusCounts.approved_by_pm ]])
+                    </v-tab>
+                    <v-tab @click="filterStatus = 'in_progress'; filterRole = null">
                         <v-icon left>mdi-progress-clock</v-icon>
                         In Progress ([[ statusCounts.in_progress ]])
                     </v-tab>
-                    <v-tab @click="filterStatus = 'approved'">
-                        <v-icon left>mdi-check-circle</v-icon>
-                        Approved ([[ statusCounts.approved ]])
-                    </v-tab>
-                    <v-tab @click="filterStatus = 'rejected'">
+                    <v-tab @click="filterStatus = 'rejected'; filterRole = null">
                         <v-icon left>mdi-close-circle</v-icon>
                         Rejected ([[ statusCounts.rejected ]])
                     </v-tab>
@@ -206,19 +223,32 @@
                         </v-chip>
                     </template>
                     
-                    <!-- Approver Column -->
+                    <!-- Approver Column with Role Badge -->
                     <template v-slot:item.approver="{ item }">
                         <div v-if="item.assignment && item.assignment.reviewed_by_username">
-                            <v-chip small color="secondary" text-color="white">
+                            <v-chip 
+                                small 
+                                :color="getReviewerChipColor(item.assignment)"
+                                text-color="white"
+                            >
                                 <v-icon small left>mdi-check-circle</v-icon>
                                 [[ item.assignment.reviewed_by_username ]]
+                            </v-chip>
+                            <v-chip 
+                                x-small 
+                                :color="getReviewerRoleBadgeColor(item.assignment)"
+                                text-color="white"
+                                class="ml-1"
+                            >
+                                [[ getReviewerRoleLabel(item.assignment) ]]
                             </v-chip>
                             <div class="text-caption mt-1">
                                 [[ formatDate(item.assignment.reviewed_at) ]]
                             </div>
                         </div>
                         <v-chip v-else small color="grey lighten-2">
-                            Not reviewed
+                            <v-icon small left>mdi-clock-outline</v-icon>
+                            Awaiting review
                         </v-chip>
                     </template>
                     
@@ -297,24 +327,37 @@ new Vue({
         examples: [],
         assignments: {},
         filterStatus: null,
+        filterRole: null,  // New: filter by reviewer role
         filterTab: 0,
         headers: [
             { text: 'ID', value: 'id', sortable: true, width: '80px' },
             { text: 'Content', value: 'text', sortable: false },
             { text: 'Assigned To', value: 'assigned_to', sortable: true },
             { text: 'Status', value: 'status', sortable: true },
-            { text: 'Approver', value: 'approver', sortable: true },
+            { text: 'Reviewed By', value: 'approver', sortable: true },
             { text: 'Actions', value: 'actions', sortable: false, width: '120px' },
         ],
     },
     computed: {
         filteredExamples() {
-            if (!this.filterStatus) {
-                return this.examples;
+            let filtered = this.examples;
+            
+            // Filter by status
+            if (this.filterStatus) {
+                filtered = filtered.filter(ex => 
+                    ex.assignment && ex.assignment.status === this.filterStatus
+                );
             }
-            return this.examples.filter(ex => 
-                ex.assignment && ex.assignment.status === this.filterStatus
-            );
+            
+            // Filter by reviewer role (for distinguishing approver vs PM approval)
+            if (this.filterRole) {
+                filtered = filtered.filter(ex => 
+                    ex.assignment && 
+                    ex.assignment.reviewed_by_role === this.filterRole
+                );
+            }
+            
+            return filtered;
         },
         statusCounts() {
             const counts = {
@@ -322,6 +365,8 @@ new Vue({
                 in_progress: 0,
                 submitted: 0,
                 approved: 0,
+                approved_by_approver: 0,  // Approved by approver (needs PM review)
+                approved_by_pm: 0,        // Final approval by PM
                 rejected: 0,
                 unassigned: 0
             };
@@ -331,7 +376,16 @@ new Vue({
                     counts.unassigned++;
                 } else {
                     const status = ex.assignment.status;
-                    if (counts.hasOwnProperty(status)) {
+                    
+                    // Count approved separately by reviewer role
+                    if (status === 'approved') {
+                        if (ex.assignment.reviewed_by_role === 'project_manager') {
+                            counts.approved_by_pm++;
+                        } else if (ex.assignment.reviewed_by_role === 'approver') {
+                            counts.approved_by_approver++;
+                        }
+                        counts.approved++;  // Total approved
+                    } else if (counts.hasOwnProperty(status)) {
                         counts[status]++;
                     }
                 }
@@ -407,6 +461,31 @@ new Vue({
         },
         goToProject() {
             window.location.href = '/projects/{{ project_id }}';
+        },
+        getReviewerChipColor(assignment) {
+            // Color based on reviewer role
+            if (assignment.reviewed_by_role === 'project_manager') {
+                return 'green darken-1'; // PM = darker green
+            } else if (assignment.reviewed_by_role === 'approver') {
+                return 'blue darken-1'; // Approver = blue
+            }
+            return 'secondary';
+        },
+        getReviewerRoleBadgeColor(assignment) {
+            if (assignment.reviewed_by_role === 'project_manager') {
+                return 'purple'; // PM badge = purple
+            } else if (assignment.reviewed_by_role === 'approver') {
+                return 'orange darken-2'; // Approver badge = orange (needs PM review)
+            }
+            return 'grey';
+        },
+        getReviewerRoleLabel(assignment) {
+            if (assignment.reviewed_by_role === 'project_manager') {
+                return '👑 PM FINAL';
+            } else if (assignment.reviewed_by_role === 'approver') {
+                return '✓ Approver';
+            }
+            return 'Reviewer';
         },
     },
 });

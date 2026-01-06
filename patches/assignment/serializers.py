@@ -41,9 +41,34 @@ class AssignmentSerializer(serializers.Serializer):
     submitted_at = serializers.DateTimeField(read_only=True, allow_null=True)
     reviewed_by_id = serializers.IntegerField(read_only=True, allow_null=True)
     reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True)
+    reviewed_by_role = serializers.SerializerMethodField()
     reviewed_at = serializers.DateTimeField(read_only=True, allow_null=True)
     review_notes = serializers.CharField(allow_blank=True, default='')
     is_active = serializers.BooleanField(default=True)
+    
+    def get_reviewed_by_role(self, obj):
+        """
+        Get the role of the reviewer (approver or project_manager).
+        This helps distinguish between approver approval and PM final approval.
+        """
+        if not obj.reviewed_by:
+            return None
+        
+        try:
+            from projects.models import RoleMapping
+            
+            # Get reviewer's role in this project
+            role_mapping = RoleMapping.objects.filter(
+                user=obj.reviewed_by,
+                project=obj.project
+            ).first()
+            
+            if role_mapping:
+                return role_mapping.role.name  # Returns 'project_manager', 'approver', etc.
+        except Exception:
+            pass
+        
+        return 'reviewer'  # Default fallback
 
 
 class BulkAssignmentSerializer(serializers.Serializer):
