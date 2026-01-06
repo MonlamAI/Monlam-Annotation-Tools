@@ -48,6 +48,25 @@ COPY patches/backend/celery_tasks.py /doccano/backend/data_import/celery_tasks.p
 # Fix external audio/image URLs (don't prepend /media/)
 COPY patches/backend/serializers.py /doccano/backend/examples/serializers.py
 
+# Visibility filtering mixin (will be imported in views.py)
+COPY patches/backend/examples_views_patch.py /doccano/backend/examples/visibility_mixin.py
+
+# Runtime monkey-patch to apply visibility filtering
+COPY patches/backend/apply_visibility_filter.py /doccano/backend/config/apply_visibility_filter.py
+
+# Auto-tracking of annotations (signal handlers)
+COPY patches/backend/auto_track_annotations.py /doccano/backend/config/auto_track_annotations.py
+
+# Import the visibility filter and auto-tracking at Django startup
+RUN echo "# Monlam: Apply visibility filtering and auto-tracking at startup" >> /doccano/backend/config/settings/base.py && \
+    echo "try:" >> /doccano/backend/config/settings/base.py && \
+    echo "    from config.apply_visibility_filter import apply_visibility_filtering" >> /doccano/backend/config/settings/base.py && \
+    echo "    from config.auto_track_annotations import setup_auto_tracking" >> /doccano/backend/config/settings/base.py && \
+    echo "    apply_visibility_filtering()" >> /doccano/backend/config/settings/base.py && \
+    echo "    setup_auto_tracking()" >> /doccano/backend/config/settings/base.py && \
+    echo "except Exception as e:" >> /doccano/backend/config/settings/base.py && \
+    echo "    print(f'[Monlam] Visibility filter/auto-tracking not applied: {e}')" >> /doccano/backend/config/settings/base.py
+
 # Export correct audio URL instead of upload filename
 COPY patches/backend/export_models.py /doccano/backend/data_export/models.py
 
@@ -156,7 +175,10 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/celery_tasks.py && \
     chown doccano:doccano /doccano/backend/examples/serializers.py && \
     chown doccano:doccano /doccano/backend/examples/review_api.py && \
+    chown doccano:doccano /doccano/backend/examples/visibility_mixin.py && \
     chown doccano:doccano /doccano/backend/config/whitenoise_config.py && \
+    chown doccano:doccano /doccano/backend/config/apply_visibility_filter.py && \
+    chown doccano:doccano /doccano/backend/config/auto_track_annotations.py && \
     chown doccano:doccano /doccano/backend/data_export/models.py && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/catalog.py && \
     chown doccano:doccano /doccano/backend/data_import/datasets.py && \
