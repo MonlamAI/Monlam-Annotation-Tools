@@ -141,9 +141,13 @@ def enhanced_dataset(request, project_id):
         if not project.members.filter(id=request.user.id).exists():
             return render(request, '403.html', status=403)
     
+    # Get project type for URL construction
+    project_type = project.project_type
+    
     context = {
         'project': project,
         'project_id': project_id,
+        'project_type': project_type,
     }
     
     return render(request, 'monlam_ui/enhanced_dataset.html', context)

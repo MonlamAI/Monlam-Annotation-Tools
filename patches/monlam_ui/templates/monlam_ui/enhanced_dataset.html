@@ -304,18 +304,19 @@
                 }
             },
             goToAnnotation(item) {
-                // For approvers/PMs who need to review specific examples,
-                // we need to navigate to the standard dataset page and auto-click
-                // the Annotate button for this specific example
+                // SIMPLIFIED: Navigate directly to annotation interface
+                // No auto-click, no localStorage - just go to the annotation URL
                 
-                console.log(`📍 Preparing to annotate example ${item.id}`);
+                console.log(`📍 Navigating to annotate example ${item.id}`);
                 
-                // Store the target example ID
-                localStorage.setItem('monlam_auto_annotate_example_id', item.id);
-                localStorage.setItem('monlam_auto_annotate_trigger', 'true');
+                // Doccano's annotation URL format: /projects/{id}/{project_type}
+                // For STT projects, it's: /projects/9/speech-to-text
+                const annotationUrl = `/projects/{{ project_id }}/{{ project_type }}`;
                 
-                // Navigate to standard dataset page (which has working Annotate buttons)
-                window.location.href = `/projects/{{ project_id }}/dataset`;
+                console.log(`   URL: ${annotationUrl}`);
+                
+                // Direct navigation
+                window.location.href = annotationUrl;
             },
             filterByStatus(status) {
                 this.filterStatus = this.filterStatus === status ? null : status;
