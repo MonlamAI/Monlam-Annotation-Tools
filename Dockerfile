@@ -230,8 +230,5 @@ WORKDIR /doccano/backend
 
 # Override Doccano's default CMD - bypass problematic run.sh script
 # Set DJANGO_SETTINGS_MODULE in CMD to avoid Docker cache issues
-# Drop and recreate schema to fix migration inconsistencies (data already deleted by user)
-CMD export DJANGO_SETTINGS_MODULE=config.settings.production && \
-    (psql ${DATABASE_URL} -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO PUBLIC;" 2>/dev/null || echo "Schema reset attempted") && \
-    python manage.py migrate --noinput && \
-    gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
+# Assumes database is already clean (user resets manually if needed)
+CMD export DJANGO_SETTINGS_MODULE=config.settings.production && python manage.py migrate --noinput && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
