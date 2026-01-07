@@ -122,13 +122,13 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-]
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_DIRS = []  # Vue dist is served by WHITENOISE_ROOT
 
-# Whitenoise settings for serving Vue.js frontend at root
-# This serves files from static/dist at / (root) level
+# Use simpler storage (Vue already hashes filenames)
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+# Whitenoise: Serve Vue.js dist folder at root URL
+# Files in static/dist/ will be served at / (e.g., /assets/index.js, /fonts/...)
 WHITENOISE_ROOT = BASE_DIR / 'static' / 'dist'
 
 # Media files
