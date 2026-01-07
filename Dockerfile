@@ -225,6 +225,11 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 # - Metrics page redirect (works on first click)
 # - Approve/reject buttons (underneath label box)
 
+# Create filepond temp upload directory BEFORE switching to doccano user
+RUN mkdir -p /doccano/backend/filepond-temp-uploads && \
+    chown -R doccano:doccano /doccano/backend/filepond-temp-uploads && \
+    chmod 777 /doccano/backend/filepond-temp-uploads
+
 USER doccano
 WORKDIR /doccano/backend
 
