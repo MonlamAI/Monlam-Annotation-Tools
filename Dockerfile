@@ -42,17 +42,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/ ./
 
+# Create necessary directories first
+RUN mkdir -p static/dist staticfiles media templates
+
 # Copy built frontend from Stage 1
 COPY --from=frontend-builder /app/frontend/dist ./static/dist/
 
-# Create necessary directories
-RUN mkdir -p static staticfiles media templates
-
-# Copy static assets (fonts, images, etc.)
-COPY backend/static/ ./static/
-
-# Collect static files
+# Collect static files for Django admin etc
 RUN python manage.py collectstatic --noinput
+
+# Debug: List what's in static/dist to verify
+RUN echo "=== Contents of static/dist ===" && ls -la ./static/dist/ && \
+    echo "=== Contents of static/dist/assets ===" && ls -la ./static/dist/assets/ 2>/dev/null || echo "No assets dir"
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
