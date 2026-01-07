@@ -5,11 +5,13 @@ This ensures files are served with correct MIME types.
 
 import os
 import mimetypes
+import logging
 from pathlib import Path
 
 from django.http import HttpResponse, Http404, FileResponse
 from django.conf import settings
 
+logger = logging.getLogger(__name__)
 
 # Initialize mimetypes with common web types
 mimetypes.add_type('application/javascript', '.js')
@@ -34,7 +36,9 @@ def serve_vue_asset(request, path, subdir=''):
         path: File path relative to the subdir
         subdir: Subdirectory within Vue dist (e.g., 'assets', 'fonts')
     """
+    logger.info(f"serve_vue_asset called: path={path}, subdir={subdir}")
     vue_dist = get_vue_dist_path()
+    logger.info(f"Vue dist path: {vue_dist}, exists: {vue_dist.exists()}")
     
     if subdir:
         file_path = vue_dist / subdir / path

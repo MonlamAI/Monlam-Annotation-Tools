@@ -40,6 +40,7 @@ class DebugStaticView(View):
         whitenoise_root = getattr(settings, 'WHITENOISE_ROOT', None)
         
         result = {
+            'version': '2.0',  # Increment to verify deployment
             'base_dir': str(settings.BASE_DIR),
             'whitenoise_root': whitenoise_root,
             'static_root': str(settings.STATIC_ROOT) if settings.STATIC_ROOT else None,
@@ -50,18 +51,31 @@ class DebugStaticView(View):
         result['static_dist_path'] = str(static_dist)
         result['static_dist_exists'] = os.path.exists(static_dist)
         
-        if whitenoise_root:
-            result['whitenoise_root_exists'] = os.path.exists(whitenoise_root)
-            if os.path.exists(whitenoise_root):
-                result['root_files'] = os.listdir(whitenoise_root)[:20]
-                
-                assets_path = os.path.join(whitenoise_root, 'assets')
-                if os.path.exists(assets_path):
-                    result['assets_files'] = os.listdir(assets_path)[:10]
-                
-                fonts_path = os.path.join(whitenoise_root, 'fonts')
-                if os.path.exists(fonts_path):
-                    result['fonts_files'] = os.listdir(fonts_path)
+        # Check Vue dist contents
+        if os.path.exists(static_dist):
+            result['root_files'] = os.listdir(static_dist)[:20]
+            
+            assets_path = static_dist / 'assets'
+            if os.path.exists(assets_path):
+                result['assets_files'] = os.listdir(assets_path)[:10]
+                # Check if specific JS file exists
+                for f in os.listdir(assets_path):
+                    if f.endswith('.js') and f.startswith('index'):
+                        result['main_js_file'] = f
+                        result['main_js_path'] = str(assets_path / f)
+                        result['main_js_exists'] = os.path.exists(assets_path / f)
+                        result['main_js_size'] = os.path.getsize(assets_path / f)
+                        break
+            
+            fonts_path = static_dist / 'fonts'
+            if os.path.exists(fonts_path):
+                result['fonts_files'] = os.listdir(fonts_path)
+        
+        # Check URL patterns
+        from django.urls import get_resolver
+        resolver = get_resolver()
+        result['url_pattern_count'] = len(resolver.url_patterns)
+        result['first_patterns'] = [str(p.pattern) for p in resolver.url_patterns[:5]]
         
         return JsonResponse(result)
 
