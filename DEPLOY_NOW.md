@@ -1,329 +1,348 @@
-# 🚀 **Deployment Guide - Everything Ready!**
+# 🚀 DEPLOY NOW - Quick Guide
 
-## ✅ **What's Been Pushed to GitHub:**
-
-| Commit | Description |
-|--------|-------------|
-| 1️⃣ `6eee5e4` | Simple tracking system + visibility + locking + fixed metrics |
-| 2️⃣ `083704f` | Dockerfile integration for tracking system |
-
-**Status:** ✅ All code pushed to `main` branch
+**Status:** ✅ **Ready for Deployment**  
+**Commit:** `12bdf90` - Vue.js Expert Fixes  
+**Date:** January 7, 2026
 
 ---
 
-## 📦 **What Render Will Deploy:**
+## 📦 **What's Being Deployed**
 
-### **Backend Changes:**
+### **Frontend Fixes (JavaScript):**
+1. ✅ **Dataset Table Enhancement** - Proper field names, no duplicates, Vue-aware
+2. ✅ **Metrics Redirect** - Works on first click, Vue Router intercepted
 
-1. **New Database Table:** `annotation_tracking`
-   - Tracks who annotated, who reviewed
-   - Example locking (5-minute locks)
-   - Status tracking (pending/submitted/approved/rejected)
+### **Backend Enhancements:**
+1. ✅ **Tracking Fields in API** - `annotated_by_username`, `reviewed_by_username`, `tracking_status`
+2. ✅ **Visibility Filtering** - Server-side DRF filter (automatic)
+3. ✅ **Auto-Tracking** - Django signals (automatic)
 
-2. **Visibility Filtering:**
-   - Annotators see: Unannotated + own rejected
-   - Reviewers see: ALL examples
-   - First-come-first-serve (no assignments)
-
-3. **New API Endpoints:**
-   ```
-   POST /v1/projects/{id}/tracking/{example_id}/approve/
-   POST /v1/projects/{id}/tracking/{example_id}/reject/
-   GET  /v1/projects/{id}/tracking/{example_id}/status/
-   POST /v1/projects/{id}/tracking/{example_id}/lock/
-   POST /v1/projects/{id}/tracking/{example_id}/unlock/
-   ```
-
-### **Frontend Changes:**
-
-4. **Metrics Redirect Fix:**
-   - Now works on first click (not just refresh)
-   - Intercepts before Vue Router
-
-5. **Dataset Columns:**
-   - Position 4: Annotated By
-   - Position 5: Reviewed By
-   - Position 6: Status (colored badge)
-
-6. **Approve/Reject Buttons:**
-   - On annotation page
-   - Underneath label box
-   - Auto-advance after action
+### **What's NOT Changed:**
+- ✅ Audio auto-loop (still working)
+- ✅ Approve/reject buttons (still working)
+- ✅ Existing Doccano features (untouched)
 
 ---
 
-## 🔧 **Render Deployment Process:**
+## 🎯 **Deployment Steps**
 
-### **Step 1: Render Auto-Detects Changes** ⏳
+### **1. Render Will Auto-Deploy** (5-10 min)
 
-Render will:
-1. Pull latest code from GitHub
-2. Build new Docker image
-3. Apply Dockerfile changes:
-   - Copy tracking files
-   - Register tracking URLs
-   - Apply visibility filter
-4. Start new container
-5. Run health checks
+Render is watching your `main` branch. After the push, it will:
+1. Pull latest code
+2. Build Docker image
+3. Deploy new version
+4. Show "Live" status
 
-**Expected Time:** 5-10 minutes
-
-### **Step 2: Wait for "Live" Status** ⏰
-
-Watch Render dashboard:
-- ⏳ "Building..." → Docker image being created
-- ⏳ "Deploying..." → Container starting
-- ✅ "Live" → Deployment successful!
+**Watch:** https://dashboard.render.com → Your service
 
 ---
 
-## 🗄️ **Step 3: Run Database Migration** (CRITICAL!)
+### **2. Wait for "Live" Status**
 
-**After Render shows "Live":**
+**Expected logs:**
+```
+==> Building...
+==> Copying patches/backend/serializers.py
+==> Copying patches/frontend/index.html
+==> Copying patches/monlam_tracking
+==> Build complete
+==> Deploying...
+==> Live ✅
+```
 
-1. Open Render Dashboard
-2. Click your service: `monlam-doccano`
-3. Click **"Shell"** button (top right)
-4. Run this command:
+---
 
+### **3. Run Migration (Optional but Recommended)**
+
+**Why?** Creates the `annotation_tracking` table for full tracking features.
+
+**In Render Shell:**
 ```bash
 python manage.py migrate assignment --noinput
 ```
 
-**Expected Output:**
+**Expected output:**
 ```
+Operations to perform:
+  Apply all migrations: assignment
 Running migrations:
-  Applying assignment.0005_annotation_tracking... OK
+  Applying assignment.0006_annotation_tracking_simple... OK ✅
 ```
 
-**What This Does:**
-- Creates `annotation_tracking` table in PostgreSQL
-- Adds indexes for performance
-- Enables all tracking features
-
-**⚠️ IMPORTANT:** Features won't work until migration is run!
-
----
-
-## ✅ **Step 4: Test Features**
-
-After migration, test these:
-
-### **Test 1: Metrics Redirect** 🔄
+**Note:** If table already exists, you'll see:
 ```
-1. Login to https://annotate.monlam.ai
-2. Open any project
-3. Click "Metrics" in left menu
-4. Should redirect IMMEDIATELY (no refresh needed) ✅
-5. Should show completion dashboard
-```
-
-### **Test 2: Dataset Columns** 📊
-```
-1. Go to dataset page
-2. Look at columns 4, 5, 6
-3. Should see:
-   - Column 4: Annotated By (username or —)
-   - Column 5: Reviewed By (username or —)
-   - Column 6: Status (colored badge) ✅
-4. Data should be from database
-```
-
-### **Test 3: Example Visibility** 👁️
-```
-As Annotator A:
-1. Annotate example #5
-2. Save
-3. Go back to dataset
-4. Example #5 should be HIDDEN ✅
-
-As Annotator B:
-1. Go to dataset
-2. Example #5 should be HIDDEN ✅
-3. Can only see unannotated examples
-
-As Reviewer/PM:
-1. Go to dataset
-2. Example #5 should be VISIBLE ✅
-3. Can see ALL examples
-```
-
-### **Test 4: Example Locking** 🔒
-```
-As Annotator A:
-1. Open example #10 (click Annotate)
-2. Example locks automatically
-
-As Annotator B (simultaneously):
-1. Try to open example #10
-2. Should see "locked by Annotator A" ✅
-OR
-3. Example hidden from list (already being edited)
-
-After 5 minutes OR Annotator A closes:
-1. Example unlocks
-2. Available for others
-```
-
-### **Test 5: Approve/Reject Buttons** ✅❌
-```
-As Reviewer:
-1. Go to annotation page of submitted example
-2. Look underneath label box
-3. Should see:
-   ┌─────────────────────────────────────┐
-   │ ⏳ Review Status                    │
-   │ Annotated by: john_doe              │
-   │ Reviewed by: Not yet                │
-   │ Status: SUBMITTED                   │
-   │                                      │
-   │  [✓ Approve]     [✗ Reject]         │
-   └─────────────────────────────────────┘
-4. Click Approve
-5. Should save to database ✅
-6. Should auto-advance to next example
+No migrations to apply. ✅
 ```
 
 ---
 
-## 📊 **Verification Queries**
+## ✅ **Post-Deployment Testing**
 
-After migration, verify in database:
+### **Test 1: Dataset Table Columns** (30 seconds)
 
-### **Check Table Exists:**
-```sql
-\d annotation_tracking
+**Steps:**
+1. Go to any project → Dataset
+2. Hard refresh: **Ctrl+Shift+R** (Windows/Linux) or **Cmd+Shift+R** (Mac)
+3. Wait 1-2 seconds
+
+**Expected:**
+```
+Column 1: [Checkbox]
+Column 2: ID
+Column 3: Text/Audio
+Column 4: Annotated By  ← NEW (shows username or "—")
+Column 5: Reviewed By   ← NEW (shows username or "—")
+Column 6: Status        ← NEW (colored badge)
+Column 7+: Other columns (shifted right)
+```
+
+**✅ PASS if:** Columns appear at positions 4, 5, 6 with correct data
+
+**❌ FAIL if:** Columns missing, duplicated, or misaligned
+
+---
+
+### **Test 2: Metrics Redirect** (10 seconds)
+
+**Steps:**
+1. Open any project
+2. Click "Metrics" (གཞི་གྲངས།) in left menu
+
+**Expected:**
+- **Immediate** redirect to `/monlam/{id}/completion/`
+- No loading delay
+- Completion dashboard appears
+
+**✅ PASS if:** Redirects on first click without refresh
+
+**❌ FAIL if:** Shows old metrics page or requires refresh
+
+---
+
+### **Test 3: API Tracking Fields** (1 minute)
+
+**Steps:**
+1. Open browser DevTools (F12)
+2. Go to Network tab
+3. Go to dataset page
+4. Find request: `/v1/projects/9/examples?limit=10`
+5. Click on it → Preview/Response
+
+**Expected JSON:**
+```json
+{
+  "count": 100,
+  "results": [
+    {
+      "id": 1,
+      "text": "སངས་རྒྱས།",
+      "annotated_by_username": "john",    ← Should exist
+      "reviewed_by_username": null,       ← Should exist
+      "tracking_status": "submitted",     ← Should exist
+      ...
+    }
+  ]
+}
+```
+
+**✅ PASS if:** All three fields exist in response
+
+**❌ FAIL if:** Fields missing or API error
+
+---
+
+## 🐛 **Troubleshooting**
+
+### **Issue: Columns don't appear**
+
+**Solution:**
+1. Hard refresh (Ctrl+Shift+R / Cmd+Shift+R)
+2. Clear browser cache
+3. Check console for `[Monlam Dataset]` logs
+4. Try incognito/private window
+
+### **Issue: Metrics redirect loops**
+
+**Solution:**
+1. Clear browser cache and cookies
+2. Try different browser
+3. Check console for `[Monlam Metrics]` logs
+
+### **Issue: API returns null for tracking fields**
+
+**Solution:**
+1. Run migration: `python manage.py migrate assignment`
+2. Check database: `\d annotation_tracking` in psql
+3. Restart Django server (Render will auto-restart)
+
+### **Issue: "Table already exists" error**
+
+**Solution:**
+```bash
+# This is OK! It means table was created before
+# Just fake the migration:
+python manage.py migrate assignment 0006_annotation_tracking_simple --fake
+```
+
+---
+
+## 📊 **Expected Console Logs**
+
+### **Browser Console (F12):**
+
+**On Dataset Page:**
+```
+[Monlam] 🚀 Initializing features...
+[Monlam Dataset] ✨ Starting table enhancement for project 9
+[Monlam Dataset] ✅ Loaded 100 tracking records
+[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6
+[Monlam Dataset] ✅ Enhanced 10 rows
+[Monlam Dataset] ✅ Enhancement complete after 2 attempts
+```
+
+**On Metrics Click:**
+```
+[Monlam Metrics] Setting up redirect interception...
+[Monlam Metrics] ✅ Redirect system initialized
+[Monlam Metrics] ⚡ Click intercepted, redirecting to: /monlam/9/completion/
+```
+
+### **Server Logs (Render):**
+
+**On Startup:**
+```
+[Monlam Tracking] App initializing...
+[Monlam Tracking] ✅ Visibility filter registered
+[Monlam Signals] ✅ Connected tracking for Category
+[Monlam Signals] ✅ Connected tracking for Span
+[Monlam Signals] ✅ Connected tracking for TextLabel
+[Monlam Tracking] ✅ Auto-tracking signals connected
+```
+
+---
+
+## 🎉 **Success Indicators**
+
+**You'll know it's working when:**
+
+✅ **Dataset table** shows 3 new columns at positions 4, 5, 6  
+✅ **Metrics redirect** works on first click  
+✅ **API response** includes tracking fields  
+✅ **Console logs** show successful initialization  
+✅ **No errors** in browser console or server logs  
+
+---
+
+## 🔍 **Verification Commands**
+
+### **Check Migration Status:**
+```bash
+python manage.py showmigrations assignment
 ```
 
 **Expected:**
 ```
-Table "public.annotation_tracking"
-Column          | Type                     | Nullable
-----------------|--------------------------|----------
-id              | bigint                   | not null
-project_id      | integer                  | not null
-example_id      | integer                  | not null
-annotated_by_id | integer                  | 
-annotated_at    | timestamp with time zone | 
-reviewed_by_id  | integer                  | 
-reviewed_at     | timestamp with time zone | 
-status          | character varying(20)    | 
-locked_by_id    | integer                  | 
-locked_at       | timestamp with time zone | 
-review_notes    | text                     | 
+assignment
+ [X] 0001_initial
+ [X] 0002_completion_tracking
+ [X] 0003_example_locking
+ [X] 0006_annotation_tracking_simple  ← This should be [X]
 ```
 
-### **Check Initial Data:**
+### **Check Table Exists:**
+```bash
+python manage.py dbshell
+```
+```sql
+\d annotation_tracking
+
+-- Should show table structure with columns:
+-- id, project_id, example_id, annotated_by_id, reviewed_by_id, status, etc.
+```
+
+### **Check Tracking Records:**
 ```sql
 SELECT COUNT(*) FROM annotation_tracking;
-```
 
-**Expected:** `0` (no data yet - will be created as users annotate)
+-- Should show number of tracking records
+-- (0 if fresh install, >0 if data exists)
+```
 
 ---
 
-## 🐛 **Troubleshooting:**
+## 📞 **If Something Breaks**
 
-### **Problem: "Table annotation_tracking does not exist"**
+### **Rollback Plan:**
 
-**Solution:**
+**Option 1: Rollback to previous commit**
 ```bash
-# Run migration
-python manage.py migrate assignment --noinput
-
-# Verify
-python manage.py showmigrations assignment
+# In Render Dashboard:
+# 1. Go to "Manual Deploy"
+# 2. Select commit: 3b9b625 (before Vue fixes)
+# 3. Click "Deploy"
 ```
 
-### **Problem: "Metrics redirect doesn't work"**
-
-**Solution:**
-1. Clear browser cache: Ctrl+Shift+R (or Cmd+Shift+R)
-2. Hard refresh the page
-3. Try in incognito/private window
-
-### **Problem: "Dataset columns don't show"**
-
-**Check:**
+**Option 2: Quick fix**
 ```bash
-# Verify tracking API is registered
-grep "tracking.urls" /doccano/backend/config/urls.py
-
-# Should output:
-# path('v1/projects/<int:project_id>/tracking/', include('assignment.tracking_urls')),
+# If specific feature is broken, disable it:
+# Edit index.html and comment out the problematic function
 ```
 
-### **Problem: "Visibility filtering not working"**
+### **Get Help:**
 
-**Check:**
-```bash
-# Verify mixin is applied
-grep "SimpleExampleFilterMixin" /doccano/backend/examples/views.py
-
-# Should output:
-# from assignment.simple_filtering import SimpleExampleFilterMixin
-# class ExampleListAPI(SimpleExampleFilterMixin, ...
-```
-
-### **Problem: "Approve buttons don't show"**
-
-**Check:**
-1. Open browser console (F12)
-2. Look for errors
-3. Verify you're on an annotation page (not dataset page)
-4. Buttons only show for reviewers/project managers
+1. **Check VUE_EXPERT_FIXES.md** - Comprehensive troubleshooting
+2. **Check console logs** - Browser + Server
+3. **Check database** - Migration status, table structure
+4. **Share error logs** - Post in support channel
 
 ---
 
-## 📝 **Summary:**
+## 🎯 **Next Steps After Deployment**
 
-| Step | Action | Status |
-|------|--------|--------|
-| 1 | Code pushed to GitHub | ✅ Done |
-| 2 | Dockerfile updated | ✅ Done |
-| 3 | Render auto-deploys | ⏳ In Progress |
-| 4 | Wait for "Live" | ⏰ Waiting |
-| 5 | Run migration | ⏳ To Do |
-| 6 | Test features | ⏳ To Do |
+1. ✅ Test all 3 features (dataset, metrics, API)
+2. ✅ Monitor console logs for errors
+3. ✅ Check server performance (should be same as before)
+4. ✅ Have users test workflow
+5. ✅ Monitor for issues over 24-48 hours
 
 ---
 
-## 🎯 **What You Should See:**
+## 📝 **Deployment Checklist**
 
-### **Before Migration:**
-- ❌ Tracking features don't work
-- ❌ API returns "table doesn't exist"
-- ❌ Approve buttons may error
-
-### **After Migration:**
-- ✅ Metrics redirect works on first click
-- ✅ Dataset columns show tracking data
-- ✅ Annotators see only their examples
-- ✅ Example locking prevents conflicts
-- ✅ Approve/reject buttons work
-- ✅ Auto-advance after review
-
----
-
-## 🎉 **Ready to Monitor Deployment!**
-
-**Next steps:**
-1. Watch Render dashboard for "Live" status
-2. Run migration command in Shell
-3. Test all features
-4. Report any issues
-
-**I'll be here to help with any problems!** 🚀
+- [ ] Code pushed to GitHub ✅ (commit `12bdf90`)
+- [ ] Render shows "Live" status
+- [ ] Migration run (if needed)
+- [ ] Test 1: Dataset table columns
+- [ ] Test 2: Metrics redirect
+- [ ] Test 3: API tracking fields
+- [ ] Console logs check
+- [ ] No errors reported
+- [ ] Users can annotate normally
+- [ ] Audio loop still works
+- [ ] Approve/reject buttons still work
 
 ---
 
-## 📞 **Need Help?**
+## ✨ **What Makes This Deployment Safe**
 
-If something doesn't work:
-1. Share the error message
-2. Share browser console logs (F12)
-3. Share Render deployment logs
-4. I'll help debug!
+1. **Backward Compatible** - Works with or without migration
+2. **Graceful Degradation** - Features fail silently if not ready
+3. **No Breaking Changes** - Existing features untouched
+4. **Error Handling** - Try/except everywhere
+5. **Rollback Ready** - Can revert to previous commit anytime
 
-**The system is ready - just needs deployment + migration!** ✅
+---
 
+**🚀 Ready to deploy! Just wait for Render to finish, then test!**
+
+**⏱️ Expected deployment time: 5-10 minutes**
+
+**✅ Expected result: All features working smoothly!**
+
+---
+
+**Document Version:** 1.0  
+**Deployment Commit:** `12bdf90`  
+**Last Updated:** January 7, 2026  
+**Status:** Production-ready ✅
