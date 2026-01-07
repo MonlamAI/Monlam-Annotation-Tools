@@ -231,10 +231,4 @@ WORKDIR /doccano/backend
 # Override Doccano's default CMD - bypass problematic run.sh script
 # Set DJANGO_SETTINGS_MODULE in CMD to avoid Docker cache issues
 # Clear migration inconsistencies then run migrations
-CMD export DJANGO_SETTINGS_MODULE=config.settings.production && \
-    (python manage.py dbshell <<'EOSQL'
-DELETE FROM django_migrations;
-EOSQL
-) || echo "Migration table cleanup attempted" && \
-    python manage.py migrate --fake-initial --noinput && \
-    gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
+CMD export DJANGO_SETTINGS_MODULE=config.settings.production && (echo "DELETE FROM django_migrations;" | python manage.py dbshell 2>/dev/null || echo "Migration cleanup attempted") && python manage.py migrate --fake-initial --noinput && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
