@@ -128,8 +128,8 @@ def serve_assets(request, path):
 
 
 def serve_fonts(request, path):
-    """Serve files from /fonts/"""
-    return serve_vue_asset(request, path, subdir='fonts')
+    """Serve files from /_fonts/"""
+    return serve_vue_asset(request, path, subdir='_fonts')
 
 
 def serve_root_file(request, path):
