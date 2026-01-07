@@ -3,9 +3,12 @@ Serve Vue.js frontend for SPA routing.
 """
 
 import os
+import logging
 from django.http import HttpResponse, Http404
 from django.conf import settings
 from django.views import View
+
+logger = logging.getLogger(__name__)
 
 
 class FrontendView(View):
@@ -22,7 +25,10 @@ class FrontendView(View):
             os.path.join(settings.BASE_DIR, 'staticfiles', 'dist', 'index.html'),
         ]
         
+        logger.info(f"FrontendView: Looking for index.html, BASE_DIR={settings.BASE_DIR}")
+        
         for index_path in index_paths:
+            logger.info(f"FrontendView: Checking {index_path}, exists={os.path.exists(index_path)}")
             if os.path.exists(index_path):
                 with open(index_path, 'r', encoding='utf-8') as f:
                     return HttpResponse(f.read(), content_type='text/html')
