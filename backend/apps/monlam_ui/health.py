@@ -3,7 +3,9 @@ Health check views for deployment monitoring.
 """
 
 import os
-from django.http import JsonResponse
+import mimetypes
+from pathlib import Path
+from django.http import JsonResponse, FileResponse, Http404
 from django.views import View
 from django.db import connection
 from django.conf import settings
@@ -78,4 +80,35 @@ class DebugStaticView(View):
         result['first_patterns'] = [str(p.pattern) for p in resolver.url_patterns[:5]]
         
         return JsonResponse(result)
+
+
+class TestServeView(View):
+    """
+    Test endpoint to directly serve the main JS file.
+    Access at /test-serve-js/
+    """
+    
+    def get(self, request):
+        static_dist = Path(settings.BASE_DIR) / 'static' / 'dist'
+        assets_path = static_dist / 'assets'
+        
+        # Find the main JS file
+        js_file = None
+        if assets_path.exists():
+            for f in os.listdir(assets_path):
+                if f.endswith('.js') and f.startswith('index'):
+                    js_file = assets_path / f
+                    break
+        
+        if not js_file or not js_file.exists():
+            return JsonResponse({'error': 'JS file not found', 'checked': str(assets_path)}, status=404)
+        
+        # Serve it with explicit content type
+        response = FileResponse(
+            open(js_file, 'rb'),
+            content_type='application/javascript'
+        )
+        response['Content-Length'] = js_file.stat().st_size
+        response['X-Debug-File'] = str(js_file)
+        return response
 
