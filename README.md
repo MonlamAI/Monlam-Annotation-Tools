@@ -330,5 +330,5 @@ Proprietary - Monlam AI
 
 ---
 
-**མོན་ལམ། - Monlam Annotation Tools**
+**སྨོན་ལམ། - Monlam Annotation Tools**
 

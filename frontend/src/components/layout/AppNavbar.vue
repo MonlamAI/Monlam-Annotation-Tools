@@ -9,7 +9,7 @@
     <router-link to="/" class="d-flex align-center text-decoration-none">
       <img src="/logo.svg" alt="Monlam" height="36" class="mr-2" />
       <v-app-bar-title class="monlam-gold text-h6 font-weight-bold">
-        མོན་ལམ།
+        སྨོན་ལམ།
         <span class="text-caption text-white ml-2">Annotation Tools</span>
       </v-app-bar-title>
     </router-link>

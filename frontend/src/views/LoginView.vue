@@ -5,7 +5,7 @@
         <v-card class="elevation-12">
           <v-toolbar color="secondary" dark flat>
             <v-toolbar-title class="monlam-gold">
-              མོན་ལམ། Monlam Annotation Tools
+              སྨོན་ལམ། Monlam Annotation Tools
             </v-toolbar-title>
           </v-toolbar>
           
