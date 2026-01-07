@@ -233,7 +233,8 @@ WORKDIR /doccano/backend
 ENV DJANGO_SETTINGS_MODULE=config.settings.production
 
 # Using shell form (not exec form) to ensure env var expansion works
-CMD echo "🔍 DATABASE_URL: ${DATABASE_URL:0:30}..." && \
+# Note: /bin/sh doesn't support ${var:start:len}, so we just check if it's set
+CMD echo "🔍 Checking database connection..." && \
     echo "🐍 Django Settings: $DJANGO_SETTINGS_MODULE" && \
     python manage.py migrate --noinput && \
     gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
