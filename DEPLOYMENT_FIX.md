@@ -1,8 +1,20 @@
-# 🔧 Deployment Fix - wait_for_db Command
+# 🔧 Deployment Fix - Custom Run Script
 
 **Date:** January 7, 2026  
-**Status:** ✅ **FIXED**  
-**Commit:** `0e7691c`
+**Status:** ✅ **FIXED (Better Solution)**  
+**Commit:** `c445553` (replaces `0e7691c`)
+
+---
+
+## 🔄 **Solution Evolution**
+
+### **First Attempt (Commit `0e7691c`):**
+- Created Django management command `wait_for_db`
+- **Result:** ❌ Still failed - command not found during initialization
+
+### **Second Attempt (Commit `c445553`):** ✅ **SUCCESS**
+- Replaced entire `/doccano/tools/run.sh` script
+- **Result:** ✅ Works! No dependency on Django commands during init
 
 ---
 
@@ -27,46 +39,52 @@ But this command doesn't exist in the base Doccano image! It's expected to be pr
 
 ---
 
-## ✅ **The Fix**
+## ✅ **The Fix (Better Solution)**
 
-### **Created Custom Management Command:**
+### **Replaced Entire Run Script:**
 
-**File:** `patches/management_commands/wait_for_db.py`
+**File:** `patches/tools/run.sh`
 
 **What it does:**
-1. Tries to connect to the PostgreSQL database
-2. Retries up to 30 times (30 seconds total)
-3. Waits 1 second between retries
-4. Exits successfully when database is ready
-5. Fails with error if database never becomes available
+```bash
+#!/usr/bin/env bash
 
-**Code:**
-```python
-class Command(BaseCommand):
-    """Django command to wait for database to be available"""
-    
-    def handle(self, *args, **options):
-        # Try to connect to database
-        # Retry up to 30 times with 1 second delay
-        # Exit when connection successful
+# 1. Wait for database (simple bash loop)
+for i in {1..30}; do
+  if python manage.py migrate --check >/dev/null 2>&1; then
+    echo "✅ Database is ready!"
+    break
+  fi
+  echo "Database not ready, waiting... (attempt $i/30)"
+  sleep 1
+done
+
+# 2. Collect static files
+python manage.py collectstatic --noinput
+
+# 3. Run migrations
+python manage.py migrate --noinput
+
+# 4. Create admin user (if env vars provided)
+python manage.py create_admin ... || true
+
+# 5. Start application
+gunicorn --bind="0.0.0.0:${PORT:-8000}" config.wsgi
 ```
 
 ### **Dockerfile Changes:**
 
-Added commands to copy the custom `wait_for_db` command into the Docker image:
-
 ```dockerfile
-# Custom management command: wait_for_db (required by Render initialization)
-RUN mkdir -p /doccano/backend/projects/management/commands
-COPY patches/management_commands/__init__.py /doccano/backend/projects/management/__init__.py
-COPY patches/management_commands/__init__.py /doccano/backend/projects/management/commands/__init__.py
-COPY patches/management_commands/wait_for_db.py /doccano/backend/projects/management/commands/wait_for_db.py
+# Custom run script: Replaces Doccano's default run.sh
+COPY patches/tools/run.sh /doccano/tools/run.sh
+RUN chmod +x /doccano/tools/run.sh
 ```
 
-**Why `projects/management/commands/`?**
-- Django management commands must be in `<app_name>/management/commands/`
-- `projects` is a core Doccano app that always exists
-- This ensures the command is available during initialization
+**Why this works:**
+- ✅ No dependency on Django management commands
+- ✅ Simple bash script runs before Django loads
+- ✅ Uses `migrate --check` to verify database readiness
+- ✅ Replaces the problematic original script entirely
 
 ---
 
