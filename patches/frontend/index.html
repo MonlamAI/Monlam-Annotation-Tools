@@ -1049,9 +1049,7 @@
         }
     }
     
-    // METRICS PAGE REDIRECT ONLY
-    // Redirect /projects/{id}/metrics to /monlam/{id}/completion/
-    // (Dataset page is NOT redirected - it uses enhanced table instead)
+    // METRICS PAGE REDIRECT - RUNS IMMEDIATELY (before Vue loads)
     function redirectMetricsPage() {
         const path = window.location.pathname;
         const match = path.match(/^\/projects\/(\d+)\/metrics/);
@@ -1060,19 +1058,28 @@
             const projectId = match[1];
             const redirectUrl = `/monlam/${projectId}/completion/`;
             
-            console.log('[Monlam] On metrics page, redirecting to completion dashboard:', redirectUrl);
+            console.log('[Monlam] ⚡ IMMEDIATE REDIRECT from metrics to completion dashboard:', redirectUrl);
             
-            // Use location.replace for immediate redirect (can't go back)
+            // IMMEDIATE redirect (before Vue can load)
             window.location.replace(redirectUrl);
             
-            // Also set a flag to prevent Vue from loading
-            sessionStorage.setItem('monlam_metrics_redirect', 'true');
+            // Stop execution
+            throw new Error('Redirecting to completion dashboard');
         }
     }
     
-    // Intercept clicks on Metrics menu item (AGGRESSIVE MODE)
+    // Run IMMEDIATELY
+    try {
+        redirectMetricsPage();
+    } catch (e) {
+        if (e.message !== 'Redirecting to completion dashboard') {
+            console.error('[Monlam] Redirect error:', e);
+        }
+    }
+    
+    // Intercept clicks on Metrics menu item (ULTRA-AGGRESSIVE MODE)
     function interceptMetricsClick() {
-        // Method 1: Capture phase event listener
+        // Method 1: Capture phase event listener (earliest possible)
         document.addEventListener('click', function(e) {
             const link = e.target.closest('a');
             if (!link) return;
@@ -1085,43 +1092,76 @@
             if (match) {
                 const projectId = match[1];
                 
-                // Prevent default navigation
+                // STOP EVERYTHING
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 
-                // Direct redirect
+                // IMMEDIATE redirect
                 const redirectUrl = `/monlam/${projectId}/completion/`;
-                console.log('[Monlam] Intercepted metrics click, redirecting to:', redirectUrl);
-                window.location.href = redirectUrl;
+                console.log('[Monlam] ⚡ Click intercepted, immediate redirect to:', redirectUrl);
+                window.location.replace(redirectUrl);  // Use replace, not href
                 
                 return false;
             }
-        }, true); // Use capture phase to run before Vue
+        }, true); // Capture phase = runs FIRST
         
-        // Method 2: Monitor for metrics links and add direct onclick
+        // Method 2: Aggressive link monitoring (runs every 200ms, not 500ms)
         setInterval(() => {
             document.querySelectorAll('a[href*="/metrics"]').forEach(link => {
-                if (link.getAttribute('data-monlam-intercept')) return; // Already processed
-                
                 const href = link.getAttribute('href') || link.href;
                 const match = href.match(/\/projects\/(\d+)\/metrics/);
                 if (match) {
                     const projectId = match[1];
-                    link.setAttribute('data-monlam-intercept', 'true');
                     
-                    // Override onclick directly
+                    // Mark as processed
+                    if (!link.getAttribute('data-monlam-intercept')) {
+                        link.setAttribute('data-monlam-intercept', 'true');
+                        console.log('[Monlam] ⚡ Found metrics link, adding aggressive intercept');
+                    }
+                    
+                    // Override BOTH onclick and href
                     link.onclick = function(e) {
                         e.preventDefault();
                         e.stopPropagation();
+                        e.stopImmediatePropagation();
                         const redirectUrl = `/monlam/${projectId}/completion/`;
-                        console.log('[Monlam] Metrics link clicked, redirecting to:', redirectUrl);
-                        window.location.href = redirectUrl;
+                        console.log('[Monlam] ⚡ Direct onclick, immediate redirect to:', redirectUrl);
+                        window.location.replace(redirectUrl);
                         return false;
+                    };
+                    
+                    // Also override addEventListener if Vue added it
+                    const originalAddEventListener = link.addEventListener;
+                    link.addEventListener = function(type, listener, options) {
+                        if (type === 'click') {
+                            // Don't allow Vue to add click listeners to metrics links
+                            console.log('[Monlam] ⚡ Blocked Vue click listener on metrics link');
+                            return;
+                        }
+                        return originalAddEventListener.call(this, type, listener, options);
                     };
                 }
             });
-        }, 500);
+        }, 200); // Check every 200ms (faster)
+        
+        // Method 3: Intercept Vue Router BEFORE it initializes
+        if (window.$nuxt && window.$nuxt.$router) {
+            const originalPush = window.$nuxt.$router.push;
+            window.$nuxt.$router.push = function(location) {
+                if (typeof location === 'string' && location.includes('/metrics')) {
+                    const match = location.match(/\/projects\/(\d+)\/metrics/);
+                    if (match) {
+                        const projectId = match[1];
+                        const redirectUrl = `/monlam/${projectId}/completion/`;
+                        console.log('[Monlam] ⚡ Intercepted Vue Router push, redirecting to:', redirectUrl);
+                        window.location.replace(redirectUrl);
+                        return;
+                    }
+                }
+                return originalPush.call(this, location);
+            };
+        }
     }
     
     // Removed: autoAnnotateExample() and autoStartAnnotation()
@@ -1306,11 +1346,8 @@
         console.log('[Monlam] Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
         
-        // Set up metrics click intercept FIRST
+        // Set up metrics click intercept IMMEDIATELY (before anything else)
         interceptMetricsClick();
-        
-        // Check if we need to redirect metrics page (if already on metrics)
-        redirectMetricsPage();
         
         setTimeout(() => {
             enableAudioLoop();
