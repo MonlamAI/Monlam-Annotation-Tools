@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'apps.monlam_ui.middleware.RequestLoggingMiddleware',  # Log ALL requests first
     'django.middleware.security.SecurityMiddleware',
     # WhiteNoise disabled - static files served via URL routing in urls.py
     # 'whitenoise.middleware.WhiteNoiseMiddleware',
