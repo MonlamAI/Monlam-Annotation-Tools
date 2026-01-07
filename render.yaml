@@ -11,15 +11,6 @@ services:
     plan: standard
     region: singapore
     healthCheckPath: /
-    # Custom Docker command - bypass Doccano's problematic run.sh
-    dockerCommand: >
-      sh -c "
-      cd /doccano/backend &&
-      python manage.py migrate --noinput &&
-      python manage.py create_admin --username=${ADMIN_USERNAME} --password=${ADMIN_PASSWORD} --email=${ADMIN_EMAIL} --noinput || true &&
-      celery --app=config worker --loglevel=INFO --concurrency=1 --pool=solo &
-      gunicorn --bind=0.0.0.0:${PORT} --workers=${WEB_CONCURRENCY} config.wsgi:application
-      "
     envVars:
       - key: PORT
         value: "10000"
