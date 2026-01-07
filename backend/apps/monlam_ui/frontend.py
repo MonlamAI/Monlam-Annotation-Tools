@@ -8,27 +8,34 @@ from django.http import HttpResponse, Http404
 from django.conf import settings
 from django.views import View
 
+from .static_serve import try_serve_static
+
 logger = logging.getLogger(__name__)
 
 
 class FrontendView(View):
     """
     Serve the Vue.js frontend index.html for all non-API routes.
-    This enables SPA routing (Vue Router handles client-side routes).
+    Also serves static files from Vue dist if they exist.
     """
     
     def get(self, request, *args, **kwargs):
-        # Try to find index.html in static/dist
+        # FIRST: Try to serve as static file (assets, fonts, etc.)
+        static_response = try_serve_static(request)
+        if static_response:
+            logger.info(f"FrontendView: Served static file for {request.path}")
+            return static_response
+        
+        # SECOND: Serve index.html for SPA routes
         index_paths = [
             os.path.join(settings.BASE_DIR, 'static', 'dist', 'index.html'),
             os.path.join(settings.STATIC_ROOT or '', 'dist', 'index.html'),
             os.path.join(settings.BASE_DIR, 'staticfiles', 'dist', 'index.html'),
         ]
         
-        logger.info(f"FrontendView: Looking for index.html, BASE_DIR={settings.BASE_DIR}")
+        logger.info(f"FrontendView: Looking for index.html for path {request.path}")
         
         for index_path in index_paths:
-            logger.info(f"FrontendView: Checking {index_path}, exists={os.path.exists(index_path)}")
             if os.path.exists(index_path):
                 with open(index_path, 'r', encoding='utf-8') as f:
                     return HttpResponse(f.read(), content_type='text/html')

@@ -15,16 +15,64 @@ logger = logging.getLogger(__name__)
 
 # Initialize mimetypes with common web types
 mimetypes.add_type('application/javascript', '.js')
+mimetypes.add_type('application/javascript', '.mjs')
 mimetypes.add_type('text/css', '.css')
 mimetypes.add_type('font/woff', '.woff')
 mimetypes.add_type('font/woff2', '.woff2')
 mimetypes.add_type('font/ttf', '.ttf')
+mimetypes.add_type('font/eot', '.eot')
 mimetypes.add_type('image/svg+xml', '.svg')
+mimetypes.add_type('image/png', '.png')
+mimetypes.add_type('image/x-icon', '.ico')
 
 
 def get_vue_dist_path():
     """Get the Vue dist directory path."""
     return Path(settings.BASE_DIR) / 'static' / 'dist'
+
+
+def try_serve_static(request):
+    """
+    Try to serve a static file from Vue dist.
+    Returns None if file doesn't exist.
+    """
+    vue_dist = get_vue_dist_path()
+    request_path = request.path.lstrip('/')
+    
+    logger.info(f"try_serve_static: request.path={request.path}, request_path={request_path}")
+    
+    file_path = vue_dist / request_path
+    
+    # Security: prevent directory traversal
+    try:
+        file_path = file_path.resolve()
+        vue_dist_resolved = vue_dist.resolve()
+        if not str(file_path).startswith(str(vue_dist_resolved)):
+            logger.warning(f"Directory traversal attempt: {request_path}")
+            return None
+    except (ValueError, OSError):
+        return None
+    
+    if not file_path.exists() or not file_path.is_file():
+        logger.info(f"File not found: {file_path}")
+        return None
+    
+    # Determine content type
+    content_type, _ = mimetypes.guess_type(str(file_path))
+    if content_type is None:
+        content_type = 'application/octet-stream'
+    
+    logger.info(f"Serving {file_path} as {content_type}")
+    
+    # Serve the file
+    response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+    response['Content-Length'] = file_path.stat().st_size
+    
+    # Cache headers for production
+    if not settings.DEBUG:
+        response['Cache-Control'] = 'public, max-age=31536000, immutable'
+    
+    return response
 
 
 def serve_vue_asset(request, path, subdir=''):
