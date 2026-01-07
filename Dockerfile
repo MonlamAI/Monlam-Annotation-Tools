@@ -7,9 +7,9 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Copy frontend files
-COPY frontend/package*.json ./
-RUN npm ci --no-audit
+# Copy frontend files and install dependencies
+COPY frontend/package.json ./
+RUN npm install --legacy-peer-deps
 
 COPY frontend/ ./
 RUN npm run build
