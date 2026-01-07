@@ -251,7 +251,7 @@ const previewFile = async () => {
     formData.append('format', fileFormat.value)
     
     const response = await api.post(
-      `/api/v1/projects/${props.projectId}/examples/upload/preview`,
+      `/projects/${props.projectId}/examples/upload/preview`,
       formData,
       {
         headers: {
@@ -286,7 +286,7 @@ const uploadFile = async () => {
     formData.append('format', fileFormat.value)
     
     const response = await api.post(
-      `/api/v1/projects/${props.projectId}/examples/upload`,
+      `/projects/${props.projectId}/examples/upload`,
       formData,
       {
         headers: {
