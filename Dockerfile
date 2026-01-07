@@ -228,9 +228,8 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
 USER doccano
 WORKDIR /doccano/backend
 
-# Copy database reset script for manual fixes
+# Copy database reset script for manual fixes (no chmod needed for Python scripts)
 COPY reset_db.py /doccano/backend/reset_db.py
-RUN chmod +x /doccano/backend/reset_db.py
 
 # Override Doccano's default CMD - bypass problematic run.sh script
 # Set DJANGO_SETTINGS_MODULE in CMD to avoid Docker cache issues
