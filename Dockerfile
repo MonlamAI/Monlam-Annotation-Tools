@@ -42,10 +42,8 @@ COPY branding/static/logo.png /doccano/backend/staticfiles/_nuxt/img/6737785.30d
 # BACKEND PATCHES
 # ============================================
 
-# Custom run script: Replaces Doccano's default run.sh
-# Handles database waiting without requiring wait_for_db command
-COPY patches/tools/run.sh /doccano/tools/run.sh
-RUN chmod +x /doccano/tools/run.sh
+# NOTE: We no longer replace run.sh - using Render's dockerCommand instead
+# This avoids issues with DATABASE_URL not being properly passed through
 
 # Auto-create TextLabels for STT projects after import
 COPY patches/backend/celery_tasks.py /doccano/backend/data_import/celery_tasks.py
