@@ -23,9 +23,10 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 _allowed_hosts = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(',') if h.strip()]
 
-# Always allow health checks
-if '.onrender.com' not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append('.onrender.com')
+# Always allow Render and Monlam domains
+for domain in ['.onrender.com', '.monlam.ai', 'annotate.monlam.ai']:
+    if domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(domain)
 
 # Application definition
 INSTALLED_APPS = [
