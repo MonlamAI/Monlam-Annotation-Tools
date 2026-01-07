@@ -6,20 +6,21 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
-from django.views.static import serve
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 from apps.monlam_ui.health import HealthCheckView, DebugStaticView
 from apps.monlam_ui.frontend import FrontendView
-
-# Vue dist directory for serving assets (as string for Django's serve view)
-VUE_DIST_DIR = str(settings.BASE_DIR / 'static' / 'dist')
-VUE_ASSETS_DIR = str(settings.BASE_DIR / 'static' / 'dist' / 'assets')
-VUE_FONTS_DIR = str(settings.BASE_DIR / 'static' / 'dist' / 'fonts')
+from apps.monlam_ui.static_serve import serve_assets, serve_fonts, serve_root_file
 
 urlpatterns = [
+    # Serve Vue.js static assets FIRST (before any other patterns)
+    re_path(r'^assets/(?P<path>.+)$', serve_assets, name='serve_assets'),
+    re_path(r'^fonts/(?P<path>.+)$', serve_fonts, name='serve_fonts'),
+    re_path(r'^(?P<path>favicon\.(ico|png|svg))$', serve_root_file, name='serve_favicon'),
+    re_path(r'^(?P<path>logo\.(png|svg))$', serve_root_file, name='serve_logo'),
+    
     # Health check and debug
     path('health/', HealthCheckView.as_view(), name='health'),
     path('debug-static/', DebugStaticView.as_view(), name='debug_static'),
@@ -41,12 +42,6 @@ urlpatterns = [
     
     # Monlam UI (completion dashboard API)
     path('monlam/', include('apps.monlam_ui.urls')),
-    
-    # Serve Vue.js static assets directly (bypassing Whitenoise issues)
-    re_path(r'^assets/(?P<path>.*)$', serve, {'document_root': VUE_ASSETS_DIR}),
-    re_path(r'^fonts/(?P<path>.*)$', serve, {'document_root': VUE_FONTS_DIR}),
-    re_path(r'^(?P<path>favicon\.(ico|png|svg))$', serve, {'document_root': VUE_DIST_DIR}),
-    re_path(r'^(?P<path>logo\.(png|svg))$', serve, {'document_root': VUE_DIST_DIR}),
 ]
 
 # Static files for Django admin etc
