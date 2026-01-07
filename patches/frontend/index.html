@@ -789,13 +789,13 @@
         }
         
         function createApproveRejectButtons(projectId, exampleId, roleName) {
-            
-            // Get example ID from URL parameters
-            const urlParams = new URLSearchParams(window.location.search);
-            const pageParam = urlParams.get('page');
-            
-            // Wait for the main content area to appear
-            waitForElement('main', (mainElement) => {
+            try {
+                // Get example ID from URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const pageParam = urlParams.get('page');
+                
+                // Wait for the main content area to appear
+                waitForElement('main', (mainElement) => {
                 if (document.querySelector('.monlam-approve-buttons')) {
                     console.log('[Monlam Approve] Buttons already exist');
                     return;
