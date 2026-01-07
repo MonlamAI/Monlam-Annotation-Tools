@@ -127,6 +127,10 @@ STATICFILES_DIRS = [
 ]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# Whitenoise settings for serving Vue.js frontend at root
+# This serves files from static/dist at / (root) level
+WHITENOISE_ROOT = BASE_DIR / 'static' / 'dist'
+
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

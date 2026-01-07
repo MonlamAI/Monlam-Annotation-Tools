@@ -42,8 +42,9 @@ if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 
 # Catch-all: Serve Vue.js frontend for SPA routing
+# Exclude /assets/, /static/, /fonts/ - let Whitenoise handle those
 # This must be LAST so API routes take precedence
 urlpatterns += [
-    re_path(r'^.*$', FrontendView.as_view(), name='frontend'),
+    re_path(r'^(?!assets/|static/|fonts/|favicon).*$', FrontendView.as_view(), name='frontend'),
 ]
 
