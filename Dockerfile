@@ -234,5 +234,8 @@ COPY init_monlam.py /doccano/backend/init_monlam.py
 
 # Override Doccano's default CMD - bypass problematic run.sh script
 # Set DJANGO_SETTINGS_MODULE in CMD to avoid Docker cache issues
-# Assumes database is already clean (user resets manually if needed)
-CMD export DJANGO_SETTINGS_MODULE=config.settings.production && python manage.py migrate --noinput && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
+# Start Celery worker for async tasks (file imports) and Gunicorn
+CMD export DJANGO_SETTINGS_MODULE=config.settings.production && \
+    python manage.py migrate --noinput && \
+    (celery --app=config worker --loglevel=INFO --concurrency=1 --pool=solo &) && \
+    gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
