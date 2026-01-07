@@ -229,5 +229,6 @@ USER doccano
 WORKDIR /doccano/backend
 
 # Override Doccano's default CMD - bypass problematic run.sh script
-# This ensures DATABASE_URL and other env vars are properly available
-CMD ["sh", "-c", "python manage.py migrate --noinput && (python manage.py create_admin --username=${ADMIN_USERNAME} --password=${ADMIN_PASSWORD} --email=${ADMIN_EMAIL:-admin@example.com} --noinput || true) && (test -n \"${CELERY_BROKER_URL}\" && celery --app=config worker --loglevel=INFO --concurrency=1 --pool=solo &) && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 --access-logfile=- --error-logfile=- config.wsgi:application"]
+# Using shell form (not exec form) to ensure env var expansion works
+CMD python manage.py migrate --noinput && \
+    gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
