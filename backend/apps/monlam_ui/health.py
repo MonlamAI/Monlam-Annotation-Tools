@@ -112,3 +112,50 @@ class TestServeView(View):
         response['X-Debug-File'] = str(js_file)
         return response
 
+
+class TestPathView(View):
+    """
+    Test endpoint to debug path resolution.
+    Access at /test-path/assets/index-D9l6PDJe.js (or any path)
+    """
+    
+    def get(self, request, test_path=''):
+        static_dist = Path(settings.BASE_DIR) / 'static' / 'dist'
+        
+        # Simulate what try_serve_static does
+        full_request_path = request.path
+        stripped_path = request.path.lstrip('/')
+        
+        # Remove 'test-path/' prefix
+        if stripped_path.startswith('test-path/'):
+            stripped_path = stripped_path[10:]  # len('test-path/') = 10
+        
+        file_path = static_dist / stripped_path
+        
+        result = {
+            'full_request_path': full_request_path,
+            'stripped_path': stripped_path,
+            'static_dist': str(static_dist),
+            'file_path': str(file_path),
+            'file_exists': file_path.exists() if file_path else False,
+            'is_file': file_path.is_file() if file_path.exists() else False,
+        }
+        
+        if file_path.exists() and file_path.is_file():
+            result['file_size'] = file_path.stat().st_size
+            result['content_type'] = mimetypes.guess_type(str(file_path))[0]
+            
+            # Try to serve the file
+            try:
+                response = FileResponse(
+                    open(file_path, 'rb'),
+                    content_type=result['content_type'] or 'application/octet-stream'
+                )
+                response['Content-Length'] = result['file_size']
+                response['X-Debug-Path'] = str(file_path)
+                return response
+            except Exception as e:
+                result['serve_error'] = str(e)
+        
+        return JsonResponse(result)
+

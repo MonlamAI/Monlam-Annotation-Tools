@@ -10,7 +10,7 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-from apps.monlam_ui.health import HealthCheckView, DebugStaticView, TestServeView
+from apps.monlam_ui.health import HealthCheckView, DebugStaticView, TestServeView, TestPathView
 from apps.monlam_ui.frontend import FrontendView
 from apps.monlam_ui.static_serve import serve_assets, serve_fonts, serve_root_file
 
@@ -34,6 +34,7 @@ urlpatterns = [
     path('health/', HealthCheckView.as_view(), name='health'),
     path('debug-static/', DebugStaticView.as_view(), name='debug_static'),
     path('test-serve-js/', TestServeView.as_view(), name='test_serve_js'),
+    path('test-path/<path:test_path>', TestPathView.as_view(), name='test_path'),
     
     path('admin/', admin.site.urls),
     
