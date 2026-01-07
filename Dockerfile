@@ -230,4 +230,5 @@ WORKDIR /doccano/backend
 
 # Override Doccano's default CMD - bypass problematic run.sh script
 # Set DJANGO_SETTINGS_MODULE in CMD to avoid Docker cache issues
-CMD export DJANGO_SETTINGS_MODULE=config.settings.production && python manage.py migrate --noinput && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
+# Use --fake-initial to skip inconsistency checks on first deploy
+CMD export DJANGO_SETTINGS_MODULE=config.settings.production && python manage.py migrate --fake-initial --noinput && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
