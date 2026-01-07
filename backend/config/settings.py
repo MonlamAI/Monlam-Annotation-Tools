@@ -55,10 +55,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'apps.monlam_ui.middleware.RequestLoggingMiddleware',  # Log ALL requests first
     'django.middleware.security.SecurityMiddleware',
-    # WhiteNoise disabled - static files served via URL routing in urls.py
-    # 'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -128,16 +126,6 @@ STATICFILES_DIRS = []  # Vue dist is served by WHITENOISE_ROOT
 
 # Use simpler storage (Vue already hashes filenames)
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
-
-# Whitenoise: Serve Vue.js dist folder at root URL
-# Files in static/dist/ will be served at / (e.g., /assets/index.js, /fonts/...)
-WHITENOISE_ROOT = str(BASE_DIR / 'static' / 'dist')
-
-# Enable autorefresh in DEBUG mode (scan files on each request)
-WHITENOISE_AUTOREFRESH = DEBUG
-
-# Skip compression for already-hashed files (Vue already hashes)
-WHITENOISE_SKIP_COMPRESS_EXTENSIONS = ['map']
 
 # Media files
 MEDIA_URL = '/media/'

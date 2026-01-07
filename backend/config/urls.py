@@ -10,32 +10,21 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-from apps.monlam_ui.health import HealthCheckView, DebugStaticView, TestServeView, TestPathView
+from apps.monlam_ui.health import HealthCheckView
 from apps.monlam_ui.frontend import FrontendView
 from apps.monlam_ui.static_serve import serve_assets, serve_fonts, serve_root_file
 
-# Debug: log URL pattern matching
-import logging
-logger = logging.getLogger(__name__)
-
-def debug_serve_assets(request, path):
-    logger.info(f"DEBUG: serve_assets called with path={path}")
-    return serve_assets(request, path)
-
 urlpatterns = [
     # Serve Vue.js static assets FIRST (before any other patterns)
-    # Using _app instead of assets to avoid CDN cache issues
-    path('_app/<path:path>', debug_serve_assets, name='serve_assets'),
+    path('_app/<path:path>', serve_assets, name='serve_assets'),
     path('_fonts/<path:path>', serve_fonts, name='serve_fonts'),
     re_path(r'^(?P<path>favicon\.(ico|png|svg))$', serve_root_file, name='serve_favicon'),
     re_path(r'^(?P<path>logo\.(png|svg))$', serve_root_file, name='serve_logo'),
     
-    # Health check and debug
+    # Health check
     path('health/', HealthCheckView.as_view(), name='health'),
-    path('debug-static/', DebugStaticView.as_view(), name='debug_static'),
-    path('test-serve-js/', TestServeView.as_view(), name='test_serve_js'),
-    path('test-path/<path:test_path>', TestPathView.as_view(), name='test_path'),
     
+    # Admin
     path('admin/', admin.site.urls),
     
     # Authentication
@@ -55,7 +44,7 @@ urlpatterns = [
     path('monlam/', include('apps.monlam_ui.urls')),
 ]
 
-# Static files for Django admin etc
+# Static files for Django admin in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
@@ -65,4 +54,3 @@ if settings.DEBUG:
 urlpatterns += [
     re_path(r'^.*$', FrontendView.as_view(), name='frontend'),
 ]
-
