@@ -64,7 +64,7 @@ class FrontendView(View):
 </head>
 <body>
     <div class="container">
-        <h1>སྨོན་ལམ་མཆན་འགོད་ལག་ཆ།</h1>
+        <h1>སྨོན་ལམ་ཞུ་དག་ཁང་།</h1>
         <h2>Monlam Annotation Tools</h2>
         <p>Frontend assets not found. Please rebuild.</p>
         <a href="/admin/">Admin Panel</a>
