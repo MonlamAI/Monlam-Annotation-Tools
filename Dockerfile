@@ -149,6 +149,9 @@ RUN sed -i '1i # Monlam: Configure MIME types for JavaScript files BEFORE WhiteN
 # - Monlam enhancement script tags (audio loop, completion tracking UI)
 COPY patches/frontend/index.html /doccano/backend/client/dist/index.html
 COPY patches/frontend/200.html /doccano/backend/client/dist/200.html
+# Also copy to staticfiles in case Django serves from there
+COPY patches/frontend/index.html /doccano/backend/staticfiles/index.html
+COPY patches/frontend/200.html /doccano/backend/staticfiles/200.html
 
 # ============================================
 # DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
@@ -184,6 +187,8 @@ RUN chown -R doccano:doccano /doccano/frontend/i18n/bo && \
     chown doccano:doccano /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl && \
     chown doccano:doccano /doccano/backend/client/dist/index.html && \
     chown doccano:doccano /doccano/backend/client/dist/200.html && \
+    chown doccano:doccano /doccano/backend/staticfiles/index.html && \
+    chown doccano:doccano /doccano/backend/staticfiles/200.html && \
     chown -R doccano:doccano /doccano/backend/assignment && \
     chown -R doccano:doccano /doccano/backend/monlam_tracking && \
     chown -R doccano:doccano /doccano/backend/monlam_ui
