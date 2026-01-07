@@ -14,10 +14,19 @@ from apps.monlam_ui.health import HealthCheckView, DebugStaticView, TestServeVie
 from apps.monlam_ui.frontend import FrontendView
 from apps.monlam_ui.static_serve import serve_assets, serve_fonts, serve_root_file
 
+# Debug: log URL pattern matching
+import logging
+logger = logging.getLogger(__name__)
+
+def debug_serve_assets(request, path):
+    logger.info(f"DEBUG: serve_assets called with path={path}")
+    return serve_assets(request, path)
+
 urlpatterns = [
     # Serve Vue.js static assets FIRST (before any other patterns)
-    re_path(r'^assets/(?P<path>.+)$', serve_assets, name='serve_assets'),
-    re_path(r'^fonts/(?P<path>.+)$', serve_fonts, name='serve_fonts'),
+    # Using path() instead of re_path() for clearer matching
+    path('assets/<path:path>', debug_serve_assets, name='serve_assets'),
+    path('fonts/<path:path>', serve_fonts, name='serve_fonts'),
     re_path(r'^(?P<path>favicon\.(ico|png|svg))$', serve_root_file, name='serve_favicon'),
     re_path(r'^(?P<path>logo\.(png|svg))$', serve_root_file, name='serve_logo'),
     
