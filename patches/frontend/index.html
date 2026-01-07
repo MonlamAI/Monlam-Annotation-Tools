@@ -754,15 +754,39 @@
             
             // Find current user's role
             const currentMember = members.find(m => m.user === currentUser.id);
-            const role = currentMember ? currentMember.role : null;
+            const roleId = currentMember ? currentMember.role : null;
             
-            console.log('[Monlam Approve] User role:', role);
+            console.log('[Monlam Approve] User role ID:', roleId, 'Member:', currentMember);
             
-            // Only show for approvers and project_managers
-            if (role !== 'approver' && role !== 'project_manager') {
-                console.log('[Monlam Approve] Not an approver/PM, skipping buttons');
+            // Fetch role name from role ID
+            if (!roleId) {
+                console.log('[Monlam Approve] No role found, skipping buttons');
                 return;
             }
+            
+            // Get role details
+            fetch(`/v1/roles/${roleId}`)
+                .then(res => res.json())
+                .then(roleData => {
+                    const roleName = roleData.name;
+                    console.log('[Monlam Approve] Role name:', roleName);
+                    
+                    // Only show for these roles
+                    const allowedRoles = ['annotation_approver', 'project_manager', 'project_admin'];
+                    if (!allowedRoles.includes(roleName)) {
+                        console.log('[Monlam Approve] Not an approver/PM/admin, skipping buttons');
+                        return;
+                    }
+                    
+                    // Continue with button creation
+                    createApproveRejectButtons(projectId, exampleId, roleName);
+                })
+                .catch(err => {
+                    console.log('[Monlam Approve] Error fetching role:', err);
+                });
+        }
+        
+        function createApproveRejectButtons(projectId, exampleId, roleName) {
             
             // Get example ID from URL parameters
             const urlParams = new URLSearchParams(window.location.search);

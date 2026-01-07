@@ -35,18 +35,36 @@ class AnnotationVisibilityFilter(filters.BaseFilterBackend):
         if not project_id:
             return queryset
         
-        # Check if user is project creator/admin
+        # Check if user is project creator/admin or has special roles
         try:
             from projects.models import Project
+            from roles.models import Member
+            
             project = Project.objects.get(pk=project_id)
             
-            # Project admins see everything
+            # Project creator sees everything
             if project.created_by == user:
                 return queryset
             
-            # Check if user has admin role in project
-            # (Implementation depends on Doccano's role system)
-            # For now, assume non-creator non-superusers are annotators
+            # Check user's role in project
+            try:
+                member = Member.objects.get(user=user, project=project)
+                role_name = member.role.name
+                
+                # These roles see all examples:
+                # - project_admin
+                # - project_manager  
+                # - annotation_approver
+                if role_name in ['project_admin', 'project_manager', 'annotation_approver']:
+                    return queryset
+                
+                # annotator role gets filtered (continues below)
+                print(f'[Monlam Filter] User {user.username} is {role_name} - applying filters')
+                
+            except Member.DoesNotExist:
+                # Not a project member, apply restrictive filtering
+                print(f'[Monlam Filter] User {user.username} not a project member')
+                return queryset.none()
             
         except Exception as e:
             print(f'[Monlam Filter] Error checking project: {e}')
