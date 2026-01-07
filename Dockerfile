@@ -22,6 +22,7 @@ FROM python:3.11-slim AS backend
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# Override any existing DJANGO_SETTINGS_MODULE from old Doccano
 ENV DJANGO_SETTINGS_MODULE=config.settings
 
 # Install system dependencies

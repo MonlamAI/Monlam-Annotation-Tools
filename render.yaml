@@ -17,9 +17,12 @@ services:
     
     healthCheckPath: /health/
     
-    # Environment variables - these inherit from your existing Render service
-    # Only define new ones or overrides here
+    # Environment variables - override old Doccano settings
     envVars:
+      # IMPORTANT: Override old Doccano settings module
+      - key: DJANGO_SETTINGS_MODULE
+        value: "config.settings"
+      
       - key: DEBUG
         value: "False"
       
