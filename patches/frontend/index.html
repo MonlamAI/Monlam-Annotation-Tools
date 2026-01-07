@@ -784,6 +784,8 @@
                 .catch(err => {
                     console.log('[Monlam Approve] Error fetching role:', err);
                 });
+        } catch (error) {
+            console.error('[Monlam Approve] Error in addApproveRejectButtons:', error);
         }
         
         function createApproveRejectButtons(projectId, exampleId, roleName) {
