@@ -203,6 +203,14 @@ LOGGING = {
     },
 }
 
+# Celery Configuration (RabbitMQ)
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='amqp://localhost')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='rpc://')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+
 # Monlam specific settings
 MONLAM_SETTINGS = {
     'LOCK_TIMEOUT_MINUTES': 15,  # Auto-release lock after 15 minutes

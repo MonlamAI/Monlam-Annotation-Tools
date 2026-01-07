@@ -1,52 +1,38 @@
-# Render.com Blueprint for Monlam Doccano
-# Deploy: Connect this repo to Render and it will auto-deploy
+# Render.com Blueprint for Monlam Annotation Tools
+# 
+# This replaces existing Doccano deployment.
+# Uses EXISTING PostgreSQL and RabbitMQ from your current Render setup.
+# Just push to the connected GitHub repo - Render will auto-deploy.
 
 services:
-  # Web Service (Django + Vue)
   - type: web
     name: monlam-doccano
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: starter
-    region: oregon
+    region: singapore
     branch: main
     autoDeploy: true
     
     healthCheckPath: /health/
     
+    # Environment variables - these inherit from your existing Render service
+    # Only define new ones or overrides here
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: monlam-doccano-db
-          property: connectionString
-      
-      - key: SECRET_KEY
-        generateValue: true
-      
       - key: DEBUG
         value: "False"
       
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
       
-      - key: CORS_ALLOWED_ORIGINS
-        value: "https://monlam-doccano.onrender.com"
-      
-      # AWS S3 for media files (optional)
       - key: USE_S3
         value: "False"
-      # - key: AWS_ACCESS_KEY_ID
-      #   sync: false
-      # - key: AWS_SECRET_ACCESS_KEY
-      #   sync: false
-      # - key: AWS_STORAGE_BUCKET_NAME
-      #   sync: false
-      # - key: AWS_S3_REGION_NAME
-      #   value: "us-east-1"
-
-    buildCommand: |
-      echo "Build complete - Dockerfile handles everything"
+      
+      # These should already exist in your Render service:
+      # - DATABASE_URL (from existing PostgreSQL)
+      # - CELERY_BROKER_URL (from existing RabbitMQ)
+      # - SECRET_KEY
 
     startCommand: |
       python manage.py migrate --noinput && \
@@ -57,12 +43,6 @@ services:
       mountPath: /app/media
       sizeGB: 10
 
-# PostgreSQL Database
-databases:
-  - name: monlam-doccano-db
-    plan: starter
-    region: oregon
-    databaseName: monlam_doccano
-    user: doccano
-    ipAllowList: []  # Allow all IPs (default for Render internal network)
+# No databases section - using your existing PostgreSQL
+# No additional services - using your existing RabbitMQ
 
