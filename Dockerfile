@@ -229,6 +229,11 @@ USER doccano
 WORKDIR /doccano/backend
 
 # Override Doccano's default CMD - bypass problematic run.sh script
+# Set Django settings module explicitly for production
+ENV DJANGO_SETTINGS_MODULE=config.settings.production
+
 # Using shell form (not exec form) to ensure env var expansion works
-CMD python manage.py migrate --noinput && \
+CMD echo "🔍 DATABASE_URL: ${DATABASE_URL:0:30}..." && \
+    echo "🐍 Django Settings: $DJANGO_SETTINGS_MODULE" && \
+    python manage.py migrate --noinput && \
     gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
