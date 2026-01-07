@@ -4,7 +4,7 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [vue()],
-  // Use root base URL - Whitenoise serves from WHITENOISE_ROOT
+  // Use root base URL
   base: '/',
   resolve: {
     alias: {
@@ -27,8 +27,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    // Ensure assets are placed in assets/ folder
-    assetsDir: 'assets',
+    // Use unique asset path to avoid CDN cache issues
+    assetsDir: '_app',
   },
 })
 

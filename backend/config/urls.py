@@ -24,8 +24,8 @@ def debug_serve_assets(request, path):
 
 urlpatterns = [
     # Serve Vue.js static assets FIRST (before any other patterns)
-    # Using path() instead of re_path() for clearer matching
-    path('assets/<path:path>', debug_serve_assets, name='serve_assets'),
+    # Using _app instead of assets to avoid CDN cache issues
+    path('_app/<path:path>', debug_serve_assets, name='serve_assets'),
     path('fonts/<path:path>', serve_fonts, name='serve_fonts'),
     re_path(r'^(?P<path>favicon\.(ico|png|svg))$', serve_root_file, name='serve_favicon'),
     re_path(r'^(?P<path>logo\.(png|svg))$', serve_root_file, name='serve_logo'),
