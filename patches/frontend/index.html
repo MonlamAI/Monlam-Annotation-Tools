@@ -1170,6 +1170,12 @@
             
             // Function to enhance table (can be called multiple times)
             function enhanceTable() {
+                // Check if already enhanced
+                const headerRow = document.querySelector('thead tr');
+                if (headerRow && headerRow.querySelector('.monlam-status-header')) {
+                    console.log('[Monlam Dataset] Table already enhanced, skipping');
+                    return; // Already enhanced
+                }
                 // Add headers at positions 4, 5, 6 (after first 3 columns)
                 const headerRow = document.querySelector('thead tr');
                 if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
@@ -1211,7 +1217,13 @@
                 // Add data cells at positions 4, 5, 6 (after first 3 cells)
                 const dataRows = document.querySelectorAll('tbody tr');
                 dataRows.forEach(row => {
-                    if (row.querySelector('.monlam-status-cell')) return; // Already added
+                    // Check if ALREADY enhanced (better duplicate detection)
+                    if (row.hasAttribute('data-monlam-enhanced')) {
+                        return; // Skip already enhanced rows
+                    }
+                    
+                    // Mark as being processed RIGHT NOW (before adding cells)
+                    row.setAttribute('data-monlam-enhanced', 'true');
                     
                     // Extract example ID (first cell usually contains ID)
                     const firstCell = row.querySelector('td:first-child');
@@ -1276,22 +1288,14 @@
                 console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');
             }
             
-            // Call enhanceTable multiple times to ensure it catches the table
-            setTimeout(enhanceTable, 1000);
-            setTimeout(enhanceTable, 2000);
-            setTimeout(enhanceTable, 3000);
-            
-            // Also set up observer to re-enhance when table changes
-            const observer = new MutationObserver(() => {
-                const tbody = document.querySelector('tbody');
-                if (tbody && !tbody.hasAttribute('data-monlam-observed')) {
-                    tbody.setAttribute('data-monlam-observed', 'true');
-                    enhanceTable();
-                }
-            });
-            
-            // Observe the whole document for table appearance
-            observer.observe(document.body, { childList: true, subtree: true });
+            // Call enhanceTable - but only ONCE per navigation
+            // Use a flag to prevent multiple calls
+            if (!window.monlamDatasetEnhanced) {
+                window.monlamDatasetEnhanced = true;
+                setTimeout(enhanceTable, 1000);
+                setTimeout(enhanceTable, 2000);
+                setTimeout(enhanceTable, 3000);
+            }
             
         } catch (error) {
             console.error('[Monlam Dataset] Error enhancing table:', error);
@@ -1320,6 +1324,10 @@
             if (window.location.pathname !== lastPath) {
                 lastPath = window.location.pathname;
                 console.log('[Monlam] Navigation detected:', lastPath);
+                
+                // Reset flag on navigation
+                window.monlamDatasetEnhanced = false;
+                
                 setTimeout(() => {
                     enableAudioLoop();
                     enhanceDatasetTable(); // Re-enhance dataset table on navigation
