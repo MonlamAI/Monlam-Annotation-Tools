@@ -1,0 +1,68 @@
+# Render.com Blueprint for Monlam Doccano
+# Deploy: Connect this repo to Render and it will auto-deploy
+
+services:
+  # Web Service (Django + Vue)
+  - type: web
+    name: monlam-doccano
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    branch: main
+    autoDeploy: true
+    
+    healthCheckPath: /health/
+    
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: monlam-doccano-db
+          property: connectionString
+      
+      - key: SECRET_KEY
+        generateValue: true
+      
+      - key: DEBUG
+        value: "False"
+      
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://monlam-doccano.onrender.com"
+      
+      # AWS S3 for media files (optional)
+      - key: USE_S3
+        value: "False"
+      # - key: AWS_ACCESS_KEY_ID
+      #   sync: false
+      # - key: AWS_SECRET_ACCESS_KEY
+      #   sync: false
+      # - key: AWS_STORAGE_BUCKET_NAME
+      #   sync: false
+      # - key: AWS_S3_REGION_NAME
+      #   value: "us-east-1"
+
+    buildCommand: |
+      echo "Build complete - Dockerfile handles everything"
+
+    startCommand: |
+      python manage.py migrate --noinput && \
+      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 2
+
+    disk:
+      name: media
+      mountPath: /app/media
+      sizeGB: 10
+
+# PostgreSQL Database
+databases:
+  - name: monlam-doccano-db
+    plan: starter
+    region: oregon
+    databaseName: monlam_doccano
+    user: doccano
+    ipAllowList: []  # Allow all IPs (default for Render internal network)
+

@@ -1,0 +1,173 @@
+// MonlamTBslim Font
+@font-face {
+  font-family: 'MonlamTBslim';
+  src: url('/fonts/MonlamTBslim.woff2') format('woff2'),
+       url('/fonts/MonlamTBslim.woff') format('woff'),
+       url('/fonts/MonlamTBslim.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+// Monlam Color Variables
+:root {
+  --monlam-gold: #B8963E;
+  --monlam-gold-dark: #9A7B32;
+  --monlam-navy: #1a1a2e;
+  --monlam-navy-light: #2d2d4a;
+}
+
+// Global Font
+html, body, * {
+  font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+// Override Vuetify font
+.v-application {
+  font-family: 'MonlamTBslim', 'Noto Sans Tibetan', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+}
+
+// Status Badge Colors
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &.pending {
+    background-color: #e0e0e0;
+    color: #666;
+  }
+
+  &.in_progress {
+    background-color: #2196f3;
+    color: white;
+  }
+
+  &.submitted {
+    background-color: #ff9800;
+    color: white;
+  }
+
+  &.approved {
+    background-color: #4caf50;
+    color: white;
+  }
+
+  &.rejected {
+    background-color: #f44336;
+    color: white;
+  }
+}
+
+// Monlam Gold text
+.monlam-gold {
+  color: var(--monlam-gold) !important;
+}
+
+// Monlam Navy background
+.monlam-navy-bg {
+  background-color: var(--monlam-navy) !important;
+}
+
+// Hide GitHub links
+a[href*="github.com"],
+button[class*="github"] {
+  display: none !important;
+}
+
+// Approve/Reject floating container
+.approve-reject-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  .status-info {
+    border-right: 1px solid #e0e0e0;
+    padding-right: 16px;
+
+    .status-label {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-value {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .annotator-name {
+      font-size: 12px;
+      color: #666;
+    }
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+// Audio player improvements
+.audio-player-container {
+  .audio-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+}
+
+// Dataset table improvements
+.dataset-table {
+  .v-data-table {
+    th, td {
+      white-space: nowrap;
+    }
+  }
+}
+
+// Progress bar
+.completion-progress {
+  height: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e0e0e0;
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--monlam-gold), var(--monlam-gold-dark));
+    border-radius: 12px;
+    transition: width 0.5s ease;
+  }
+}
+
+// Card hover effect
+.hover-lift {
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+  }
+}
+
+// Tibetan text styling
+.tibetan-text {
+  font-size: 1.1em;
+  line-height: 1.6;
+}
+

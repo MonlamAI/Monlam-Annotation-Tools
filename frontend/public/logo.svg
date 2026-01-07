@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50">
+  <defs>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#B8963E"/>
+      <stop offset="100%" style="stop-color:#9A7B32"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="5" width="40" height="40" rx="8" fill="#1a1a2e"/>
+  <text x="20" y="35" font-family="serif" font-size="24" font-weight="bold" fill="url(#goldGradient)" text-anchor="middle">མ</text>
+  <text x="55" y="32" font-family="sans-serif" font-size="18" font-weight="bold" fill="#B8963E">MONLAM</text>
+  <text x="55" y="44" font-family="sans-serif" font-size="10" fill="#888">Annotation Tools</text>
+</svg>
+

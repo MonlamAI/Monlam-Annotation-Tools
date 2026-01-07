@@ -1,0 +1,25 @@
+export default {
+  mainTitle: 'མིའི་ཆེད་ཡི་གེ་མཆན་འགོད།',
+  getStarted: 'འགོ་བརྩམས།',
+  startAnnotation: 'མཆན་འགོད་འགོ་བརྩམས།',
+  featuresTitle: 'ཁྱད་ཆོས་མཆོག་ཏུ་གྱུར་པ།',
+  featuresTitle1: 'ཚོགས་པའི་མཉམ་ལས།',
+  featuresText1: 'ཁྱོད་ཀྱི་ལས་རོགས་དང་མཉམ་དུ་མཆན་འགོད།',
+  featuresTitle2: 'སྐད་རིགས་གང་ཡང་།',
+  featuresText2: 'སྐད་རིགས་གང་ཡང་རུང་བའི་མཆན་འགོད།',
+  featuresTitle3: 'ཁ་ཕྱེ་རྩོམ་ཆས།',
+  featuresText3: 'རིན་མེད་དང་རང་མོས་བཟོ་བཅོས་བྱེད་རུང་བའི་མཆན་འགོད།',
+  footerTitle: 'ཁྱོད་ཀྱི་བསམ་བློ་མགྱོགས་པོར་དངོས་སུ་སྒྲུབ།',
+  demoDropDown: 'ཚོད་ལྟ་བྱེད།',
+  demoNER: 'མིང་ཚིག་དབྱེ་འབྱེད།',
+  demoSent: 'སེམས་ཚོར་དབྱེ་ཞིབ།',
+  demoTranslation: 'ཡིག་སྒྱུར།',
+  demoTextToSQL: 'ཡི་གེ་ནས་SQL',
+  demoIntenDetectSlotFil: 'དམིགས་བསལ་འཚོལ་ཞིབ།',
+  demoImageClas: 'པར་རིས་དབྱེ་འབྱེད།',
+  demoImageCapt: 'པར་རིས་འགྲེལ་བཤད།',
+  demoObjDetect: 'དངོས་པོ་འཚོལ་ཞིབ།',
+  demoPolygSegm: 'མཐའ་རིས་དབྱེ་བཞག',
+  demoSTT: 'སྐད་ཆ་ནས་ཡི་གེ།'
+}
+
