@@ -10,12 +10,13 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-from apps.monlam_ui.health import HealthCheckView
+from apps.monlam_ui.health import HealthCheckView, DebugStaticView
 from apps.monlam_ui.frontend import FrontendView
 
 urlpatterns = [
-    # Health check
+    # Health check and debug
     path('health/', HealthCheckView.as_view(), name='health'),
+    path('debug-static/', DebugStaticView.as_view(), name='debug_static'),
     
     path('admin/', admin.site.urls),
     

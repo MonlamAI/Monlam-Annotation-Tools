@@ -129,7 +129,13 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Whitenoise: Serve Vue.js dist folder at root URL
 # Files in static/dist/ will be served at / (e.g., /assets/index.js, /fonts/...)
-WHITENOISE_ROOT = BASE_DIR / 'static' / 'dist'
+WHITENOISE_ROOT = str(BASE_DIR / 'static' / 'dist')
+
+# Enable autorefresh in DEBUG mode (scan files on each request)
+WHITENOISE_AUTOREFRESH = DEBUG
+
+# Skip compression for already-hashed files (Vue already hashes)
+WHITENOISE_SKIP_COMPRESS_EXTENSIONS = ['map']
 
 # Media files
 MEDIA_URL = '/media/'
