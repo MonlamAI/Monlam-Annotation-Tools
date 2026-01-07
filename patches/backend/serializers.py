@@ -1,8 +1,11 @@
 """
-Patched serializers.py for Doccano with external URL support.
+Patched serializers.py for Doccano with external URL support + tracking fields.
 
 This file replaces /doccano/backend/examples/serializers.py
-Fixes the issue where external URLs get /media/ prefix added.
+
+Features:
+1. Fixes external URLs (don't add /media/ prefix)
+2. Adds annotation tracking fields (annotated_by_username, reviewed_by_username, tracking_status)
 """
 
 from rest_framework import serializers
@@ -29,6 +32,13 @@ class ExampleSerializer(serializers.ModelSerializer):
     is_confirmed = serializers.SerializerMethodField()
     # Override filename to handle external URLs
     filename = serializers.SerializerMethodField()
+    
+    # ========================================
+    # MONLAM: Annotation tracking fields
+    # ========================================
+    annotated_by_username = serializers.SerializerMethodField()
+    reviewed_by_username = serializers.SerializerMethodField()
+    tracking_status = serializers.SerializerMethodField()
 
     @classmethod
     def get_annotation_approver(cls, instance):
@@ -59,6 +69,78 @@ class ExampleSerializer(serializers.ModelSerializer):
         if instance.filename:
             return instance.filename.url
         return None
+    
+    # ========================================
+    # MONLAM: Tracking field getters
+    # ========================================
+    
+    def get_annotated_by_username(self, obj):
+        """Get the username of who annotated this example"""
+        try:
+            # Try to get from prefetched data first (for efficiency)
+            if hasattr(obj, 'tracking'):
+                tracking = obj.tracking
+                if tracking and tracking.annotated_by:
+                    return tracking.annotated_by.username
+                return None
+            
+            # Fallback: query database
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                example_id=obj.id,
+                project_id=obj.project_id
+            ).select_related('annotated_by').first()
+            
+            if tracking and tracking.annotated_by:
+                return tracking.annotated_by.username
+            return None
+        except Exception as e:
+            # Silently fail if tracking table doesn't exist yet
+            return None
+    
+    def get_reviewed_by_username(self, obj):
+        """Get the username of who reviewed this example"""
+        try:
+            # Try to get from prefetched data first (for efficiency)
+            if hasattr(obj, 'tracking'):
+                tracking = obj.tracking
+                if tracking and tracking.reviewed_by:
+                    return tracking.reviewed_by.username
+                return None
+            
+            # Fallback: query database
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                example_id=obj.id,
+                project_id=obj.project_id
+            ).select_related('reviewed_by').first()
+            
+            if tracking and tracking.reviewed_by:
+                return tracking.reviewed_by.username
+            return None
+        except Exception as e:
+            # Silently fail if tracking table doesn't exist yet
+            return None
+    
+    def get_tracking_status(self, obj):
+        """Get the tracking status"""
+        try:
+            # Try to get from prefetched data first (for efficiency)
+            if hasattr(obj, 'tracking'):
+                tracking = obj.tracking
+                return tracking.status if tracking else 'pending'
+            
+            # Fallback: query database
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                example_id=obj.id,
+                project_id=obj.project_id
+            ).first()
+            
+            return tracking.status if tracking else 'pending'
+        except Exception as e:
+            # Silently fail if tracking table doesn't exist yet
+            return 'pending'
 
     class Meta:
         model = Example
@@ -72,8 +154,20 @@ class ExampleSerializer(serializers.ModelSerializer):
             "is_confirmed",
             "upload_name",
             "score",
+            # MONLAM: Tracking fields
+            "annotated_by_username",
+            "reviewed_by_username",
+            "tracking_status",
         ]
-        read_only_fields = ["filename", "is_confirmed", "upload_name"]
+        read_only_fields = [
+            "filename", 
+            "is_confirmed", 
+            "upload_name",
+            # MONLAM: Tracking fields are read-only
+            "annotated_by_username",
+            "reviewed_by_username",
+            "tracking_status",
+        ]
 
 
 class ExampleStateSerializer(serializers.ModelSerializer):
@@ -81,4 +175,3 @@ class ExampleStateSerializer(serializers.ModelSerializer):
         model = ExampleState
         fields = ("id", "example", "confirmed_by", "confirmed_at")
         read_only_fields = ("id", "example", "confirmed_by", "confirmed_at")
-

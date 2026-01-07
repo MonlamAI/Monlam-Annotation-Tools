@@ -139,3 +139,5 @@ class CanLockExample(permissions.BasePermission):
         # Either not locked, locked by this user, or lock expired
         return True
 
+
+

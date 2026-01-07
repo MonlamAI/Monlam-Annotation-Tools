@@ -257,3 +257,5 @@ Metrics redirect: ✅ / ❌
 **Current branch:** `safe-fixes` (created from 318f73b)  
 **Ready to add minimal fixes based on your feedback.**
 
+
+

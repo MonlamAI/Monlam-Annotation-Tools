@@ -1049,37 +1049,33 @@
         }
     }
     
-    // METRICS PAGE REDIRECT - RUNS IMMEDIATELY (before Vue loads)
-    function redirectMetricsPage() {
-        const path = window.location.pathname;
-        const match = path.match(/^\/projects\/(\d+)\/metrics/);
+    // METRICS PAGE REDIRECT - Vue Router Aware (Professional Implementation)
+    function setupMetricsRedirect() {
+        console.log('[Monlam Metrics] Setting up redirect interception...');
         
-        if (match) {
-            const projectId = match[1];
-            const redirectUrl = `/monlam/${projectId}/completion/`;
+        // Check if we're already ON the metrics page (immediate redirect)
+        function checkAndRedirect() {
+            const path = window.location.pathname;
+            const match = path.match(/^\/projects\/(\d+)\/metrics/);
             
-            console.log('[Monlam] ⚡ IMMEDIATE REDIRECT from metrics to completion dashboard:', redirectUrl);
-            
-            // IMMEDIATE redirect (before Vue can load)
-            window.location.replace(redirectUrl);
-            
-            // Stop execution
-            throw new Error('Redirecting to completion dashboard');
+            if (match) {
+                const projectId = match[1];
+                const redirectUrl = `/monlam/${projectId}/completion/`;
+                console.log('[Monlam Metrics] ⚡ On metrics page, redirecting to:', redirectUrl);
+                window.location.replace(redirectUrl);
+                return true;
+            }
+            return false;
         }
-    }
-    
-    // Run IMMEDIATELY
-    try {
-        redirectMetricsPage();
-    } catch (e) {
-        if (e.message !== 'Redirecting to completion dashboard') {
-            console.error('[Monlam] Redirect error:', e);
+        
+        // Try immediate redirect if on metrics page
+        if (checkAndRedirect()) {
+            return; // Stop further execution
         }
-    }
-    
-    // Intercept clicks on Metrics menu item (ULTRA-AGGRESSIVE MODE)
-    function interceptMetricsClick() {
-        // Method 1: Capture phase event listener (earliest possible)
+        
+        // ========================================
+        // Method 1: Intercept clicks (capture phase)
+        // ========================================
         document.addEventListener('click', function(e) {
             const link = e.target.closest('a');
             if (!link) return;
@@ -1092,83 +1088,136 @@
             if (match) {
                 const projectId = match[1];
                 
-                // STOP EVERYTHING
+                // Prevent default behavior
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
                 
-                // IMMEDIATE redirect
+                // Redirect
                 const redirectUrl = `/monlam/${projectId}/completion/`;
-                console.log('[Monlam] ⚡ Click intercepted, immediate redirect to:', redirectUrl);
-                window.location.replace(redirectUrl);  // Use replace, not href
+                console.log('[Monlam Metrics] ⚡ Click intercepted, redirecting to:', redirectUrl);
+                window.location.replace(redirectUrl);
                 
                 return false;
             }
-        }, true); // Capture phase = runs FIRST
+        }, true); // Capture phase = runs BEFORE Vue Router
         
-        // Method 2: Aggressive link monitoring (runs every 200ms, not 500ms)
-        setInterval(() => {
+        // ========================================
+        // Method 2: Monitor and override metrics links
+        // ========================================
+        function overrideMetricsLinks() {
             document.querySelectorAll('a[href*="/metrics"]').forEach(link => {
                 const href = link.getAttribute('href') || link.href;
                 const match = href.match(/\/projects\/(\d+)\/metrics/);
-                if (match) {
+                
+                if (match && !link.hasAttribute('data-monlam-metrics-override')) {
                     const projectId = match[1];
+                    link.setAttribute('data-monlam-metrics-override', 'true');
                     
-                    // Mark as processed
-                    if (!link.getAttribute('data-monlam-intercept')) {
-                        link.setAttribute('data-monlam-intercept', 'true');
-                        console.log('[Monlam] ⚡ Found metrics link, adding aggressive intercept');
-                    }
-                    
-                    // Override BOTH onclick and href
+                    // Override onclick
                     link.onclick = function(e) {
                         e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
+                        
                         const redirectUrl = `/monlam/${projectId}/completion/`;
-                        console.log('[Monlam] ⚡ Direct onclick, immediate redirect to:', redirectUrl);
+                        console.log('[Monlam Metrics] ⚡ Direct click, redirecting to:', redirectUrl);
                         window.location.replace(redirectUrl);
+                        
                         return false;
                     };
                     
-                    // Also override addEventListener if Vue added it
-                    const originalAddEventListener = link.addEventListener;
-                    link.addEventListener = function(type, listener, options) {
-                        if (type === 'click') {
-                            // Don't allow Vue to add click listeners to metrics links
-                            console.log('[Monlam] ⚡ Blocked Vue click listener on metrics link');
-                            return;
-                        }
-                        return originalAddEventListener.call(this, type, listener, options);
-                    };
+                    console.log('[Monlam Metrics] ✅ Overrode metrics link for project', projectId);
                 }
             });
-        }, 200); // Check every 200ms (faster)
+        }
         
-        // Method 3: Intercept Vue Router BEFORE it initializes
-        if (window.$nuxt && window.$nuxt.$router) {
-            const originalPush = window.$nuxt.$router.push;
-            window.$nuxt.$router.push = function(location) {
-                if (typeof location === 'string' && location.includes('/metrics')) {
-                    const match = location.match(/\/projects\/(\d+)\/metrics/);
+        // Run initially and periodically
+        overrideMetricsLinks();
+        setInterval(overrideMetricsLinks, 500);
+        
+        // ========================================
+        // Method 3: Intercept Vue Router (when available)
+        // ========================================
+        function interceptVueRouter() {
+            // Wait for $nuxt to be available
+            if (!window.$nuxt || !window.$nuxt.$router) {
+                return;
+            }
+            
+            // Only intercept once
+            if (window.$nuxt.$router._monlamMetricsIntercepted) {
+                return;
+            }
+            
+            const router = window.$nuxt.$router;
+            
+            // Intercept push
+            const originalPush = router.push;
+            router.push = function(location) {
+                // Handle both string and object location
+                let path = typeof location === 'string' ? location : location.path;
+                
+                if (path && path.includes('/metrics')) {
+                    const match = path.match(/\/projects\/(\d+)\/metrics/);
                     if (match) {
                         const projectId = match[1];
                         const redirectUrl = `/monlam/${projectId}/completion/`;
-                        console.log('[Monlam] ⚡ Intercepted Vue Router push, redirecting to:', redirectUrl);
+                        console.log('[Monlam Metrics] ⚡ Intercepted Router.push, redirecting to:', redirectUrl);
                         window.location.replace(redirectUrl);
-                        return;
+                        return Promise.resolve(); // Return resolved promise to avoid errors
                     }
                 }
+                
                 return originalPush.call(this, location);
             };
+            
+            // Intercept replace
+            const originalReplace = router.replace;
+            router.replace = function(location) {
+                let path = typeof location === 'string' ? location : location.path;
+                
+                if (path && path.includes('/metrics')) {
+                    const match = path.match(/\/projects\/(\d+)\/metrics/);
+                    if (match) {
+                        const projectId = match[1];
+                        const redirectUrl = `/monlam/${projectId}/completion/`;
+                        console.log('[Monlam Metrics] ⚡ Intercepted Router.replace, redirecting to:', redirectUrl);
+                        window.location.replace(redirectUrl);
+                        return Promise.resolve();
+                    }
+                }
+                
+                return originalReplace.call(this, location);
+            };
+            
+            router._monlamMetricsIntercepted = true;
+            console.log('[Monlam Metrics] ✅ Vue Router intercepted');
         }
+        
+        // Try to intercept router immediately
+        interceptVueRouter();
+        
+        // Keep trying until router is available
+        let attempts = 0;
+        const maxAttempts = 20;
+        const routerCheckInterval = setInterval(() => {
+            attempts++;
+            interceptVueRouter();
+            
+            if (window.$nuxt?.$router?._monlamMetricsIntercepted || attempts >= maxAttempts) {
+                clearInterval(routerCheckInterval);
+            }
+        }, 500);
+        
+        console.log('[Monlam Metrics] ✅ Redirect system initialized');
     }
     
     // Removed: autoAnnotateExample() and autoStartAnnotation()
     // No longer needed since we enhance the original dataset table
     // Users just click Doccano's original Annotate button
     
-    // FEATURE: ENHANCE DATASET TABLE WITH ASSIGNMENT COLUMNS
+    // FEATURE: ENHANCE DATASET TABLE WITH TRACKING COLUMNS (Vue-Aware)
     async function enhanceDatasetTable() {
         // Check if we're on dataset page
         if (!window.location.pathname.includes('/dataset')) {
@@ -1181,106 +1230,107 @@
             return;
         }
         
-        console.log('[Monlam Dataset] Enhancing dataset table for project', projectId);
+        // CRITICAL: Check if already enhanced for THIS specific project (page-level flag)
+        const enhanceKey = `monlam_dataset_enhanced_${projectId}_${window.location.pathname}`;
+        if (window[enhanceKey]) {
+            console.log('[Monlam Dataset] Table already enhanced for this page, skipping');
+            return;
+        }
+        
+        console.log('[Monlam Dataset] ✨ Starting table enhancement for project', projectId);
         
         try {
-            // Fetch current user info
-            const userResp = await fetch('/v1/me');
-            const currentUser = userResp.ok ? await userResp.json() : null;
-            const currentUserId = currentUser ? currentUser.id : null;
-            const isAdmin = currentUser ? currentUser.is_superuser : false;
-            
-            console.log('[Monlam Dataset] Current user:', currentUserId, 'Admin:', isAdmin);
-            
-            // Fetch examples with embedded tracking data from serializer
+            // Fetch examples with embedded tracking data from SERIALIZER
+            // The serializer adds: annotated_by_username, reviewed_by_username, tracking_status
             const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000`);
-            const examplesData = examplesResp.ok ? await examplesResp.json() : { results: [] };
+            if (!examplesResp.ok) {
+                console.error('[Monlam Dataset] Failed to fetch examples:', examplesResp.status);
+                return;
+            }
+            
+            const examplesData = await examplesResp.json();
             
             // Build a map of example_id -> tracking data
+            // IMPORTANT: Use CORRECT field names from serializer
             const trackingMap = {};
             (examplesData.results || []).forEach(ex => {
                 trackingMap[ex.id] = {
-                    annotated_by: ex.annotated_by || null,
-                    reviewed_by: ex.reviewed_by || null,
-                    status: ex.assignment_status || 'pending'
+                    annotated_by: ex.annotated_by_username || null,  // ← Correct field name
+                    reviewed_by: ex.reviewed_by_username || null,    // ← Correct field name
+                    status: ex.tracking_status || 'pending'           // ← Correct field name
                 };
             });
             
-            console.log('[Monlam Dataset] Loaded', Object.keys(trackingMap).length, 'tracking records');
+            console.log('[Monlam Dataset] ✅ Loaded', Object.keys(trackingMap).length, 'tracking records');
             
-            // Function to enhance table (can be called multiple times)
+            // Function to enhance table (runs ONCE with Vue reactivity awareness)
             function enhanceTable() {
-                // Check if already enhanced
                 const headerRow = document.querySelector('thead tr');
-                if (headerRow && headerRow.querySelector('.monlam-status-header')) {
-                    console.log('[Monlam Dataset] Table already enhanced, skipping');
-                    return; // Already enhanced
-                }
-                // Add headers at positions 4, 5, 6 (after first 3 columns)
-                const headerRow = document.querySelector('thead tr');
-                if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
-                    const headers = Array.from(headerRow.querySelectorAll('th'));
-                    
-                    // Create headers
-                    const annotatedHeader = document.createElement('th');
-                    annotatedHeader.textContent = 'Annotated By';
-                    annotatedHeader.className = 'monlam-status-header monlam-annotated-header';
-                    annotatedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    
-                    const reviewedHeader = document.createElement('th');
-                    reviewedHeader.textContent = 'Reviewed By';
-                    reviewedHeader.className = 'monlam-status-header monlam-reviewed-header';
-                    reviewedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    
-                    const statusHeader = document.createElement('th');
-                    statusHeader.textContent = 'Status';
-                    statusHeader.className = 'monlam-status-header monlam-status-col-header';
-                    statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    
-                    // Insert after the 3rd column (positions 4, 5, 6)
-                    if (headers.length >= 3) {
-                        const thirdHeader = headers[2];
-                        // Insert in correct order: 4, 5, 6
-                        thirdHeader.insertAdjacentElement('afterend', annotatedHeader);
-                        annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
-                        reviewedHeader.insertAdjacentElement('afterend', statusHeader);
-                        console.log('[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6');
-                    } else {
-                        // Fallback: append at end
-                        headerRow.appendChild(annotatedHeader);
-                        headerRow.appendChild(reviewedHeader);
-                        headerRow.appendChild(statusHeader);
-                        console.log('[Monlam Dataset] ✅ Headers appended (less than 3 columns)');
-                    }
+                if (!headerRow) {
+                    console.log('[Monlam Dataset] No header row found yet');
+                    return false;
                 }
                 
-                // Add data cells at positions 4, 5, 6 (after first 3 cells)
-                const dataRows = document.querySelectorAll('tbody tr');
+                // Check if ALREADY enhanced (global check)
+                if (headerRow.querySelector('.monlam-status-header')) {
+                    console.log('[Monlam Dataset] Table already has headers');
+                    return true; // Already done
+                }
+                
+                const headers = Array.from(headerRow.querySelectorAll('th'));
+                if (headers.length < 3) {
+                    console.log('[Monlam Dataset] Not enough columns yet:', headers.length);
+                    return false;
+                }
+                
+                // Create headers
+                const annotatedHeader = document.createElement('th');
+                annotatedHeader.textContent = 'Annotated By';
+                annotatedHeader.className = 'monlam-status-header monlam-annotated-header';
+                annotatedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
+                
+                const reviewedHeader = document.createElement('th');
+                reviewedHeader.textContent = 'Reviewed By';
+                reviewedHeader.className = 'monlam-status-header monlam-reviewed-header';
+                reviewedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
+                
+                const statusHeader = document.createElement('th');
+                statusHeader.textContent = 'Status';
+                statusHeader.className = 'monlam-status-header monlam-status-col-header';
+                statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
+                
+                // Insert after the 3rd column (positions 4, 5, 6)
+                const thirdHeader = headers[2];
+                thirdHeader.insertAdjacentElement('afterend', annotatedHeader);
+                annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
+                reviewedHeader.insertAdjacentElement('afterend', statusHeader);
+                console.log('[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6');
+                
+                // Add data cells to rows
+                const dataRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
+                console.log('[Monlam Dataset] Processing', dataRows.length, 'unprocessed rows');
+                
                 dataRows.forEach(row => {
-                    // Check if ALREADY enhanced (better duplicate detection)
-                    if (row.hasAttribute('data-monlam-enhanced')) {
-                        return; // Skip already enhanced rows
-                    }
-                    
-                    // Mark as being processed RIGHT NOW (before adding cells)
+                    // Mark as processed IMMEDIATELY
                     row.setAttribute('data-monlam-enhanced', 'true');
                     
-                    // Extract example ID (first cell usually contains ID)
-                    const firstCell = row.querySelector('td:first-child');
-                    if (!firstCell) return;
+                    // Extract example ID from first cell
+                    const cells = Array.from(row.querySelectorAll('td'));
+                    if (cells.length < 3) return;
                     
-                    const idMatch = firstCell.textContent.match(/(\d+)/);
+                    // First cell typically contains checkbox/ID
+                    const idMatch = cells[1]?.textContent.match(/(\d+)/) || cells[0]?.textContent.match(/(\d+)/);
                     if (!idMatch) return;
                     
                     const exampleId = parseInt(idMatch[1]);
-                    const tracking = trackingMap[exampleId];
+                    const tracking = trackingMap[exampleId] || {};
                     
-                    // Get values from tracking data (comes from EnhancedExampleSerializer)
-                    const annotatedBy = tracking?.annotated_by || '—';
-                    const reviewedBy = tracking?.reviewed_by || '—';
-                    const status = tracking?.status || 'pending';
+                    // Get values with proper fallbacks
+                    const annotatedBy = tracking.annotated_by || '—';
+                    const reviewedBy = tracking.reviewed_by || '—';
+                    const status = tracking.status || 'pending';
                     
-                    // Status badge colors (matching AnnotationTracking statuses)
+                    // Status badge colors
                     const statusColors = {
                         'pending': '#e0e0e0',
                         'in_progress': '#2196f3',
@@ -1290,9 +1340,6 @@
                     };
                     const color = statusColors[status] || '#e0e0e0';
                     const textColor = (status === 'pending') ? '#666' : 'white';
-                    
-                    // Get all cells in row
-                    const cells = Array.from(row.querySelectorAll('td'));
                     
                     // Create cells
                     const annotatedCell = document.createElement('td');
@@ -1310,68 +1357,94 @@
                     statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                     statusCell.innerHTML = `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`;
                     
-                    // Insert after the 3rd cell (positions 4, 5, 6) - SAME as headers
-                    if (cells.length >= 3) {
-                        const thirdCell = cells[2];
-                        // Insert in correct order: 4, 5, 6
-                        thirdCell.insertAdjacentElement('afterend', annotatedCell);
-                        annotatedCell.insertAdjacentElement('afterend', reviewedCell);
-                        reviewedCell.insertAdjacentElement('afterend', statusCell);
-                    } else {
-                        // Fallback: append at end
-                        row.appendChild(annotatedCell);
-                        row.appendChild(reviewedCell);
-                        row.appendChild(statusCell);
-                    }
+                    // Insert after the 3rd cell
+                    const thirdCell = cells[2];
+                    thirdCell.insertAdjacentElement('afterend', annotatedCell);
+                    annotatedCell.insertAdjacentElement('afterend', reviewedCell);
+                    reviewedCell.insertAdjacentElement('afterend', statusCell);
                 });
                 
                 console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');
+                return true;
             }
             
-            // Call enhanceTable - but only ONCE per navigation
-            // Use a flag to prevent multiple calls
-            if (!window.monlamDatasetEnhanced) {
-                window.monlamDatasetEnhanced = true;
-                setTimeout(enhanceTable, 1000);
-                setTimeout(enhanceTable, 2000);
-                setTimeout(enhanceTable, 3000);
+            // Try to enhance once Vue has rendered the table
+            // Use exponential backoff to avoid hammering the DOM
+            let attempt = 0;
+            const maxAttempts = 5;
+            const baseDelay = 500;
+            
+            function tryEnhance() {
+                attempt++;
+                const success = enhanceTable();
+                
+                if (success) {
+                    // Mark as complete for THIS specific page
+                    window[enhanceKey] = true;
+                    console.log('[Monlam Dataset] ✅ Enhancement complete after', attempt, 'attempts');
+                    
+                    // Set up MutationObserver to handle new rows (e.g., pagination)
+                    const tbody = document.querySelector('tbody');
+                    if (tbody) {
+                        const rowObserver = new MutationObserver(() => {
+                            const newRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
+                            if (newRows.length > 0) {
+                                console.log('[Monlam Dataset] 🔄 Detected', newRows.length, 'new rows');
+                                enhanceTable(); // Process new rows only
+                            }
+                        });
+                        rowObserver.observe(tbody, { childList: true });
+                    }
+                } else if (attempt < maxAttempts) {
+                    const delay = baseDelay * Math.pow(1.5, attempt);
+                    console.log('[Monlam Dataset] Attempt', attempt, 'failed, retrying in', delay, 'ms');
+                    setTimeout(tryEnhance, delay);
+                }
             }
+            
+            // Start enhancement
+            setTimeout(tryEnhance, 500);
             
         } catch (error) {
-            console.error('[Monlam Dataset] Error enhancing table:', error);
+            console.error('[Monlam Dataset] ❌ Error enhancing table:', error);
         }
     }
     
     function init() {
-        console.log('[Monlam] Initializing features...');
+        console.log('[Monlam] 🚀 Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
         
-        // Set up metrics click intercept IMMEDIATELY (before anything else)
-        interceptMetricsClick();
+        // Set up metrics redirect IMMEDIATELY (before Vue Router)
+        setupMetricsRedirect();
         
+        // Initialize features after a short delay (let Vue render)
         setTimeout(() => {
             enableAudioLoop();
-            enhanceDatasetTable(); // Add assignment columns to dataset table
-            addApproveRejectButtons(); // Add approve/reject buttons for reviewers
+            enhanceDatasetTable();
+            addApproveRejectButtons();
         }, 1000);
         
-        // Re-enhance table on SPA navigation
+        // Monitor SPA navigation and re-initialize on route change
         let lastPath = window.location.pathname;
         setInterval(() => {
-            if (window.location.pathname !== lastPath) {
-                lastPath = window.location.pathname;
-                console.log('[Monlam] Navigation detected:', lastPath);
+            const currentPath = window.location.pathname;
+            
+            if (currentPath !== lastPath) {
+                lastPath = currentPath;
+                console.log('[Monlam] 🔄 Navigation detected:', currentPath);
                 
-                // Reset flag on navigation
-                window.monlamDatasetEnhanced = false;
+                // Reset page-specific flags (but not global ones)
+                // The enhance functions will check their own page-specific flags
                 
                 setTimeout(() => {
                     enableAudioLoop();
-                    enhanceDatasetTable(); // Re-enhance dataset table on navigation
-                    addApproveRejectButtons(); // Re-add approve/reject buttons on navigation
+                    enhanceDatasetTable();
+                    addApproveRejectButtons();
                 }, 500);
             }
         }, 500);
+        
+        console.log('[Monlam] ✅ Initialization complete');
     }
     
     if (document.readyState === 'loading') {

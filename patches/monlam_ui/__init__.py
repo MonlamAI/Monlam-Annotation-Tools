@@ -8,3 +8,5 @@ Provides custom views for:
 
 default_app_config = 'monlam_ui.apps.MonlamUiConfig'
 
+
+
