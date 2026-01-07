@@ -232,9 +232,5 @@ WORKDIR /doccano/backend
 # Set Django settings module explicitly for production
 ENV DJANGO_SETTINGS_MODULE=config.settings.production
 
-# Using shell form (not exec form) to ensure env var expansion works
-# Note: /bin/sh doesn't support ${var:start:len}, so we just check if it's set
-CMD echo "🔍 Checking database connection..." && \
-    echo "🐍 Django Settings: $DJANGO_SETTINGS_MODULE" && \
-    python manage.py migrate --noinput && \
-    gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
+# Using shell form - single line to avoid newline issues
+CMD python manage.py migrate --noinput && gunicorn --bind=0.0.0.0:${PORT:-8000} --workers=${WEB_CONCURRENCY:-1} --timeout=300 config.wsgi:application
