@@ -1,21 +1,14 @@
 """
-Monlam Visibility Middleware
+Monlam Visibility Middleware - SIMPLIFIED
 
-A SAFE approach to filter examples for annotators.
-This runs at request/response time, NOT during app initialization.
-
-How it works:
-1. Intercepts API responses to /v1/projects/{id}/examples
-2. Filters results based on user role and ExampleState (confirmation)
-3. For single-item requests (limit=1), returns the Nth VISIBLE example
-4. Does NOT modify views or querysets directly
+Instead of complex filtering, we now:
+1. Use Doccano's native confirmed=false filter
+2. Just log requests for debugging
+3. Let the frontend handle filter defaults
 """
 
-import json
 import re
 import sys
-from datetime import timedelta
-from django.utils import timezone
 
 
 def log(msg):
@@ -25,155 +18,20 @@ def log(msg):
 
 class VisibilityMiddleware:
     """
-    Middleware to filter example visibility for annotators.
+    Simplified middleware - just logging now.
     
-    - Admins/Managers/Approvers: See all examples
-    - Annotators: See only unannotated + own rejected + own locked
-    
-    IMPORTANT: Handles both list requests AND single-item requests correctly.
+    Visibility is handled by:
+    1. Doccano's native ?confirmed=false filter (set via frontend)
+    2. Frontend JavaScript to default filter for annotators
     """
     
     def __init__(self, get_response):
-        log('[Monlam MW] 🚀 VisibilityMiddleware initialized!')
+        log('[Monlam MW] 🚀 VisibilityMiddleware initialized (simplified)')
         self.get_response = get_response
-        # Regex to match examples API endpoint
-        self.examples_pattern = re.compile(r'^/v1/projects/(\d+)/examples/?$')
     
     def __call__(self, request):
-        # Debug: Log EVERY request to see if middleware is active
-        if '/examples' in request.path:
-            log(f'[Monlam MW] 📥 Request: {request.method} {request.path}')
-        
-        # Only process GET requests to examples API
-        if request.method != 'GET':
-            return self.get_response(request)
-        
-        # Check if this is an examples API call
-        match = self.examples_pattern.match(request.path)
-        if not match:
-            return self.get_response(request)
-        
-        # Don't filter if not authenticated
-        if not request.user.is_authenticated:
-            log('[Monlam Middleware] User not authenticated, skipping filter')
-            return self.get_response(request)
-        
-        # Superusers see everything
-        if request.user.is_superuser:
-            log('[Monlam Middleware] Superuser, showing all')
-            return self.get_response(request)
-        
-        project_id = match.group(1)
-        
-        try:
-            # Check user's role
-            if self._is_privileged_user(request.user, project_id):
-                log(f'[Monlam Middleware] User {request.user.username} is privileged, showing all')
-                return self.get_response(request)
-            
-            log(f'[Monlam Middleware] 🔍 User {request.user.username} is annotator')
-            
-            # Parse query params
-            query_string = request.META.get('QUERY_STRING', '')
-            limit_match = re.search(r'limit=(\d+)', query_string)
-            offset_match = re.search(r'offset=(\d+)', query_string)
-            
-            limit = int(limit_match.group(1)) if limit_match else 10
-            offset = int(offset_match.group(1)) if offset_match else 0
-            
-            log(f'[Monlam Middleware] Requested: limit={limit}, offset={offset}')
-            
-            # For single-item requests (annotation page), we need special handling
-            # to return the Nth VISIBLE example, not the Nth overall example
-            if limit == 1:
-                return self._handle_single_item_request(request, project_id, offset)
-            
-            # For list requests, filter the response
-            response = self.get_response(request)
-            return self._filter_response(response, request.user, project_id)
-            
-        except Exception as e:
-            log(f'[Monlam Middleware] Error: {e}')
-            import traceback
-            traceback.print_exc()
-            # On error, return original response (fail open for safety)
-            return self.get_response(request)
-    
-    def _handle_single_item_request(self, request, project_id, offset):
-        """
-        Handle limit=1 requests (annotation page).
-        Returns the Nth VISIBLE example, not the Nth overall example.
-        """
-        log(f'[Monlam Middleware] 🎯 Single-item request: finding visible example at index {offset}')
-        
-        try:
-            from examples.models import Example, ExampleState
-            from django.http import JsonResponse
-            
-            # Get all examples for this project, ordered by ID
-            all_examples = list(Example.objects.filter(project_id=project_id).order_by('id'))
-            
-            # Get confirmation states
-            confirmed_states = ExampleState.objects.filter(
-                example__project_id=project_id
-            ).select_related('confirmed_by')
-            confirmed_map = {state.example_id: state.confirmed_by for state in confirmed_states}
-            
-            # Get locking data
-            from assignment.simple_tracking import AnnotationTracking
-            tracking_qs = AnnotationTracking.objects.filter(project_id=project_id).select_related('locked_by')
-            tracking_map = {t.example_id: t for t in tracking_qs}
-            
-            # Build list of VISIBLE examples
-            visible_examples = []
-            for example in all_examples:
-                confirmed_by = confirmed_map.get(example.id)
-                tracking = tracking_map.get(example.id)
-                
-                if self._should_show_example(example.id, confirmed_by, tracking, request.user):
-                    visible_examples.append(example)
-            
-            log(f'[Monlam Middleware] Total: {len(all_examples)}, Visible: {len(visible_examples)}')
-            
-            # Get the example at the requested offset in the VISIBLE list
-            if offset >= len(visible_examples):
-                log(f'[Monlam Middleware] Offset {offset} beyond visible count {len(visible_examples)}')
-                # Return empty result
-                return JsonResponse({
-                    'count': len(visible_examples),
-                    'next': None,
-                    'previous': None,
-                    'results': []
-                })
-            
-            example = visible_examples[offset]
-            log(f'[Monlam Middleware] ✅ Returning visible example at index {offset}: ID={example.id}')
-            
-            # Serialize the example
-            example_data = {
-                'id': example.id,
-                'uuid': str(example.uuid) if hasattr(example, 'uuid') else None,
-                'text': example.text if hasattr(example, 'text') else '',
-                'meta': example.meta if hasattr(example, 'meta') else {},
-                'filename': example.filename if hasattr(example, 'filename') else '',
-                'upload_name': example.upload_name if hasattr(example, 'upload_name') else '',
-                'is_confirmed': example.id in confirmed_map,
-                'annotation_approver': None,
-            }
-            
-            return JsonResponse({
-                'count': len(visible_examples),
-                'next': f'/v1/projects/{project_id}/examples?limit=1&offset={offset+1}' if offset + 1 < len(visible_examples) else None,
-                'previous': f'/v1/projects/{project_id}/examples?limit=1&offset={offset-1}' if offset > 0 else None,
-                'results': [example_data]
-            })
-            
-        except Exception as e:
-            log(f'[Monlam Middleware] Single-item error: {e}')
-            import traceback
-            traceback.print_exc()
-            # Fallback to original response
-            return self.get_response(request)
+        # Just pass through - no filtering
+        return self.get_response(request)
     
     def _is_privileged_user(self, user, project_id):
         """Check if user is admin/manager/approver."""

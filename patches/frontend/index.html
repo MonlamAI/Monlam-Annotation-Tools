@@ -1027,14 +1027,63 @@
     }  // Close addApproveRejectButtons
     
     // ========================================
-    // AUTO-SKIP REMOVED
+    // FEATURE: AUTO-FILTER FOR ANNOTATORS
+    // Uses Doccano's native ?confirmed=false filter
     // ========================================
-    // The visibility middleware already filters examples for annotators:
-    // - Dataset table only shows unconfirmed/rejected examples
-    // - Clicking any row's "Annotate" → shows that specific example
-    // - "Start Annotation" uses the filtered list, so page=0 = first available
-    //
-    // No frontend auto-skip needed!
+    async function setDefaultFilterForAnnotators() {
+        const path = window.location.pathname;
+        
+        // Only run on dataset page
+        if (!path.includes('/dataset')) return;
+        
+        // Check if already has confirmed parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('confirmed')) {
+            console.log('[Monlam Filter] URL already has confirmed param, respecting user choice');
+            return;
+        }
+        
+        try {
+            const projectMatch = path.match(/\/projects\/(\d+)/);
+            if (!projectMatch) return;
+            const projectId = projectMatch[1];
+            
+            // Check user role
+            const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
+            if (!roleResp.ok) return;
+            const roleData = await roleResp.json();
+            const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
+            
+            // If annotator, redirect to filtered view
+            if (roleName.includes('annotator') && !roleName.includes('admin') && !roleName.includes('manager') && !roleName.includes('approver')) {
+                console.log('[Monlam Filter] 🔍 User is annotator, setting confirmed=false filter');
+                
+                // Add confirmed=false to URL without reload
+                urlParams.set('confirmed', 'false');
+                const newUrl = `${path}?${urlParams.toString()}`;
+                
+                // Use history.replaceState to update URL without reload
+                window.history.replaceState({}, '', newUrl);
+                
+                // Trigger Vue to reload data with the new filter
+                // Find and click the filter checkbox if it exists
+                setTimeout(() => {
+                    const checkbox = document.querySelector('input[type="checkbox"][aria-label*="confirmed"], .v-input--checkbox');
+                    if (checkbox) {
+                        // Check if it's unchecked (we want to show unconfirmed)
+                        console.log('[Monlam Filter] Found checkbox, triggering filter');
+                    }
+                    
+                    // Alternative: Dispatch event to trigger Vue reload
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                }, 500);
+            } else {
+                console.log('[Monlam Filter] User is privileged, showing all');
+            }
+        } catch (error) {
+            console.error('[Monlam Filter] Error:', error);
+        }
+    }
     
     // ========================================
     // FEATURE: EXAMPLE LOCKING (Prevents Simultaneous Editing)
@@ -1715,13 +1764,15 @@
         // Set up metrics redirect IMMEDIATELY (before Vue Router)
         setupMetricsRedirect();
         
+        // Set default filter for annotators FIRST (before other features)
+        setDefaultFilterForAnnotators();
+        
         // Initialize features after a short delay (let Vue render)
         setTimeout(() => {
             enableAudioLoop();  // Only loops on annotation pages (not dataset)
             enhanceDatasetTable();
             addApproveRejectButtons();
             handleExampleLocking();  // Lock examples to prevent conflicts
-            // Note: Auto-skip removed - visibility middleware handles filtering
         }, 1000);
         
         // Monitor SPA navigation and re-initialize on route change
@@ -1736,12 +1787,14 @@
                 // Reset page-specific flags (but not global ones)
                 // The enhance functions will check their own page-specific flags
                 
+                // Set default filter for annotators on dataset navigation
+                setDefaultFilterForAnnotators();
+                
                 setTimeout(() => {
                     enableAudioLoop();  // Only loops on annotation pages (not dataset)
                     enhanceDatasetTable();
                     addApproveRejectButtons();
                     handleExampleLocking();  // Lock examples to prevent conflicts
-                    // Note: Auto-skip removed - visibility middleware handles filtering
                 }, 500);
             }
         }, 500);
