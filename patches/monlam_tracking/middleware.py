@@ -118,9 +118,26 @@ class VisibilityMiddleware:
                 return response
             
             # Get CONFIRMATION data from Doccano's ExampleState
-            from examples.models import ExampleState
+            from examples.models import ExampleState, Example
             
-            # Get all confirmed examples in this project
+            # Get all confirmed examples in this project (for total count)
+            all_project_examples = Example.objects.filter(project_id=project_id).values_list('id', flat=True)
+            all_confirmed = set(
+                ExampleState.objects.filter(example_id__in=all_project_examples)
+                .exclude(confirmed_by=user)  # Exclude ones confirmed by current user
+                .values_list('example_id', flat=True)
+            )
+            my_confirmed = set(
+                ExampleState.objects.filter(example_id__in=all_project_examples, confirmed_by=user)
+                .values_list('example_id', flat=True)
+            )
+            
+            # Total visible = all examples - confirmed by others - confirmed by me
+            total_visible = len(all_project_examples) - len(all_confirmed) - len(my_confirmed)
+            
+            print(f'[Monlam Middleware] Total: {len(all_project_examples)}, Confirmed by others: {len(all_confirmed)}, By me: {len(my_confirmed)}, Visible: {total_visible}')
+            
+            # Get current page's confirmed states
             example_ids = [ex.get('id') for ex in results if ex.get('id')]
             confirmed_states = ExampleState.objects.filter(
                 example_id__in=example_ids
@@ -150,9 +167,9 @@ class VisibilityMiddleware:
                 if self._should_show_example(example_id, confirmed_by, tracking, user):
                     filtered_results.append(example)
             
-            # Update response
+            # Update response with correct total count
             data['results'] = filtered_results
-            data['count'] = len(filtered_results)
+            data['count'] = total_visible  # Use calculated total, not just current page
             
             # Create new response
             from django.http import JsonResponse
@@ -163,7 +180,7 @@ class VisibilityMiddleware:
                 if header.lower() not in ['content-length', 'content-type']:
                     new_response[header] = value
             
-            print(f'[Monlam Middleware] Filtered: {len(results)} → {len(filtered_results)} examples for {user.username}')
+            print(f'[Monlam Middleware] Page filtered: {len(results)} → {len(filtered_results)}, Total visible: {total_visible}')
             
             return new_response
             
