@@ -681,7 +681,24 @@
                                   path.includes('/segmentation') ||
                                   path.includes('/image-captioning');
         
-        if (!isAnnotationPage) return;
+        // CLEANUP: Remove buttons and lock indicator when NOT on annotation page
+        if (!isAnnotationPage) {
+            const existingButtons = document.querySelector('.monlam-approve-buttons');
+            if (existingButtons) {
+                existingButtons.remove();
+                console.log('[Monlam Approve] Removed buttons (not on annotation page)');
+            }
+            const existingLockIndicator = document.querySelector('.monlam-lock-indicator');
+            if (existingLockIndicator) {
+                existingLockIndicator.remove();
+                console.log('[Monlam Lock] Removed lock indicator (not on annotation page)');
+            }
+            const existingLockModal = document.querySelector('.monlam-lock-modal');
+            if (existingLockModal) {
+                existingLockModal.remove();
+            }
+            return;
+        }
         
         console.log('[Monlam Approve] On annotation page, checking user role...');
         
