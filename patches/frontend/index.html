@@ -641,33 +641,6 @@
         audioObserver.observe(document.body, { childList: true, subtree: true });
     }
     
-    // FEATURE 2: STOP AUDIO ON DATASET PAGE
-    // Dataset table should NOT auto-play audio - only show preview
-    function stopDatasetAudio() {
-        if (!window.location.pathname.includes('/dataset')) return;
-        
-        // Stop all audio elements on dataset page
-        document.querySelectorAll('audio').forEach(audio => {
-            audio.pause();
-            audio.currentTime = 0;
-            audio.autoplay = false;
-            audio.loop = false;
-        });
-        
-        // Also prevent future audio from auto-playing via observer
-        const audioStopObserver = new MutationObserver(() => {
-            document.querySelectorAll('audio').forEach(audio => {
-                if (!audio.paused && !audio.hasAttribute('data-user-played')) {
-                    audio.pause();
-                    audio.currentTime = 0;
-                }
-                audio.autoplay = false;
-                audio.loop = false;
-            });
-        });
-        audioStopObserver.observe(document.body, { childList: true, subtree: true });
-    }
-    
     // FEATURE: APPROVE/REJECT BUTTONS FOR REVIEWERS
     async function addApproveRejectButtons() {
         const path = window.location.pathname;
@@ -1396,8 +1369,7 @@
         
         // Initialize features after a short delay (let Vue render)
         setTimeout(() => {
-            enableAudioLoop();
-            stopDatasetAudio();  // Stop auto-play on dataset page
+            enableAudioLoop();  // Only loops on annotation pages (not dataset)
             enhanceDatasetTable();
             addApproveRejectButtons();
         }, 1000);
@@ -1415,8 +1387,7 @@
                 // The enhance functions will check their own page-specific flags
                 
                 setTimeout(() => {
-                    enableAudioLoop();
-                    stopDatasetAudio();  // Stop auto-play on dataset page
+                    enableAudioLoop();  // Only loops on annotation pages (not dataset)
                     enhanceDatasetTable();
                     addApproveRejectButtons();
                 }, 500);
