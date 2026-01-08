@@ -18,11 +18,22 @@ User = get_user_model()
 print("🚀 Initializing Monlam Doccano...")
 print("=" * 50)
 
+# First, show existing roles
+print("\n📋 Existing Roles in Database:")
+print("-" * 50)
+existing_roles = Role.objects.all()
+if existing_roles:
+    for role in existing_roles:
+        print(f"  - ID: {role.id}, Name: '{role.name}'")
+else:
+    print("  (No roles found)")
+
 # Define roles with their permissions and mapping to our custom logic
+# These are the roles needed for our custom visibility/approval features
 MONLAM_ROLES = [
     {
         'name': 'project_admin',
-        'description': 'Project Admin - Full project control',
+        'description': 'Project Admin - Full project control, can manage members and see all data',
         'permissions': [
             '✅ Create/delete projects',
             '✅ Manage members',
@@ -32,8 +43,8 @@ MONLAM_ROLES = [
         ]
     },
     {
-        'name': 'project_manager',
-        'description': 'Project Manager - Manage workflow',
+        'name': 'project_manager', 
+        'description': 'Project Manager - Manage workflow and approve annotations',
         'permissions': [
             '✅ Manage assignments',
             '✅ See all examples',
@@ -43,7 +54,7 @@ MONLAM_ROLES = [
     },
     {
         'name': 'annotation_approver',
-        'description': 'Approver - Review and approve annotations',
+        'description': 'Approver - Review and approve/reject annotations',
         'permissions': [
             '✅ See all examples',
             '✅ Approve/reject annotations',
@@ -52,9 +63,10 @@ MONLAM_ROLES = [
     },
     {
         'name': 'annotator',
-        'description': 'Annotator - Create annotations',
+        'description': 'Annotator - Create annotations, filtered view',
         'permissions': [
-            '✅ See only unassigned/assigned-to-me examples',
+            '✅ See only unannotated examples',
+            '✅ See own rejected examples (to fix)',
             '✅ Create annotations',
             '❌ Cannot see submitted examples',
             '❌ Cannot approve/reject',
