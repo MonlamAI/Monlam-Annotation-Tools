@@ -686,63 +686,40 @@
         console.log('[Monlam Approve] On annotation page, checking user role...');
         
         try {
-            // Get current user info
-            const userResp = await fetch('/v1/me');
-            if (!userResp.ok) return;
-            const currentUser = await userResp.json();
-            
             // Get project ID
             const projectMatch = path.match(/\/projects\/(\d+)/);
             if (!projectMatch) return;
             const projectId = projectMatch[1];
             
-            // Get project members to check role
-            const membersResp = await fetch(`/v1/projects/${projectId}/members`);
-            if (!membersResp.ok) return;
-            const membersData = await membersResp.json();
-            const members = membersData.results || [];
+            // Use /my-role API (accessible to all users, unlike /members)
+            const myRoleResp = await fetch(`/v1/projects/${projectId}/my-role`);
+            if (!myRoleResp.ok) {
+                console.log('[Monlam Approve] Cannot get role, status:', myRoleResp.status);
+                return;
+            }
+            const myRoleData = await myRoleResp.json();
+            const roleName = (myRoleData.rolename || myRoleData.role || '').toLowerCase();
             
-            // Find current user's role
-            const currentMember = members.find(m => m.user === currentUser.id);
-            const roleId = currentMember ? currentMember.role : null;
+            console.log('[Monlam Approve] My role:', roleName, 'Data:', myRoleData);
             
-            console.log('[Monlam Approve] User role ID:', roleId, 'Member:', currentMember);
+            // Check for approver/PM/admin roles (case-insensitive, flexible matching)
+            const isApprover = 
+                roleName.includes('approver') || 
+                roleName.includes('approval') ||
+                roleName.includes('manager') || 
+                roleName.includes('admin') ||
+                roleName === 'annotation_approver' ||
+                roleName === 'project_manager' ||
+                roleName === 'project_admin';
             
-            // Fetch role name from role ID
-            if (!roleId) {
-                console.log('[Monlam Approve] No role found, skipping buttons');
+            if (!isApprover) {
+                console.log('[Monlam Approve] User is not an approver/PM/admin, skipping buttons');
                 return;
             }
             
-            // Get role details
-            fetch(`/v1/roles/${roleId}`)
-                .then(res => res.json())
-                .then(roleData => {
-                    const roleName = roleData.name?.toLowerCase() || '';
-                    console.log('[Monlam Approve] Role name:', roleName, 'Role data:', roleData);
-                    
-                    // Check for approver/PM/admin roles (case-insensitive, flexible matching)
-                    const isApprover = 
-                        roleName.includes('approver') || 
-                        roleName.includes('approval') ||
-                        roleName.includes('manager') || 
-                        roleName.includes('admin') ||
-                        roleName === 'annotation_approver' ||
-                        roleName === 'project_manager' ||
-                        roleName === 'project_admin';
-                    
-                    if (!isApprover) {
-                        console.log('[Monlam Approve] User is not an approver/PM/admin, skipping buttons');
-                        return;
-                    }
-                    
-                    console.log('[Monlam Approve] User IS an approver/PM/admin, creating buttons');
-                    // Continue with button creation (note: exampleId is obtained inside the function)
-                    createApproveRejectButtons(projectId, roleName);
-                })
-                .catch(err => {
-                    console.log('[Monlam Approve] Error fetching role:', err);
-                });
+            console.log('[Monlam Approve] User IS an approver/PM/admin, creating buttons');
+            // Continue with button creation
+            createApproveRejectButtons(projectId, roleName);
         } catch (error) {
             console.error('[Monlam Approve] Error in addApproveRejectButtons:', error);
         }

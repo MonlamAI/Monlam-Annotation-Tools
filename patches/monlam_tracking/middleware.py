@@ -41,12 +41,16 @@ class VisibilityMiddleware:
         if not match:
             return response
         
+        print(f'[Monlam Middleware] 🔍 Processing {request.path} for user {request.user}')
+        
         # Don't filter if not authenticated
         if not request.user.is_authenticated:
+            print('[Monlam Middleware] User not authenticated, skipping filter')
             return response
         
         # Superusers see everything
         if request.user.is_superuser:
+            print('[Monlam Middleware] Superuser, showing all')
             return response
         
         project_id = match.group(1)
@@ -54,13 +58,17 @@ class VisibilityMiddleware:
         try:
             # Check user's role
             if self._is_privileged_user(request.user, project_id):
+                print(f'[Monlam Middleware] User {request.user.username} is privileged, showing all')
                 return response
             
+            print(f'[Monlam Middleware] User {request.user.username} is annotator, filtering...')
             # Filter the response for annotators
             return self._filter_response(response, request.user, project_id)
             
         except Exception as e:
             print(f'[Monlam Middleware] Error: {e}')
+            import traceback
+            traceback.print_exc()
             # On error, return original response (fail open for safety)
             return response
     
