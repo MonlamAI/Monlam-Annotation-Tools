@@ -159,6 +159,20 @@ COPY patches/frontend/index.html /doccano/backend/staticfiles/index.html
 COPY patches/frontend/200.html /doccano/backend/staticfiles/200.html
 
 # ============================================
+# PATCH: Add project_manager to role translation
+# ============================================
+# The compiled JS has: "annotation_approver"===e?t.annotationApprover:t.undefined
+# We need to add: "project_manager"===e?"Project Manager":
+RUN find /doccano/backend/staticfiles/_nuxt -name "*.js" -exec grep -l "annotation_approver" {} \; | while read f; do \
+    echo "Patching $f for project_manager role..."; \
+    sed -i 's/"annotation_approver"===\([a-z]\)?t\.annotationApprover:t\.undefined/"annotation_approver"===\1?t.annotationApprover:"project_manager"===\1?"Project Manager":t.undefined/g' "$f"; \
+    done || true
+RUN find /doccano/backend/client/dist/_nuxt -name "*.js" -exec grep -l "annotation_approver" {} \; | while read f; do \
+    echo "Patching $f for project_manager role..."; \
+    sed -i 's/"annotation_approver"===\([a-z]\)?t\.annotationApprover:t\.undefined/"annotation_approver"===\1?t.annotationApprover:"project_manager"===\1?"Project Manager":t.undefined/g' "$f"; \
+    done || true
+
+# ============================================
 # DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
 # ============================================
 RUN rm -rf /doccano/backend/staticfiles/_nuxt/fonts/Roboto* && \
