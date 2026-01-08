@@ -41,6 +41,13 @@ class VisibilityMiddleware:
         if not match:
             return response
         
+        # IMPORTANT: Don't filter if it's a single-item request (for annotation page)
+        # Check query params - if limit=1 or offset is specific, don't filter
+        query_string = request.META.get('QUERY_STRING', '')
+        if 'limit=1' in query_string:
+            print(f'[Monlam Middleware] Single item request, skipping filter')
+            return response
+        
         print(f'[Monlam Middleware] 🔍 Processing {request.path} for user {request.user}')
         
         # Don't filter if not authenticated
