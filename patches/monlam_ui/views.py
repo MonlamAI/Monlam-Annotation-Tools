@@ -346,3 +346,238 @@ def api_completion_stats(request, project_id):
         'approvers': list(approver_stats),
     })
 
+
+# ============================================
+# ANALYTICS DASHBOARD
+# ============================================
+
+@login_required
+def analytics_dashboard(request):
+    """
+    Main analytics dashboard page.
+    URL: /monlam/analytics/
+    """
+    return render(request, 'monlam_ui/analytics_dashboard.html')
+
+
+@login_required
+@require_http_methods(["GET"])
+def analytics_api(request):
+    """
+    API endpoint for analytics data.
+    URL: /monlam/analytics/api/
+    
+    Query params:
+    - date_range: today, yesterday, last_7_days, last_30_days, this_month, last_month, this_year, custom
+    - project_id: optional, filter by project
+    - start_date: for custom range (YYYY-MM-DD)
+    - end_date: for custom range (YYYY-MM-DD)
+    """
+    from datetime import datetime, timedelta
+    from django.utils import timezone
+    from projects.models import Project
+    from examples.models import Example, ExampleState
+    from django.contrib.auth import get_user_model
+    
+    User = get_user_model()
+    
+    # Parse query params
+    date_range = request.GET.get('date_range', 'last_30_days')
+    project_id = request.GET.get('project_id', '')
+    start_date_str = request.GET.get('start_date', '')
+    end_date_str = request.GET.get('end_date', '')
+    
+    # Calculate date range
+    today = timezone.now().date()
+    
+    if date_range == 'today':
+        start_date = today
+        end_date = today
+    elif date_range == 'yesterday':
+        start_date = today - timedelta(days=1)
+        end_date = today - timedelta(days=1)
+    elif date_range == 'last_7_days':
+        start_date = today - timedelta(days=7)
+        end_date = today
+    elif date_range == 'last_30_days':
+        start_date = today - timedelta(days=30)
+        end_date = today
+    elif date_range == 'this_month':
+        start_date = today.replace(day=1)
+        end_date = today
+    elif date_range == 'last_month':
+        first_of_this_month = today.replace(day=1)
+        end_date = first_of_this_month - timedelta(days=1)
+        start_date = end_date.replace(day=1)
+    elif date_range == 'this_year':
+        start_date = today.replace(month=1, day=1)
+        end_date = today
+    elif date_range == 'custom' and start_date_str and end_date_str:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    else:
+        start_date = today - timedelta(days=30)
+        end_date = today
+    
+    # Convert to datetime with timezone
+    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+    
+    # Get projects
+    if project_id:
+        projects = Project.objects.filter(id=project_id)
+    else:
+        projects = Project.objects.all()
+    
+    # Get all example IDs for these projects
+    example_ids = list(Example.objects.filter(project__in=projects).values_list('id', flat=True))
+    
+    # Get ExampleState data (confirmations)
+    states = ExampleState.objects.filter(
+        example_id__in=example_ids,
+        confirmed_at__gte=start_datetime,
+        confirmed_at__lte=end_datetime
+    ).select_related('confirmed_by', 'example')
+    
+    # Get tracking data
+    try:
+        from assignment.simple_tracking import AnnotationTracking
+        tracking = AnnotationTracking.objects.filter(
+            project__in=projects
+        ).select_related('annotated_by', 'reviewed_by')
+    except:
+        tracking = []
+    
+    # Summary stats
+    total_examples = len(example_ids)
+    confirmed_count = states.count()
+    pending_count = total_examples - ExampleState.objects.filter(example_id__in=example_ids).count()
+    
+    approved_count = 0
+    rejected_count = 0
+    if tracking:
+        approved_count = tracking.filter(status='approved').count()
+        rejected_count = tracking.filter(status='rejected').count()
+    
+    # Get unique annotators in this period
+    active_annotators = states.values('confirmed_by').distinct().count()
+    
+    # Per-annotator stats
+    annotator_stats = {}
+    for state in states:
+        if state.confirmed_by:
+            username = state.confirmed_by.username
+            if username not in annotator_stats:
+                annotator_stats[username] = {
+                    'username': username,
+                    'total': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                    'pending': 0,
+                    'first_date': state.confirmed_at.date(),
+                    'last_date': state.confirmed_at.date()
+                }
+            annotator_stats[username]['total'] += 1
+            if state.confirmed_at.date() < annotator_stats[username]['first_date']:
+                annotator_stats[username]['first_date'] = state.confirmed_at.date()
+            if state.confirmed_at.date() > annotator_stats[username]['last_date']:
+                annotator_stats[username]['last_date'] = state.confirmed_at.date()
+    
+    # Add tracking status
+    if tracking:
+        for t in tracking:
+            if t.annotated_by and t.annotated_by.username in annotator_stats:
+                if t.status == 'approved':
+                    annotator_stats[t.annotated_by.username]['approved'] += 1
+                elif t.status == 'rejected':
+                    annotator_stats[t.annotated_by.username]['rejected'] += 1
+    
+    # Calculate derived stats
+    for username, stats in annotator_stats.items():
+        stats['pending'] = stats['total'] - stats['approved'] - stats['rejected']
+        if stats['pending'] < 0:
+            stats['pending'] = 0
+        
+        reviewed = stats['approved'] + stats['rejected']
+        stats['approval_rate'] = round((stats['approved'] / reviewed * 100) if reviewed > 0 else 0)
+        
+        # Days active
+        days = (stats['last_date'] - stats['first_date']).days + 1
+        stats['avg_per_day'] = stats['total'] / days if days > 0 else 0
+        
+        # Remove date objects (not JSON serializable)
+        del stats['first_date']
+        del stats['last_date']
+    
+    annotator_list = sorted(annotator_stats.values(), key=lambda x: -x['total'])
+    
+    # Per-project stats
+    project_stats = []
+    for project in projects:
+        proj_examples = Example.objects.filter(project=project).count()
+        proj_confirmed = ExampleState.objects.filter(example__project=project).count()
+        project_stats.append({
+            'id': project.id,
+            'name': project.name,
+            'total': proj_examples,
+            'confirmed': proj_confirmed,
+            'pending': proj_examples - proj_confirmed
+        })
+    
+    # Daily activity
+    daily_activity = {}
+    for state in states:
+        date_str = state.confirmed_at.strftime('%Y-%m-%d')
+        if date_str not in daily_activity:
+            daily_activity[date_str] = {
+                'date': date_str,
+                'annotations': 0,
+                'approved': 0,
+                'rejected': 0,
+                'users': set()
+            }
+        daily_activity[date_str]['annotations'] += 1
+        if state.confirmed_by:
+            daily_activity[date_str]['users'].add(state.confirmed_by.username)
+    
+    # Add tracking to daily activity
+    if tracking:
+        for t in tracking:
+            if t.reviewed_at:
+                date_str = t.reviewed_at.strftime('%Y-%m-%d')
+                if date_str in daily_activity:
+                    if t.status == 'approved':
+                        daily_activity[date_str]['approved'] += 1
+                    elif t.status == 'rejected':
+                        daily_activity[date_str]['rejected'] += 1
+    
+    # Convert sets to counts
+    daily_list = []
+    for date_str in sorted(daily_activity.keys()):
+        day = daily_activity[date_str]
+        daily_list.append({
+            'date': day['date'],
+            'annotations': day['annotations'],
+            'approved': day['approved'],
+            'rejected': day['rejected'],
+            'active_users': len(day['users'])
+        })
+    
+    return JsonResponse({
+        'summary': {
+            'total_examples': total_examples,
+            'confirmed': confirmed_count,
+            'pending': pending_count,
+            'approved': approved_count,
+            'rejected': rejected_count,
+            'active_annotators': active_annotators
+        },
+        'annotators': annotator_list,
+        'projects': project_stats,
+        'daily_activity': daily_list,
+        'date_range': {
+            'start': start_date.isoformat(),
+            'end': end_date.isoformat()
+        }
+    })
+

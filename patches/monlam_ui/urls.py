@@ -54,5 +54,20 @@ urlpatterns = [
         views.api_completion_stats,
         name='api-completion-stats'
     ),
+    
+    # ============================================
+    # ANALYTICS DASHBOARD (Global - not project-specific)
+    # ============================================
+    path(
+        'analytics/',
+        views.analytics_dashboard,
+        name='analytics-dashboard'
+    ),
+    
+    path(
+        'analytics/api/',
+        views.analytics_api,
+        name='analytics-api'
+    ),
 ]
 

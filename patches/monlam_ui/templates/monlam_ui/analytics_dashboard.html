@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - Monlam Tools</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@5.x/css/materialdesignicons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.x/dist/chart.min.js"></script>
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Roboto', sans-serif; background: #f5f5f5; }
+        .page-header { 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
+            color: white; 
+            padding: 24px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .page-header h1 { margin: 0; font-size: 28px; font-weight: 500; }
+        .page-header p { margin: 8px 0 0 0; opacity: 0.8; font-size: 14px; }
+        .stat-card { transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .chart-container { position: relative; height: 300px; }
+        @media print {
+            .no-print { display: none !important; }
+            .page-header { background: #333 !important; -webkit-print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="page-header no-print">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1>📊 Analytics Dashboard</h1>
+                <p>Comprehensive reporting for Project Managers & HR Team</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <a href="/projects/" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 20px;">
+                    <span style="font-size: 18px;">🏠</span> Projects
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue App -->
+    <div id="app">
+        <v-app>
+            <v-container fluid class="pa-4">
+                <!-- Filters Row -->
+                <v-card class="mb-4 no-print" elevation="2">
+                    <v-card-title class="blue-grey darken-3 white--text py-2">
+                        <v-icon left dark>mdi-filter</v-icon>
+                        Report Filters
+                    </v-card-title>
+                    <v-card-text class="pa-4">
+                        <v-row>
+                            <v-col cols="12" sm="6" md="3">
+                                <v-select
+                                    v-model="selectedProject"
+                                    :items="projects"
+                                    item-text="name"
+                                    item-value="id"
+                                    label="Project"
+                                    prepend-icon="mdi-folder"
+                                    outlined
+                                    dense
+                                    clearable
+                                ></v-select>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                                <v-select
+                                    v-model="dateRange"
+                                    :items="dateRangeOptions"
+                                    label="Date Range"
+                                    prepend-icon="mdi-calendar"
+                                    outlined
+                                    dense
+                                ></v-select>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                                <v-menu
+                                    v-model="startDateMenu"
+                                    :close-on-content-click="false"
+                                    transition="scale-transition"
+                                    offset-y
+                                    min-width="auto"
+                                >
+                                    <template v-slot:activator="{ on, attrs }">
+                                        <v-text-field
+                                            v-model="startDate"
+                                            label="Start Date"
+                                            prepend-icon="mdi-calendar-start"
+                                            readonly
+                                            outlined
+                                            dense
+                                            v-bind="attrs"
+                                            v-on="on"
+                                        ></v-text-field>
+                                    </template>
+                                    <v-date-picker v-model="startDate" @input="startDateMenu = false"></v-date-picker>
+                                </v-menu>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                                <v-menu
+                                    v-model="endDateMenu"
+                                    :close-on-content-click="false"
+                                    transition="scale-transition"
+                                    offset-y
+                                    min-width="auto"
+                                >
+                                    <template v-slot:activator="{ on, attrs }">
+                                        <v-text-field
+                                            v-model="endDate"
+                                            label="End Date"
+                                            prepend-icon="mdi-calendar-end"
+                                            readonly
+                                            outlined
+                                            dense
+                                            v-bind="attrs"
+                                            v-on="on"
+                                        ></v-text-field>
+                                    </template>
+                                    <v-date-picker v-model="endDate" @input="endDateMenu = false"></v-date-picker>
+                                </v-menu>
+                            </v-col>
+                        </v-row>
+                        <v-row>
+                            <v-col cols="12" class="text-right">
+                                <v-btn color="primary" @click="loadData" :loading="loading" class="mr-2">
+                                    <v-icon left>mdi-refresh</v-icon>
+                                    Generate Report
+                                </v-btn>
+                                <v-btn color="success" @click="exportCSV" :disabled="!data">
+                                    <v-icon left>mdi-download</v-icon>
+                                    Export CSV
+                                </v-btn>
+                                <v-btn color="grey" @click="printReport" :disabled="!data" class="ml-2">
+                                    <v-icon left>mdi-printer</v-icon>
+                                    Print
+                                </v-btn>
+                            </v-col>
+                        </v-row>
+                    </v-card-text>
+                </v-card>
+
+                <!-- Loading -->
+                <v-row v-if="loading">
+                    <v-col cols="12" class="text-center py-8">
+                        <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
+                        <p class="mt-4">Loading analytics data...</p>
+                    </v-col>
+                </v-row>
+
+                <!-- Summary Cards -->
+                <v-row v-if="data && !loading">
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="blue lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="blue">mdi-file-document-multiple</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.total_examples ]]</div>
+                                <div class="text--secondary">Total Examples</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="green lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="green">mdi-check-circle</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.confirmed ]]</div>
+                                <div class="text--secondary">Confirmed</div>
+                                <div class="text-caption">[[ percentage(data.summary.confirmed, data.summary.total_examples) ]]%</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="orange lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="orange">mdi-clock-outline</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.pending ]]</div>
+                                <div class="text--secondary">Pending</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="purple lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="purple">mdi-account-group</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.active_annotators ]]</div>
+                                <div class="text--secondary">Active Annotators</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Charts Row -->
+                <v-row v-if="data && !loading" class="mt-4">
+                    <v-col cols="12" md="6">
+                        <v-card elevation="2">
+                            <v-card-title class="blue-grey darken-1 white--text py-2">
+                                <v-icon left dark>mdi-chart-line</v-icon>
+                                Daily Progress
+                            </v-card-title>
+                            <v-card-text>
+                                <div class="chart-container">
+                                    <canvas id="dailyChart"></canvas>
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" md="6">
+                        <v-card elevation="2">
+                            <v-card-title class="blue-grey darken-1 white--text py-2">
+                                <v-icon left dark>mdi-chart-pie</v-icon>
+                                Status Distribution
+                            </v-card-title>
+                            <v-card-text>
+                                <div class="chart-container">
+                                    <canvas id="statusChart"></canvas>
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Annotator Performance Table -->
+                <v-row v-if="data && !loading" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title class="green darken-1 white--text py-2">
+                                <v-icon left dark>mdi-account-details</v-icon>
+                                Annotator Performance
+                            </v-card-title>
+                            <v-data-table
+                                :headers="annotatorHeaders"
+                                :items="data.annotators"
+                                :items-per-page="10"
+                                class="elevation-1"
+                            >
+                                <template v-slot:item.username="{ item }">
+                                    <v-chip small color="primary" dark>
+                                        <v-icon small left>mdi-account</v-icon>
+                                        [[ item.username ]]
+                                    </v-chip>
+                                </template>
+                                <template v-slot:item.total="{ item }">
+                                    <strong>[[ item.total ]]</strong>
+                                </template>
+                                <template v-slot:item.approved="{ item }">
+                                    <v-chip small :color="item.approved > 0 ? 'success' : 'grey'" dark>
+                                        [[ item.approved ]]
+                                    </v-chip>
+                                </template>
+                                <template v-slot:item.rejected="{ item }">
+                                    <v-chip small :color="item.rejected > 0 ? 'error' : 'grey'" dark>
+                                        [[ item.rejected ]]
+                                    </v-chip>
+                                </template>
+                                <template v-slot:item.approval_rate="{ item }">
+                                    <v-progress-linear
+                                        :value="item.approval_rate"
+                                        height="20"
+                                        :color="item.approval_rate >= 80 ? 'success' : item.approval_rate >= 50 ? 'warning' : 'error'"
+                                    >
+                                        [[ item.approval_rate ]]%
+                                    </v-progress-linear>
+                                </template>
+                                <template v-slot:item.avg_per_day="{ item }">
+                                    [[ item.avg_per_day.toFixed(1) ]]
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Project Breakdown Table -->
+                <v-row v-if="data && !loading" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title class="indigo darken-1 white--text py-2">
+                                <v-icon left dark>mdi-folder-multiple</v-icon>
+                                Project Breakdown
+                            </v-card-title>
+                            <v-data-table
+                                :headers="projectHeaders"
+                                :items="data.projects"
+                                :items-per-page="10"
+                                class="elevation-1"
+                            >
+                                <template v-slot:item.name="{ item }">
+                                    <a :href="'/projects/' + item.id + '/dataset'" target="_blank">
+                                        [[ item.name ]]
+                                    </a>
+                                </template>
+                                <template v-slot:item.progress="{ item }">
+                                    <v-progress-linear
+                                        :value="percentage(item.confirmed, item.total)"
+                                        height="20"
+                                        color="primary"
+                                    >
+                                        [[ percentage(item.confirmed, item.total) ]]%
+                                    </v-progress-linear>
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Daily Activity Log -->
+                <v-row v-if="data && !loading" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title class="teal darken-1 white--text py-2">
+                                <v-icon left dark>mdi-calendar-clock</v-icon>
+                                Daily Activity Log
+                            </v-card-title>
+                            <v-data-table
+                                :headers="dailyHeaders"
+                                :items="data.daily_activity"
+                                :items-per-page="15"
+                                class="elevation-1"
+                            >
+                                <template v-slot:item.date="{ item }">
+                                    <strong>[[ item.date ]]</strong>
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+            </v-container>
+        </v-app>
+    </div>
+
+    <!-- Vue & Vuetify -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.x/dist/vue.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@2.x/dist/vuetify.js"></script>
+    
+    <script>
+        new Vue({
+            el: '#app',
+            vuetify: new Vuetify(),
+            delimiters: ['[[', ']]'],
+            data: {
+                loading: false,
+                data: null,
+                projects: [],
+                selectedProject: null,
+                dateRange: 'last_30_days',
+                dateRangeOptions: [
+                    { text: 'Today', value: 'today' },
+                    { text: 'Yesterday', value: 'yesterday' },
+                    { text: 'Last 7 Days', value: 'last_7_days' },
+                    { text: 'Last 30 Days', value: 'last_30_days' },
+                    { text: 'This Month', value: 'this_month' },
+                    { text: 'Last Month', value: 'last_month' },
+                    { text: 'This Year', value: 'this_year' },
+                    { text: 'Custom Range', value: 'custom' }
+                ],
+                startDate: null,
+                endDate: null,
+                startDateMenu: false,
+                endDateMenu: false,
+                dailyChart: null,
+                statusChart: null,
+                annotatorHeaders: [
+                    { text: 'Annotator', value: 'username' },
+                    { text: 'Total Annotated', value: 'total' },
+                    { text: 'Approved', value: 'approved' },
+                    { text: 'Rejected', value: 'rejected' },
+                    { text: 'Pending Review', value: 'pending' },
+                    { text: 'Approval Rate', value: 'approval_rate', width: 150 },
+                    { text: 'Avg/Day', value: 'avg_per_day' }
+                ],
+                projectHeaders: [
+                    { text: 'Project', value: 'name' },
+                    { text: 'Total Examples', value: 'total' },
+                    { text: 'Confirmed', value: 'confirmed' },
+                    { text: 'Pending', value: 'pending' },
+                    { text: 'Progress', value: 'progress', width: 200 }
+                ],
+                dailyHeaders: [
+                    { text: 'Date', value: 'date' },
+                    { text: 'Annotations', value: 'annotations' },
+                    { text: 'Approved', value: 'approved' },
+                    { text: 'Rejected', value: 'rejected' },
+                    { text: 'Active Users', value: 'active_users' }
+                ]
+            },
+            async mounted() {
+                await this.loadProjects();
+                await this.loadData();
+            },
+            methods: {
+                async loadProjects() {
+                    try {
+                        const resp = await fetch('/v1/projects?limit=100');
+                        const data = await resp.json();
+                        this.projects = [{ id: null, name: 'All Projects' }, ...(data.results || data)];
+                    } catch (e) {
+                        console.error('Error loading projects:', e);
+                    }
+                },
+                async loadData() {
+                    this.loading = true;
+                    try {
+                        const params = new URLSearchParams({
+                            date_range: this.dateRange,
+                            project_id: this.selectedProject || '',
+                            start_date: this.startDate || '',
+                            end_date: this.endDate || ''
+                        });
+                        
+                        const resp = await fetch(`/monlam/analytics/api/?${params}`);
+                        this.data = await resp.json();
+                        
+                        this.$nextTick(() => {
+                            this.renderCharts();
+                        });
+                    } catch (e) {
+                        console.error('Error loading data:', e);
+                    }
+                    this.loading = false;
+                },
+                renderCharts() {
+                    // Daily Progress Chart
+                    if (this.dailyChart) this.dailyChart.destroy();
+                    const dailyCtx = document.getElementById('dailyChart');
+                    if (dailyCtx && this.data.daily_activity) {
+                        this.dailyChart = new Chart(dailyCtx, {
+                            type: 'line',
+                            data: {
+                                labels: this.data.daily_activity.map(d => d.date),
+                                datasets: [{
+                                    label: 'Annotations',
+                                    data: this.data.daily_activity.map(d => d.annotations),
+                                    borderColor: '#1976d2',
+                                    backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                }, {
+                                    label: 'Approved',
+                                    data: this.data.daily_activity.map(d => d.approved),
+                                    borderColor: '#4caf50',
+                                    backgroundColor: 'transparent',
+                                    tension: 0.4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top' }
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Status Distribution Chart
+                    if (this.statusChart) this.statusChart.destroy();
+                    const statusCtx = document.getElementById('statusChart');
+                    if (statusCtx && this.data.summary) {
+                        this.statusChart = new Chart(statusCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Confirmed', 'Pending', 'Approved', 'Rejected'],
+                                datasets: [{
+                                    data: [
+                                        this.data.summary.confirmed,
+                                        this.data.summary.pending,
+                                        this.data.summary.approved,
+                                        this.data.summary.rejected
+                                    ],
+                                    backgroundColor: ['#9c27b0', '#ff9800', '#4caf50', '#f44336']
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'right' }
+                                }
+                            }
+                        });
+                    }
+                },
+                percentage(part, total) {
+                    if (!total) return 0;
+                    return Math.round((part / total) * 100);
+                },
+                exportCSV() {
+                    if (!this.data) return;
+                    
+                    let csv = 'Annotator,Total,Approved,Rejected,Pending,Approval Rate\n';
+                    this.data.annotators.forEach(a => {
+                        csv += `${a.username},${a.total},${a.approved},${a.rejected},${a.pending},${a.approval_rate}%\n`;
+                    });
+                    
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `analytics_${new Date().toISOString().split('T')[0]}.csv`;
+                    a.click();
+                },
+                printReport() {
+                    window.print();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+
