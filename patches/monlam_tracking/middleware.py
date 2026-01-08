@@ -146,12 +146,15 @@ class VisibilityMiddleware:
             
             # Get current page's confirmed states
             example_ids = [ex.get('id') for ex in results if ex.get('id')]
+            print(f'[Monlam Middleware] Page example IDs: {example_ids[:10]}...')
+            
             confirmed_states = ExampleState.objects.filter(
                 example_id__in=example_ids
             ).select_related('confirmed_by')
             
             # Map: example_id -> confirmed_by user
             confirmed_map = {state.example_id: state.confirmed_by for state in confirmed_states}
+            print(f'[Monlam Middleware] Confirmed on this page: {list(confirmed_map.keys())}')
             
             # Also get our tracking data for locking and review status
             from assignment.simple_tracking import AnnotationTracking
