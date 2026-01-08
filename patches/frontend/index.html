@@ -1032,6 +1032,267 @@
     }
     }  // Close addApproveRejectButtons
     
+    // ========================================
+    // FEATURE: EXAMPLE LOCKING (Prevents Simultaneous Editing)
+    // ========================================
+    async function handleExampleLocking() {
+        const path = window.location.pathname;
+        
+        // Only run on annotation pages
+        const isAnnotationPage = path.includes('/speech-to-text') || 
+                                  path.includes('/sequence-labeling') ||
+                                  path.includes('/document-classification') ||
+                                  path.includes('/seq2seq') ||
+                                  path.includes('/intent-detection-and-slot-filling') ||
+                                  path.includes('/image-classification') ||
+                                  path.includes('/bounding-box') ||
+                                  path.includes('/segmentation') ||
+                                  path.includes('/image-captioning');
+        
+        if (!isAnnotationPage) {
+            // If leaving annotation page, unlock any locked example
+            if (window.monlamLockedExample) {
+                try {
+                    await unlockExample(window.monlamLockedExample.projectId, window.monlamLockedExample.exampleId);
+                } catch (e) {
+                    console.log('[Monlam Lock] Error unlocking on leave:', e);
+                }
+                window.monlamLockedExample = null;
+            }
+            return;
+        }
+        
+        console.log('[Monlam Lock] On annotation page, checking lock status...');
+        
+        try {
+            // Get project ID
+            const projectMatch = path.match(/\/projects\/(\d+)/);
+            if (!projectMatch) return;
+            const projectId = projectMatch[1];
+            
+            // Get example ID (retry a few times as it may take a moment to load)
+            let exampleId = null;
+            for (let i = 0; i < 10; i++) {
+                exampleId = getCurrentExampleIdForLock();
+                if (exampleId) break;
+                await new Promise(r => setTimeout(r, 300));
+            }
+            
+            if (!exampleId) {
+                console.log('[Monlam Lock] Could not find example ID');
+                return;
+            }
+            
+            console.log('[Monlam Lock] Example ID:', exampleId);
+            
+            // Check if already locked by us
+            if (window.monlamLockedExample && 
+                window.monlamLockedExample.exampleId == exampleId) {
+                console.log('[Monlam Lock] Already locked by us');
+                return;
+            }
+            
+            // Unlock previous example if different
+            if (window.monlamLockedExample && 
+                window.monlamLockedExample.exampleId != exampleId) {
+                try {
+                    await unlockExample(
+                        window.monlamLockedExample.projectId, 
+                        window.monlamLockedExample.exampleId
+                    );
+                } catch (e) {
+                    console.log('[Monlam Lock] Error unlocking previous:', e);
+                }
+            }
+            
+            // Check lock status first
+            const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
+            if (statusResp.ok) {
+                const status = await statusResp.json();
+                
+                if (status.is_locked && !status.is_own_lock) {
+                    // Locked by someone else!
+                    showLockedByOtherModal(status.locked_by, status.expires_in_minutes);
+                    return;
+                }
+            }
+            
+            // Try to lock the example
+            const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            
+            if (lockResp.ok) {
+                const lockData = await lockResp.json();
+                if (lockData.success) {
+                    console.log('[Monlam Lock] ✅ Locked example', exampleId);
+                    window.monlamLockedExample = { projectId, exampleId };
+                    showLockIndicator(lockData.expires_in_minutes);
+                } else if (lockData.error === 'locked_by_other') {
+                    showLockedByOtherModal(lockData.locked_by, lockData.expires_in_minutes);
+                }
+            } else if (lockResp.status === 409) {
+                const lockData = await lockResp.json();
+                showLockedByOtherModal(lockData.locked_by, lockData.expires_in_minutes);
+            }
+            
+        } catch (error) {
+            console.error('[Monlam Lock] Error:', error);
+        }
+    }
+    
+    function getCurrentExampleIdForLock() {
+        // Method 1: Check Vue app state
+        if (window.$nuxt && window.$nuxt.$store && window.$nuxt.$store.state) {
+            const state = window.$nuxt.$store.state;
+            if (state.example && state.example.id) return state.example.id;
+            if (state.examples && state.examples.current && state.examples.current.id) {
+                return state.examples.current.id;
+            }
+        }
+        
+        // Method 2: Check __NUXT__
+        if (window.__NUXT__ && window.__NUXT__.state) {
+            const state = window.__NUXT__.state;
+            if (state.example && state.example.id) return state.example.id;
+        }
+        
+        // Method 3: Performance API
+        if (window.performance) {
+            const entries = performance.getEntriesByType('resource');
+            const exampleApiCalls = entries.filter(e => e.name.includes('/examples/'));
+            if (exampleApiCalls.length > 0) {
+                const lastCall = exampleApiCalls[exampleApiCalls.length - 1];
+                const match = lastCall.name.match(/\/examples\/(\d+)/);
+                if (match) return match[1];
+            }
+        }
+        
+        return null;
+    }
+    
+    async function unlockExample(projectId, exampleId) {
+        try {
+            await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/unlock/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            console.log('[Monlam Lock] Unlocked example', exampleId);
+        } catch (e) {
+            console.log('[Monlam Lock] Unlock error:', e);
+        }
+    }
+    
+    function showLockIndicator(expiresInMinutes) {
+        // Remove existing indicator
+        const existing = document.querySelector('.monlam-lock-indicator');
+        if (existing) existing.remove();
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'monlam-lock-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: #e8f5e9;
+            border: 1px solid #4caf50;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #2e7d32;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        `;
+        indicator.innerHTML = `
+            <span style="font-size: 16px;">🔒</span>
+            <span>Locked for editing (${expiresInMinutes}m)</span>
+        `;
+        document.body.appendChild(indicator);
+    }
+    
+    function showLockedByOtherModal(lockedByUsername, expiresInMinutes) {
+        // Remove existing modal
+        const existing = document.querySelector('.monlam-lock-modal');
+        if (existing) existing.remove();
+        
+        const modal = document.createElement('div');
+        modal.className = 'monlam-lock-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="
+                background: white;
+                padding: 32px;
+                border-radius: 12px;
+                max-width: 400px;
+                text-align: center;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            ">
+                <div style="font-size: 48px; margin-bottom: 16px;">🔐</div>
+                <h2 style="margin: 0 0 16px 0; color: #333;">Example Locked</h2>
+                <p style="color: #666; margin-bottom: 24px;">
+                    This example is currently being edited by<br>
+                    <strong style="color: #1976d2;">${lockedByUsername}</strong><br>
+                    <small>(Expires in ~${expiresInMinutes} minutes)</small>
+                </p>
+                <button onclick="window.history.back()" style="
+                    padding: 12px 24px;
+                    background: #1976d2;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    cursor: pointer;
+                ">← Go Back to Dataset</button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    function getCsrfToken() {
+        // Try multiple methods to get CSRF token
+        const cookies = document.cookie.split(';');
+        for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'csrftoken') return value;
+        }
+        const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (csrfInput) return csrfInput.value;
+        return '';
+    }
+    
+    // Unlock when user leaves the page
+    window.addEventListener('beforeunload', async () => {
+        if (window.monlamLockedExample) {
+            // Use sendBeacon for reliable unlock on page leave
+            const { projectId, exampleId } = window.monlamLockedExample;
+            const url = `/v1/projects/${projectId}/tracking/${exampleId}/unlock/`;
+            navigator.sendBeacon(url);
+        }
+    });
+    
     // METRICS PAGE REDIRECT - Vue Router Aware (Professional Implementation)
     function setupMetricsRedirect() {
         console.log('[Monlam Metrics] Setting up redirect interception...');
@@ -1437,6 +1698,7 @@
             enableAudioLoop();  // Only loops on annotation pages (not dataset)
             enhanceDatasetTable();
             addApproveRejectButtons();
+            handleExampleLocking();  // Lock examples to prevent conflicts
         }, 1000);
         
         // Monitor SPA navigation and re-initialize on route change
@@ -1455,6 +1717,7 @@
                     enableAudioLoop();  // Only loops on annotation pages (not dataset)
                     enhanceDatasetTable();
                     addApproveRejectButtons();
+                    handleExampleLocking();  // Lock examples to prevent conflicts
                 }, 500);
             }
         }, 500);

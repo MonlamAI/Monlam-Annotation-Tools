@@ -102,15 +102,19 @@ RUN if ! grep -q "assignment.tracking_urls" /doccano/backend/config/urls.py; the
 # TODO: Create proper Python patch file for examples/views.py
 
 # ============================================
-# MONLAM TRACKING - AUTO-TRACKING SIGNALS ONLY
+# MONLAM TRACKING - VISIBILITY + LOCKING
 # ============================================
-# Copy the Monlam Tracking app (for auto-tracking annotations)
-# NOTE: Visibility filtering removed - use Doccano's native assignment system
+# Copy the Monlam Tracking app (visibility middleware + auto-tracking)
 COPY patches/monlam_tracking /doccano/backend/monlam_tracking
 
 # Register the Monlam Tracking app in settings
-RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Auto-tracking\n/" /doccano/backend/config/settings/base.py || \
+RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Visibility + Tracking\n/" /doccano/backend/config/settings/base.py || \
     echo "INSTALLED_APPS += ['monlam_tracking']" >> /doccano/backend/config/settings/base.py
+
+# Add Visibility Middleware (SAFE approach - filters at response time)
+RUN echo "" >> /doccano/backend/config/settings/base.py && \
+    echo "# Monlam: Add visibility middleware" >> /doccano/backend/config/settings/base.py && \
+    echo "MIDDLEWARE += ['monlam_tracking.middleware.VisibilityMiddleware']" >> /doccano/backend/config/settings/base.py
 
 # ============================================
 # MONLAM UI - PROFESSIONAL DJANGO INTEGRATION
