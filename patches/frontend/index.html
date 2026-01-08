@@ -1090,45 +1090,47 @@
             
             console.log('[Monlam Skip] Current example ID:', currentExample.id);
             
-            // Check if example has ExampleState (confirmation)
-            // We need to fetch states for this specific example
-            const statesResp = await fetch(`/v1/projects/${projectId}/examples/${currentExample.id}/states`);
-            let isConfirmed = false;
+            // Use unified tracking status API (checks both ExampleState and our tracking)
+            const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${currentExample.id}/status/`);
+            let statusData = { status: 'pending', is_confirmed: false };
             
-            if (statesResp.ok) {
-                const statesData = await statesResp.json();
-                // If there's a state with confirmed_by, it's confirmed
-                isConfirmed = statesData && statesData.length > 0 && statesData.some(s => s.confirmed_by);
-                console.log('[Monlam Skip] States for example', currentExample.id, ':', statesData);
-            } else {
-                // States endpoint might not exist, try alternative check
-                // Check if the example data has is_confirmed or similar
-                isConfirmed = currentExample.is_confirmed === true;
+            if (statusResp.ok) {
+                statusData = await statusResp.json();
+                console.log('[Monlam Skip] Status for example', currentExample.id, ':', statusData);
             }
             
-            console.log('[Monlam Skip] Example', currentExample.id, 'confirmed:', isConfirmed);
+            // Should skip if: confirmed OR submitted/approved
+            const shouldSkip = statusData.is_confirmed || 
+                               statusData.status === 'submitted' || 
+                               statusData.status === 'approved';
             
-            if (isConfirmed) {
-                console.log('[Monlam Skip] Example is confirmed! Finding next unconfirmed...');
+            console.log('[Monlam Skip] Example', currentExample.id, 'shouldSkip:', shouldSkip);
+            
+            if (shouldSkip) {
+                console.log('[Monlam Skip] Example needs skipping! Finding next available...');
                 
                 // Mark this URL as processed before navigating
                 sessionStorage.setItem(skipKey, 'true');
                 
-                // Find next unconfirmed example
+                // Find next available example (not confirmed, not submitted/approved)
                 let foundIndex = -1;
                 
                 // Search forward from current position
                 for (let i = pageIndex + 1; i < examples.length; i++) {
-                    const checkResp = await fetch(`/v1/projects/${projectId}/examples/${examples[i].id}/states`);
-                    let isThisConfirmed = false;
+                    const checkResp = await fetch(`/v1/projects/${projectId}/tracking/${examples[i].id}/status/`);
+                    let checkStatus = { status: 'pending', is_confirmed: false };
                     if (checkResp.ok) {
-                        const checkData = await checkResp.json();
-                        isThisConfirmed = checkData && checkData.length > 0 && checkData.some(s => s.confirmed_by);
+                        checkStatus = await checkResp.json();
                     }
                     
-                    if (!isThisConfirmed) {
+                    const isAvailable = !checkStatus.is_confirmed && 
+                                       checkStatus.status !== 'submitted' && 
+                                       checkStatus.status !== 'approved' &&
+                                       !checkStatus.is_locked;
+                    
+                    if (isAvailable) {
                         foundIndex = i;
-                        console.log('[Monlam Skip] ✅ Found unconfirmed at index', i, '(ID:', examples[i].id, ')');
+                        console.log('[Monlam Skip] ✅ Found available at index', i, '(ID:', examples[i].id, ')');
                         break;
                     }
                 }
@@ -1136,16 +1138,20 @@
                 // Wrap around to beginning
                 if (foundIndex === -1) {
                     for (let i = 0; i < pageIndex; i++) {
-                        const checkResp = await fetch(`/v1/projects/${projectId}/examples/${examples[i].id}/states`);
-                        let isThisConfirmed = false;
+                        const checkResp = await fetch(`/v1/projects/${projectId}/tracking/${examples[i].id}/status/`);
+                        let checkStatus = { status: 'pending', is_confirmed: false };
                         if (checkResp.ok) {
-                            const checkData = await checkResp.json();
-                            isThisConfirmed = checkData && checkData.length > 0 && checkData.some(s => s.confirmed_by);
+                            checkStatus = await checkResp.json();
                         }
                         
-                        if (!isThisConfirmed) {
+                        const isAvailable = !checkStatus.is_confirmed && 
+                                           checkStatus.status !== 'submitted' && 
+                                           checkStatus.status !== 'approved' &&
+                                           !checkStatus.is_locked;
+                        
+                        if (isAvailable) {
                             foundIndex = i;
-                            console.log('[Monlam Skip] ✅ Found unconfirmed at index', i, '(ID:', examples[i].id, ')');
+                            console.log('[Monlam Skip] ✅ Found available at index', i, '(ID:', examples[i].id, ')');
                             break;
                         }
                     }

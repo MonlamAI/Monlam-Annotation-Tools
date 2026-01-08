@@ -169,10 +169,32 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
     def get_status(self, request, project_id=None, pk=None):
         """
         Get tracking status for an example
+        Also checks ExampleState for Doccano's native confirmation
         
         GET /v1/projects/{project_id}/tracking/{example_id}/status/
+        
+        Returns:
+        - is_confirmed: True if marked complete via Doccano checkmark
+        - confirmed_by: Username who confirmed (if any)
+        - status: 'pending', 'submitted', 'approved', 'rejected' (from our tracking)
+        - All other tracking fields
         """
         try:
+            from datetime import timedelta
+            
+            # Check Doccano's native ExampleState (confirmation via checkmark)
+            is_confirmed = False
+            confirmed_by = None
+            try:
+                from examples.models import ExampleState
+                state = ExampleState.objects.filter(example_id=pk).select_related('confirmed_by').first()
+                if state and state.confirmed_by:
+                    is_confirmed = True
+                    confirmed_by = state.confirmed_by.username
+            except Exception:
+                pass  # ExampleState may not exist
+            
+            # Get our custom tracking record
             tracking = AnnotationTracking.objects.filter(
                 project_id=project_id,
                 example_id=pk
@@ -180,8 +202,10 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             
             if not tracking:
                 return Response({
-                    'status': 'pending',
-                    'annotated_by': None,
+                    'status': 'submitted' if is_confirmed else 'pending',  # If confirmed but no tracking, treat as submitted
+                    'is_confirmed': is_confirmed,
+                    'confirmed_by': confirmed_by,
+                    'annotated_by': confirmed_by,  # Use confirmed_by as annotator if no tracking
                     'reviewed_by': None,
                     'locked_by': None,
                     'is_locked': False
@@ -191,7 +215,6 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             is_locked = False
             locked_by_username = None
             if tracking.locked_by and tracking.locked_at:
-                from datetime import timedelta
                 lock_expiry = tracking.locked_at + timedelta(minutes=30)
                 if timezone.now() < lock_expiry:
                     is_locked = True
@@ -202,9 +225,16 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     tracking.locked_at = None
                     tracking.save(update_fields=['locked_by', 'locked_at'])
             
+            # Override status if confirmed but tracking says pending
+            effective_status = tracking.status
+            if is_confirmed and tracking.status == 'pending':
+                effective_status = 'submitted'
+            
             return Response({
-                'status': tracking.status,
-                'annotated_by': tracking.annotated_by.username if tracking.annotated_by else None,
+                'status': effective_status,
+                'is_confirmed': is_confirmed,
+                'confirmed_by': confirmed_by,
+                'annotated_by': tracking.annotated_by.username if tracking.annotated_by else confirmed_by,
                 'annotated_at': tracking.annotated_at,
                 'reviewed_by': tracking.reviewed_by.username if tracking.reviewed_by else None,
                 'reviewed_at': tracking.reviewed_at,
