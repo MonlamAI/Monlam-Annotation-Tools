@@ -351,12 +351,61 @@ def api_completion_stats(request, project_id):
 # ANALYTICS DASHBOARD
 # ============================================
 
+def has_analytics_access(user):
+    """
+    Check if user has access to analytics dashboard.
+    
+    Access granted to:
+    - Superusers (Admin)
+    - Staff users
+    - Users with project_manager role in any project
+    - Users with project_admin role in any project
+    - Users with annotation_approver role in any project
+    """
+    if not user.is_authenticated:
+        return False
+    
+    # Superusers and staff always have access
+    if user.is_superuser or user.is_staff:
+        return True
+    
+    # Check if user has manager/admin/approver role in any project
+    try:
+        from roles.models import Role, Member
+        
+        # Get role IDs for privileged roles
+        privileged_roles = Role.objects.filter(
+            name__in=['project_admin', 'project_manager', 'annotation_approver']
+        ).values_list('id', flat=True)
+        
+        # Check if user is a member with any of these roles
+        return Member.objects.filter(
+            user=user,
+            role_id__in=privileged_roles
+        ).exists()
+    except Exception as e:
+        # If role checking fails, deny access (fail secure)
+        print(f"[Analytics] Role check error: {e}")
+        return False
+
+
 @login_required
 def analytics_dashboard(request):
     """
     Main analytics dashboard page.
     URL: /monlam/analytics/
+    
+    ACCESS: Admin, Staff, Project Managers, Project Admins, Approvers
     """
+    if not has_analytics_access(request.user):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden(
+            '<h1>Access Denied</h1>'
+            '<p>You do not have permission to view the Analytics Dashboard.</p>'
+            '<p>This page is available to Project Managers, Approvers, and Admins only.</p>'
+            '<p><a href="/projects/">← Return to Projects</a></p>'
+        )
+    
     return render(request, 'monlam_ui/analytics_dashboard.html')
 
 
@@ -367,12 +416,18 @@ def analytics_api(request):
     API endpoint for analytics data.
     URL: /monlam/analytics/api/
     
+    ACCESS: Admin, Staff, Project Managers, Project Admins, Approvers
+    
     Query params:
     - date_range: today, yesterday, last_7_days, last_30_days, this_month, last_month, this_year, custom
     - project_id: optional, filter by project
     - start_date: for custom range (YYYY-MM-DD)
     - end_date: for custom range (YYYY-MM-DD)
     """
+    # Check access
+    if not has_analytics_access(request.user):
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
     from datetime import datetime, timedelta
     from django.utils import timezone
     from projects.models import Project
