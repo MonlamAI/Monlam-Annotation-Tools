@@ -1027,21 +1027,15 @@
     }  // Close addApproveRejectButtons
     
     // ========================================
-    // FEATURE: AUTO-FILTER FOR ANNOTATORS
+    // FEATURE: AUTO-FILTER + HIDE ANNOTATE BUTTONS FOR ANNOTATORS
     // Uses Doccano's native ?confirmed=false filter
+    // Hides row "Annotate" buttons so annotators use "Start Annotation"
     // ========================================
     async function setDefaultFilterForAnnotators() {
         const path = window.location.pathname;
         
         // Only run on dataset page
         if (!path.includes('/dataset')) return;
-        
-        // Check if already has confirmed parameter
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('confirmed')) {
-            console.log('[Monlam Filter] URL already has confirmed param, respecting user choice');
-            return;
-        }
         
         try {
             const projectMatch = path.match(/\/projects\/(\d+)/);
@@ -1054,35 +1048,69 @@
             const roleData = await roleResp.json();
             const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
             
-            // If annotator, redirect to filtered view
-            if (roleName.includes('annotator') && !roleName.includes('admin') && !roleName.includes('manager') && !roleName.includes('approver')) {
-                console.log('[Monlam Filter] 🔍 User is annotator, setting confirmed=false filter');
+            const isAnnotator = roleName.includes('annotator') && 
+                               !roleName.includes('admin') && 
+                               !roleName.includes('manager') && 
+                               !roleName.includes('approver');
+            
+            if (isAnnotator) {
+                console.log('[Monlam Filter] 🔍 User is annotator');
                 
-                // Add confirmed=false to URL without reload
-                urlParams.set('confirmed', 'false');
-                const newUrl = `${path}?${urlParams.toString()}`;
-                
-                // Use history.replaceState to update URL without reload
-                window.history.replaceState({}, '', newUrl);
-                
-                // Trigger Vue to reload data with the new filter
-                // Find and click the filter checkbox if it exists
-                setTimeout(() => {
-                    const checkbox = document.querySelector('input[type="checkbox"][aria-label*="confirmed"], .v-input--checkbox');
-                    if (checkbox) {
-                        // Check if it's unchecked (we want to show unconfirmed)
-                        console.log('[Monlam Filter] Found checkbox, triggering filter');
-                    }
-                    
-                    // Alternative: Dispatch event to trigger Vue reload
+                // 1. Set confirmed=false filter if not already set
+                const urlParams = new URLSearchParams(window.location.search);
+                if (!urlParams.has('confirmed')) {
+                    urlParams.set('confirmed', 'false');
+                    const newUrl = `${path}?${urlParams.toString()}`;
+                    window.history.replaceState({}, '', newUrl);
                     window.dispatchEvent(new PopStateEvent('popstate'));
-                }, 500);
+                }
+                
+                // 2. Hide "Annotate" buttons on rows - annotators should use "Start Annotation"
+                hideAnnotateButtonsForAnnotators();
+                
+                // Keep checking for new buttons (pagination changes)
+                setInterval(hideAnnotateButtonsForAnnotators, 1000);
+                
             } else {
-                console.log('[Monlam Filter] User is privileged, showing all');
+                console.log('[Monlam Filter] User is privileged, showing all + annotate buttons');
             }
         } catch (error) {
             console.error('[Monlam Filter] Error:', error);
         }
+    }
+    
+    function hideAnnotateButtonsForAnnotators() {
+        /**
+         * Hide "Annotate" buttons on dataset table rows for annotators.
+         * They should use "Start Annotation" button which has proper filtering and locking.
+         */
+        
+        // Find all annotate links/buttons in the table (not the main "Start Annotation" button)
+        const table = document.querySelector('table');
+        if (!table) return;
+        
+        const annotateLinks = table.querySelectorAll('a[href*="speech-to-text"], a[href*="sequence-labeling"], a[href*="document-classification"], a[href*="seq2seq"]');
+        
+        annotateLinks.forEach(link => {
+            if (!link.dataset.monlamHidden) {
+                link.style.display = 'none';
+                link.dataset.monlamHidden = 'true';
+                console.log('[Monlam Filter] Hidden annotate button in row');
+            }
+        });
+        
+        // Also hide any buttons that might be "Annotate" actions
+        const actionCells = table.querySelectorAll('td');
+        actionCells.forEach(cell => {
+            const buttons = cell.querySelectorAll('button, .v-btn');
+            buttons.forEach(btn => {
+                const text = btn.textContent?.toLowerCase() || '';
+                if (text.includes('annotate') && !btn.dataset.monlamHidden) {
+                    btn.style.display = 'none';
+                    btn.dataset.monlamHidden = 'true';
+                }
+            });
+        });
     }
     
     // ========================================
