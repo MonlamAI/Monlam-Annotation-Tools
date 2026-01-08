@@ -1056,14 +1056,20 @@
             if (isAnnotator) {
                 console.log('[Monlam Filter] 🔍 User is annotator');
                 
-                // 1. Set confirmed=false filter if not already set
+                // 1. Set confirmed=false filter - must use actual navigation to trigger Vue reload
                 const urlParams = new URLSearchParams(window.location.search);
-                if (!urlParams.has('confirmed')) {
+                const currentConfirmed = urlParams.get('confirmed');
+                
+                // Only redirect if not already filtered
+                if (currentConfirmed !== 'false') {
+                    console.log('[Monlam Filter] 🔄 Redirecting to filtered view (confirmed=false)');
                     urlParams.set('confirmed', 'false');
-                    const newUrl = `${path}?${urlParams.toString()}`;
-                    window.history.replaceState({}, '', newUrl);
-                    window.dispatchEvent(new PopStateEvent('popstate'));
+                    // Use location.replace to actually navigate and trigger data reload
+                    window.location.replace(`${path}?${urlParams.toString()}`);
+                    return; // Stop execution, page will reload
                 }
+                
+                console.log('[Monlam Filter] ✅ Already on filtered view');
                 
                 // 2. Hide "Annotate" buttons on rows - annotators should use "Start Annotation"
                 hideAnnotateButtonsForAnnotators();
