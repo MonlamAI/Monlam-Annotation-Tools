@@ -1059,6 +1059,13 @@
             
             console.log('[Monlam Skip] 🔍 Checking page index', pageIndex, 'in project', projectId);
             
+            // IMPORTANT: Only auto-skip for "Start Annotation" (page=0)
+            // When user clicks specific row's "Annotate", they want THAT example
+            if (pageIndex > 0) {
+                console.log('[Monlam Skip] User clicked specific row (page > 0), no auto-skip');
+                return;
+            }
+            
             // Check user role - privileged users don't skip
             const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
             if (!roleResp.ok) return;
