@@ -24,9 +24,9 @@
                 <p>Project: {{ project.name }} (ID: {{ project_id }})</p>
             </div>
             <div style="display: flex; gap: 10px;">
-                <a href="/monlam/{{ project_id }}/dataset-enhanced/" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px;">
+                <a href="/projects/{{ project_id }}/dataset/" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px;">
                     <span style="font-size: 20px;">📊</span>
-                    <span>Enhanced Dataset</span>
+                    <span>Dataset</span>
                 </a>
                 <a href="/projects/{{ project_id }}/" style="color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 10px 20px; border-radius: 20px; display: inline-flex; align-items: center; gap: 8px;">
                     <span style="font-size: 20px;">🏠</span>
@@ -52,36 +52,36 @@
                     </v-col>
                     
                     <v-col cols="12" sm="6" md="3">
-                        <v-card color="green lighten-5" elevation="2">
-                            <v-card-text>
-                                <div class="text-h4 text-center">[[ stats.summary.assigned || 0 ]]</div>
-                                <div class="text-center text--secondary">Assigned</div>
-                                <div class="text-center text-caption">
-                                    [[ calculatePercentage(stats.summary.assigned, stats.summary.total_examples) ]]%
-                                </div>
-                            </v-card-text>
-                        </v-card>
-                    </v-col>
-                    
-                    <v-col cols="12" sm="6" md="3">
                         <v-card color="orange lighten-5" elevation="2">
                             <v-card-text>
                                 <div class="text-h4 text-center">[[ stats.summary.submitted || 0 ]]</div>
                                 <div class="text-center text--secondary">Submitted</div>
                                 <div class="text-center text-caption">
-                                    [[ calculatePercentage(stats.summary.submitted, stats.summary.assigned) ]]%
+                                    [[ calculatePercentage(stats.summary.submitted, stats.summary.total_examples) ]]%
                                 </div>
                             </v-card-text>
                         </v-card>
                     </v-col>
                     
                     <v-col cols="12" sm="6" md="3">
-                        <v-card color="purple lighten-5" elevation="2">
+                        <v-card color="green lighten-5" elevation="2">
                             <v-card-text>
                                 <div class="text-h4 text-center">[[ stats.summary.approved || 0 ]]</div>
                                 <div class="text-center text--secondary">Approved</div>
                                 <div class="text-center text-caption">
                                     [[ calculatePercentage(stats.summary.approved, stats.summary.submitted) ]]%
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card color="red lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.rejected || 0 ]]</div>
+                                <div class="text-center text--secondary">Rejected</div>
+                                <div class="text-center text-caption">
+                                    [[ calculatePercentage(stats.summary.rejected, stats.summary.submitted) ]]%
                                 </div>
                             </v-card-text>
                         </v-card>
@@ -120,20 +120,20 @@
                                 :items-per-page="10"
                                 class="elevation-1"
                             >
-                                <template v-slot:item.assigned_to__username="{ item }">
+                                <template v-slot:item.annotated_by__username="{ item }">
                                     <v-chip small color="primary" dark>
                                         <v-icon small left>mdi-account</v-icon>
-                                        [[ item.assigned_to__username ]]
+                                        [[ item.annotated_by__username ]]
                                     </v-chip>
                                 </template>
                                 
                                 <template v-slot:item.progress="{ item }">
                                     <v-progress-linear
-                                        :value="calculatePercentage(item.completed, item.total_assigned)"
+                                        :value="calculatePercentage(item.approved, item.total_annotated)"
                                         height="20"
                                         color="success"
                                     >
-                                        [[ calculatePercentage(item.completed, item.total_assigned) ]]%
+                                        [[ calculatePercentage(item.approved, item.total_annotated) ]]%
                                     </v-progress-linear>
                                 </template>
                                 
@@ -202,9 +202,9 @@
                         <v-card elevation="2">
                             <v-card-title>Quick Actions</v-card-title>
                             <v-card-actions>
-                                <v-btn color="primary" :href="'/monlam/{{ project_id }}/dataset-enhanced/'">
+                                <v-btn color="primary" :href="'/projects/{{ project_id }}/dataset/'">
                                     <v-icon left>mdi-table</v-icon>
-                                    Enhanced Dataset
+                                    Dataset
                                 </v-btn>
                                 <v-btn color="secondary" :href="'/projects/{{ project_id }}/'">
                                     <v-icon left>mdi-folder</v-icon>
@@ -250,13 +250,12 @@
                 approvers: [],
             },
             annotatorHeaders: [
-                { text: 'Annotator', value: 'assigned_to__username', sortable: true },
-                { text: 'Total Assigned', value: 'total_assigned', sortable: true },
-                { text: 'Completed', value: 'completed', sortable: true },
+                { text: 'Annotator', value: 'annotated_by__username', sortable: true },
+                { text: 'Total Annotated', value: 'total_annotated', sortable: true },
                 { text: 'Submitted', value: 'submitted', sortable: true },
                 { text: 'Approved', value: 'approved', sortable: true },
                 { text: 'Rejected', value: 'rejected', sortable: true },
-                { text: 'Progress', value: 'progress', sortable: false },
+                { text: 'Approval Rate', value: 'progress', sortable: false },
             ],
             approverHeaders: [
                 { text: 'Approver', value: 'reviewed_by__username', sortable: true },
@@ -295,4 +294,3 @@
     </script>
 </body>
 </html>
-

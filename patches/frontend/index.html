@@ -641,99 +641,32 @@
         audioObserver.observe(document.body, { childList: true, subtree: true });
     }
     
-    // FEATURE 2: DATASET COLUMNS
-    function addDatasetColumns() {
-        const isDatasetPage = window.location.pathname.includes('/dataset');
-        if (!isDatasetPage) return;
+    // FEATURE 2: STOP AUDIO ON DATASET PAGE
+    // Dataset table should NOT auto-play audio - only show preview
+    function stopDatasetAudio() {
+        if (!window.location.pathname.includes('/dataset')) return;
         
-        console.log('[Monlam Dataset] Adding completion columns...');
-        CONFIG.projectId = getProjectId();
+        // Stop all audio elements on dataset page
+        document.querySelectorAll('audio').forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.autoplay = false;
+            audio.loop = false;
+        });
         
-        let assignmentData = {};
-        
-        fetch(`/v1/projects/${CONFIG.projectId}/assignments/`)
-            .then(r => r.json())
-            .then(data => {
-                const assignments = data.results || data;
-                assignments.forEach(a => {
-                    assignmentData[a.example_id] = a;
-                });
-                console.log('[Monlam Dataset] Loaded', Object.keys(assignmentData).length, 'assignments');
-                injectColumns();
-            })
-            .catch(e => console.error('[Monlam Dataset] Failed:', e));
-        
-        function injectColumns() {
-            waitForElement('thead tr', (headerRow) => {
-                if (headerRow.querySelector('.monlam-col')) return;
-                
-                const th = document.createElement('th');
-                th.className = 'monlam-col text-start';
-                th.innerHTML = '<span style="font-weight: 600;">👤 Assigned To</span>';
-                th.style.cssText = 'padding: 12px; background: #f5f5f5;';
-                headerRow.appendChild(th);
-                
-                console.log('[Monlam Dataset] Header added');
-            });
-            
-            // Function to process rows and add completion data
-            function processRows() {
-                document.querySelectorAll('tbody tr:not([data-monlam-col])').forEach(row => {
-                    row.setAttribute('data-monlam-col', 'true');
-                    
-                    // Get example ID from Cell 1 (ID column)
-                    const cells = row.querySelectorAll('td');
-                    if (cells.length < 2) return;
-                    
-                    const exampleId = cells[1].textContent.trim();
-                    if (!exampleId || !/^\d+$/.test(exampleId)) return;
-                    
-                    const assignment = assignmentData[exampleId];
-                    
-                    const td = document.createElement('td');
-                    td.className = 'monlam-col text-start';
-                    td.style.cssText = 'padding: 12px;';
-                    
-                    if (assignment) {
-                        td.innerHTML = `
-                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                <span style="background: #2196F3; color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; display: inline-block; width: fit-content;">
-                                    📋 ${assignment.status}
-                                </span>
-                                <span style="font-size: 10px; color: #666;">${assignment.assigned_to_username || 'N/A'}</span>
-                            </div>
-                        `;
-                    } else {
-                        td.innerHTML = '<span style="color: #999; font-size: 12px;">Not assigned</span>';
-                    }
-                    
-                    row.appendChild(td);
-                });
-                
-                const rowsProcessed = document.querySelectorAll('tbody tr[data-monlam-col]').length;
-                if (rowsProcessed > 0) {
-                    console.log('[Monlam Dataset] Processed', rowsProcessed, 'rows');
+        // Also prevent future audio from auto-playing via observer
+        const audioStopObserver = new MutationObserver(() => {
+            document.querySelectorAll('audio').forEach(audio => {
+                if (!audio.paused && !audio.hasAttribute('data-user-played')) {
+                    audio.pause();
+                    audio.currentTime = 0;
                 }
-            }
-            
-            // Set up observer for future rows
-            const observer = new MutationObserver(() => {
-                processRows();
+                audio.autoplay = false;
+                audio.loop = false;
             });
-            
-            waitForElement('tbody', (tbody) => {
-                // Process existing rows first
-                processRows();
-                
-                // Then watch for new rows
-                observer.observe(tbody, { childList: true, subtree: true });
-            });
-        }
+        });
+        audioStopObserver.observe(document.body, { childList: true, subtree: true });
     }
-    
-    // Removed: addMetricsMatrix()
-    // This was for the old /monlam/{id}/completion/ custom page
-    // No longer needed since we're not redirecting to custom pages
     
     // FEATURE: APPROVE/REJECT BUTTONS FOR REVIEWERS
     async function addApproveRejectButtons() {
@@ -1464,6 +1397,7 @@
         // Initialize features after a short delay (let Vue render)
         setTimeout(() => {
             enableAudioLoop();
+            stopDatasetAudio();  // Stop auto-play on dataset page
             enhanceDatasetTable();
             addApproveRejectButtons();
         }, 1000);
@@ -1482,6 +1416,7 @@
                 
                 setTimeout(() => {
                     enableAudioLoop();
+                    stopDatasetAudio();  // Stop auto-play on dataset page
                     enhanceDatasetTable();
                     addApproveRejectButtons();
                 }, 500);

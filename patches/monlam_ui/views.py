@@ -246,9 +246,11 @@ def api_completion_stats(request, project_id):
     """
     API endpoint for completion statistics
     Used by the completion dashboard
+    
+    Now uses AnnotationTracking (not Assignment) for stats.
     """
     from projects.models import Project
-    from assignment.models_separate import Assignment
+    from assignment.simple_tracking import AnnotationTracking
     
     project = get_object_or_404(Project, pk=project_id)
     
@@ -257,30 +259,30 @@ def api_completion_stats(request, project_id):
         if not project.members.filter(id=request.user.id).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
     
-    # Get overall stats
+    # Get overall stats from AnnotationTracking
     total_examples = project.examples.count()
-    assignments = Assignment.objects.filter(project=project, is_active=True)
+    tracking = AnnotationTracking.objects.filter(project=project)
     
-    assigned_count = assignments.count()
-    completed_count = assignments.filter(status='completed').count()
-    submitted_count = assignments.filter(status='submitted').count()
-    approved_count = assignments.filter(status='approved').count()
-    rejected_count = assignments.filter(status='rejected').count()
+    submitted_count = tracking.filter(status='submitted').count()
+    approved_count = tracking.filter(status='approved').count()
+    rejected_count = tracking.filter(status='rejected').count()
+    pending_count = total_examples - tracking.count()  # Examples without tracking = pending
     
-    # Per-annotator stats
-    annotator_stats = assignments.values(
-        'assigned_to__id',
-        'assigned_to__username'
+    # Per-annotator stats (grouped by annotated_by)
+    annotator_stats = tracking.filter(
+        annotated_by__isnull=False
+    ).values(
+        'annotated_by__id',
+        'annotated_by__username'
     ).annotate(
-        total_assigned=Count('id'),
-        completed=Count('id', filter=Q(status='completed')),
+        total_annotated=Count('id'),
         submitted=Count('id', filter=Q(status='submitted')),
         approved=Count('id', filter=Q(status='approved')),
         rejected=Count('id', filter=Q(status='rejected')),
-    ).order_by('assigned_to__username')
+    ).order_by('annotated_by__username')
     
-    # Per-approver stats
-    approver_stats = assignments.filter(
+    # Per-approver stats (grouped by reviewed_by)
+    approver_stats = tracking.filter(
         reviewed_by__isnull=False
     ).values(
         'reviewed_by__id',
@@ -294,12 +296,10 @@ def api_completion_stats(request, project_id):
     return JsonResponse({
         'summary': {
             'total_examples': total_examples,
-            'assigned': assigned_count,
-            'completed': completed_count,
+            'pending': pending_count,
             'submitted': submitted_count,
             'approved': approved_count,
             'rejected': rejected_count,
-            'unassigned': total_examples - assigned_count,
         },
         'annotators': list(annotator_stats),
         'approvers': list(approver_stats),
