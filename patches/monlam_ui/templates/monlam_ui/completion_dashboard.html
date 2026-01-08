@@ -42,7 +42,7 @@
             <v-container fluid class="pa-4">
                 <!-- Summary Cards -->
                 <v-row v-if="!loading && !error">
-                    <v-col cols="12" sm="6" md="3">
+                    <v-col cols="12" sm="6" md="2">
                         <v-card color="blue lighten-5" elevation="2">
                             <v-card-text>
                                 <div class="text-h4 text-center">[[ stats.summary.total_examples || 0 ]]</div>
@@ -51,38 +51,50 @@
                         </v-card>
                     </v-col>
                     
-                    <v-col cols="12" sm="6" md="3">
-                        <v-card color="orange lighten-5" elevation="2">
+                    <v-col cols="12" sm="6" md="2">
+                        <v-card color="purple lighten-5" elevation="2">
                             <v-card-text>
-                                <div class="text-h4 text-center">[[ stats.summary.submitted || 0 ]]</div>
-                                <div class="text-center text--secondary">Submitted</div>
+                                <div class="text-h4 text-center">[[ stats.summary.confirmed || 0 ]]</div>
+                                <div class="text-center text--secondary">Confirmed ✓</div>
                                 <div class="text-center text-caption">
-                                    [[ calculatePercentage(stats.summary.submitted, stats.summary.total_examples) ]]%
+                                    [[ calculatePercentage(stats.summary.confirmed, stats.summary.total_examples) ]]%
                                 </div>
                             </v-card-text>
                         </v-card>
                     </v-col>
                     
-                    <v-col cols="12" sm="6" md="3">
+                    <v-col cols="12" sm="6" md="2">
+                        <v-card color="grey lighten-4" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.pending || 0 ]]</div>
+                                <div class="text-center text--secondary">Pending</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    
+                    <v-col cols="12" sm="6" md="2">
+                        <v-card color="orange lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.submitted || 0 ]]</div>
+                                <div class="text-center text--secondary">Awaiting Review</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    
+                    <v-col cols="12" sm="6" md="2">
                         <v-card color="green lighten-5" elevation="2">
                             <v-card-text>
                                 <div class="text-h4 text-center">[[ stats.summary.approved || 0 ]]</div>
                                 <div class="text-center text--secondary">Approved</div>
-                                <div class="text-center text-caption">
-                                    [[ calculatePercentage(stats.summary.approved, stats.summary.submitted) ]]%
-                                </div>
                             </v-card-text>
                         </v-card>
                     </v-col>
                     
-                    <v-col cols="12" sm="6" md="3">
+                    <v-col cols="12" sm="6" md="2">
                         <v-card color="red lighten-5" elevation="2">
                             <v-card-text>
                                 <div class="text-h4 text-center">[[ stats.summary.rejected || 0 ]]</div>
                                 <div class="text-center text--secondary">Rejected</div>
-                                <div class="text-center text-caption">
-                                    [[ calculatePercentage(stats.summary.rejected, stats.summary.submitted) ]]%
-                                </div>
                             </v-card-text>
                         </v-card>
                     </v-col>

@@ -247,9 +247,12 @@ def api_completion_stats(request, project_id):
     API endpoint for completion statistics
     Used by the completion dashboard
     
-    Now uses AnnotationTracking (not Assignment) for stats.
+    Uses BOTH:
+    - ExampleState (Doccano's native confirmation via checkmark)
+    - AnnotationTracking (our approve/reject workflow)
     """
     from projects.models import Project
+    from examples.models import ExampleState
     from assignment.simple_tracking import AnnotationTracking
     
     project = get_object_or_404(Project, pk=project_id)
@@ -259,29 +262,66 @@ def api_completion_stats(request, project_id):
         if not project.members.filter(id=request.user.id).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
     
-    # Get overall stats from AnnotationTracking
+    # Get overall stats
     total_examples = project.examples.count()
-    tracking = AnnotationTracking.objects.filter(project=project)
     
-    submitted_count = tracking.filter(status='submitted').count()
+    # Get CONFIRMED examples from Doccano's ExampleState (checkmark clicked)
+    example_ids = list(project.examples.values_list('id', flat=True))
+    confirmed_states = ExampleState.objects.filter(
+        example_id__in=example_ids
+    ).select_related('confirmed_by')
+    confirmed_count = confirmed_states.count()
+    
+    # Get tracking stats (our approve/reject workflow)
+    tracking = AnnotationTracking.objects.filter(project=project)
     approved_count = tracking.filter(status='approved').count()
     rejected_count = tracking.filter(status='rejected').count()
-    pending_count = total_examples - tracking.count()  # Examples without tracking = pending
     
-    # Per-annotator stats (grouped by annotated_by)
-    annotator_stats = tracking.filter(
-        annotated_by__isnull=False
-    ).values(
-        'annotated_by__id',
-        'annotated_by__username'
-    ).annotate(
-        total_annotated=Count('id'),
-        submitted=Count('id', filter=Q(status='submitted')),
-        approved=Count('id', filter=Q(status='approved')),
-        rejected=Count('id', filter=Q(status='rejected')),
-    ).order_by('annotated_by__username')
+    # Submitted = confirmed but not yet approved/rejected
+    submitted_count = confirmed_count - approved_count - rejected_count
+    if submitted_count < 0:
+        submitted_count = 0
     
-    # Per-approver stats (grouped by reviewed_by)
+    pending_count = total_examples - confirmed_count
+    
+    # Per-annotator stats from ExampleState (who confirmed each example)
+    annotator_dict = {}
+    for state in confirmed_states:
+        if state.confirmed_by:
+            username = state.confirmed_by.username
+            user_id = state.confirmed_by.id
+            if username not in annotator_dict:
+                annotator_dict[username] = {
+                    'annotated_by__id': user_id,
+                    'annotated_by__username': username,
+                    'total_annotated': 0,
+                    'submitted': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                }
+            annotator_dict[username]['total_annotated'] += 1
+    
+    # Add tracking status to annotator stats
+    for t in tracking:
+        if t.annotated_by:
+            username = t.annotated_by.username
+            if username in annotator_dict:
+                if t.status == 'approved':
+                    annotator_dict[username]['approved'] += 1
+                elif t.status == 'rejected':
+                    annotator_dict[username]['rejected'] += 1
+                elif t.status == 'submitted':
+                    annotator_dict[username]['submitted'] += 1
+    
+    # Calculate submitted (total - approved - rejected) for each annotator
+    for username, stats in annotator_dict.items():
+        stats['submitted'] = stats['total_annotated'] - stats['approved'] - stats['rejected']
+        if stats['submitted'] < 0:
+            stats['submitted'] = 0
+    
+    annotator_stats = sorted(annotator_dict.values(), key=lambda x: x['annotated_by__username'])
+    
+    # Per-approver stats (who approved/rejected)
     approver_stats = tracking.filter(
         reviewed_by__isnull=False
     ).values(
@@ -296,12 +336,13 @@ def api_completion_stats(request, project_id):
     return JsonResponse({
         'summary': {
             'total_examples': total_examples,
+            'confirmed': confirmed_count,  # New: from ExampleState
             'pending': pending_count,
             'submitted': submitted_count,
             'approved': approved_count,
             'rejected': rejected_count,
         },
-        'annotators': list(annotator_stats),
+        'annotators': annotator_stats,
         'approvers': list(approver_stats),
     })
 
