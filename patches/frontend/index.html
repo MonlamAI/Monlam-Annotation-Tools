@@ -1546,7 +1546,25 @@
                 console.log('[Monlam Dataset] ✅ Headers reordered: Audio → Action → Annotated By → Reviewed By → Status');
                 
                 // Add data cells to rows
+                enhanceDataRows(trackingMap);
+                
+                // Watch for new rows (when pagination changes)
+                if (!window.monlamRowObserver) {
+                    window.monlamRowObserver = setInterval(() => {
+                        const newRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
+                        if (newRows.length > 0) {
+                            console.log('[Monlam Dataset] 🔄 Found', newRows.length, 'new rows, enhancing...');
+                            enhanceDataRows(trackingMap);
+                        }
+                    }, 500);
+                }
+                
+                return true;
+            }
+            
+            function enhanceDataRows(trackingMap) {
                 const dataRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
+                if (dataRows.length === 0) return;
                 console.log('[Monlam Dataset] Processing', dataRows.length, 'unprocessed rows');
                 
                 dataRows.forEach(row => {
@@ -1638,15 +1656,15 @@
                     
                     // Set up MutationObserver to handle new rows (e.g., pagination)
                     const tbody = document.querySelector('tbody');
-                    if (tbody) {
-                        const rowObserver = new MutationObserver(() => {
+                    if (tbody && !window.monlamTbodyObserver) {
+                        window.monlamTbodyObserver = new MutationObserver(() => {
                             const newRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
                             if (newRows.length > 0) {
                                 console.log('[Monlam Dataset] 🔄 Detected', newRows.length, 'new rows');
-                                enhanceTable(); // Process new rows only
+                                enhanceDataRows(trackingMap); // Process new rows only
                             }
                         });
-                        rowObserver.observe(tbody, { childList: true });
+                        window.monlamTbodyObserver.observe(tbody, { childList: true, subtree: true });
                     }
                 } else if (attempt < maxAttempts) {
                     const delay = baseDelay * Math.pow(1.5, attempt);
