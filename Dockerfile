@@ -246,6 +246,7 @@ WORKDIR /doccano/backend
 # Copy database reset script and init script for manual fixes (no chmod needed for Python scripts)
 COPY reset_db.py /doccano/backend/reset_db.py
 COPY init_monlam.py /doccano/backend/init_monlam.py
+COPY backfill_tracking.py /doccano/backend/backfill_tracking.py
 
 # Override Doccano's default CMD - bypass problematic run.sh script
 # Set DJANGO_SETTINGS_MODULE in CMD to avoid Docker cache issues
