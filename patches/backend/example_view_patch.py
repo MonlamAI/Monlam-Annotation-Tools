@@ -55,9 +55,9 @@ def patch_example_view():
                 pass
         
         if not ExampleListAPI:
-            print('[Monlam Visibility] Could not find ExampleList view, trying alternative approach')
-            # Try to patch via URL dispatcher
-            return patch_via_url_dispatcher()
+            print('[Monlam Visibility] Could not find ExampleList view - visibility filtering disabled')
+            print('[Monlam Visibility] Will rely on REST_FRAMEWORK filter backend instead')
+            return False
         
         from django.db.models import Q
         from django.utils import timezone
