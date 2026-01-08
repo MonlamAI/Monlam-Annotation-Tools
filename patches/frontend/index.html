@@ -529,6 +529,42 @@
     
     console.log('[Monlam Inline] Features loading...');
     
+    // ========================================
+    // FIX: Override $translateRole to support project_manager
+    // ========================================
+    function fixRoleTranslation() {
+        // Wait for Vue to be available
+        const checkVue = setInterval(() => {
+            if (window.Vue && window.Vue.prototype) {
+                // Override the $translateRole function
+                window.Vue.prototype.$translateRole = function(role, mapping) {
+                    const roleMap = {
+                        'project_admin': 'Project Admin',
+                        'annotator': 'Annotator',
+                        'annotation_approver': 'Annotation Approver',
+                        'project_manager': 'Project Manager'
+                    };
+                    
+                    if (roleMap[role]) {
+                        return roleMap[role];
+                    }
+                    
+                    // For unknown roles, format nicely
+                    return role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                };
+                
+                console.log('[Monlam] ✅ Role translation fixed (project_manager added)');
+                clearInterval(checkVue);
+            }
+        }, 100);
+        
+        // Stop checking after 10 seconds
+        setTimeout(() => clearInterval(checkVue), 10000);
+    }
+    
+    // Run immediately
+    fixRoleTranslation();
+    
     const CONFIG = {
         maxRetries: 50,
         retryDelay: 200,
