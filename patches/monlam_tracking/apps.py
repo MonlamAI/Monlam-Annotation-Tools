@@ -20,13 +20,21 @@ class MonlamTrackingConfig(AppConfig):
         """
         print('[Monlam Tracking] App initializing...')
         
-        # Import and register the visibility filter backend
+        # DIRECT PATCH: Patch Doccano's Example view for visibility filtering
+        # This is more reliable than REST_FRAMEWORK filter backends
         try:
-            from .filters import register_visibility_filter
-            register_visibility_filter()
-            print('[Monlam Tracking] ✅ Visibility filter registered')
+            from backend.example_view_patch import patch_example_view
+            patch_example_view()
+            print('[Monlam Tracking] ✅ Example view patched for visibility')
         except Exception as e:
-            print(f'[Monlam Tracking] ⚠️ Visibility filter not registered: {e}')
+            print(f'[Monlam Tracking] ⚠️ Example view patch failed: {e}')
+            # Fallback: Try the filter backend approach
+            try:
+                from .filters import register_visibility_filter
+                register_visibility_filter()
+                print('[Monlam Tracking] ✅ Fallback: Visibility filter registered')
+            except Exception as e2:
+                print(f'[Monlam Tracking] ⚠️ Fallback also failed: {e2}')
         
         # Set up auto-tracking signals
         try:
