@@ -176,14 +176,31 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             tracking = AnnotationTracking.objects.filter(
                 project_id=project_id,
                 example_id=pk
-            ).select_related('annotated_by', 'reviewed_by').first()
+            ).select_related('annotated_by', 'reviewed_by', 'locked_by').first()
             
             if not tracking:
                 return Response({
                     'status': 'pending',
                     'annotated_by': None,
-                    'reviewed_by': None
+                    'reviewed_by': None,
+                    'locked_by': None,
+                    'is_locked': False
                 })
+            
+            # Check if lock is still valid (30 minute expiry)
+            is_locked = False
+            locked_by_username = None
+            if tracking.locked_by and tracking.locked_at:
+                from datetime import timedelta
+                lock_expiry = tracking.locked_at + timedelta(minutes=30)
+                if timezone.now() < lock_expiry:
+                    is_locked = True
+                    locked_by_username = tracking.locked_by.username
+                else:
+                    # Lock expired, clear it
+                    tracking.locked_by = None
+                    tracking.locked_at = None
+                    tracking.save(update_fields=['locked_by', 'locked_at'])
             
             return Response({
                 'status': tracking.status,
@@ -191,7 +208,185 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 'annotated_at': tracking.annotated_at,
                 'reviewed_by': tracking.reviewed_by.username if tracking.reviewed_by else None,
                 'reviewed_at': tracking.reviewed_at,
-                'review_notes': tracking.review_notes
+                'review_notes': tracking.review_notes,
+                'locked_by': locked_by_username,
+                'is_locked': is_locked,
+                'locked_at': tracking.locked_at if is_locked else None
+            })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    # ========================================
+    # LOCKING ENDPOINTS
+    # ========================================
+    
+    @action(detail=True, methods=['post'], url_path='lock')
+    def lock(self, request, project_id=None, pk=None):
+        """
+        Lock an example for annotation.
+        
+        POST /v1/projects/{project_id}/tracking/{example_id}/lock/
+        
+        Locks expire after 30 minutes.
+        Returns error if already locked by another user.
+        """
+        from datetime import timedelta
+        
+        try:
+            with transaction.atomic():
+                tracking, created = AnnotationTracking.objects.select_for_update().get_or_create(
+                    project_id=project_id,
+                    example_id=pk,
+                    defaults={
+                        'locked_by': request.user,
+                        'locked_at': timezone.now(),
+                        'status': 'pending'
+                    }
+                )
+                
+                if not created:
+                    # Check if already locked by someone else
+                    if tracking.locked_by and tracking.locked_by != request.user:
+                        # Check if lock is still valid
+                        lock_expiry = tracking.locked_at + timedelta(minutes=30) if tracking.locked_at else timezone.now()
+                        if timezone.now() < lock_expiry:
+                            return Response({
+                                'success': False,
+                                'error': 'locked_by_other',
+                                'message': f'This example is locked by {tracking.locked_by.username}',
+                                'locked_by': tracking.locked_by.username,
+                                'locked_at': tracking.locked_at,
+                                'expires_in_minutes': int((lock_expiry - timezone.now()).total_seconds() / 60)
+                            }, status=status.HTTP_409_CONFLICT)
+                    
+                    # Lock it for this user (or renew existing lock)
+                    tracking.locked_by = request.user
+                    tracking.locked_at = timezone.now()
+                    tracking.save(update_fields=['locked_by', 'locked_at'])
+                
+                print(f'[Monlam Lock] Example {pk} locked by {request.user.username}')
+                
+                return Response({
+                    'success': True,
+                    'locked_by': request.user.username,
+                    'locked_at': tracking.locked_at,
+                    'expires_in_minutes': 30
+                })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], url_path='unlock')
+    def unlock(self, request, project_id=None, pk=None):
+        """
+        Unlock an example.
+        
+        POST /v1/projects/{project_id}/tracking/{example_id}/unlock/
+        
+        Only the user who locked it (or an admin) can unlock.
+        """
+        try:
+            tracking = AnnotationTracking.objects.filter(
+                project_id=project_id,
+                example_id=pk
+            ).first()
+            
+            if not tracking:
+                return Response({
+                    'success': True,
+                    'message': 'No tracking record exists'
+                })
+            
+            # Check if user can unlock
+            if tracking.locked_by and tracking.locked_by != request.user:
+                # Check if user is admin/superuser
+                if not request.user.is_superuser:
+                    # Check if user is project admin/manager
+                    try:
+                        from roles.models import Member
+                        member = Member.objects.get(user=request.user, project_id=project_id)
+                        role_name = member.role.name.lower() if member.role.name else ''
+                        if 'admin' not in role_name and 'manager' not in role_name:
+                            return Response({
+                                'success': False,
+                                'error': 'not_authorized',
+                                'message': 'Only the lock owner or an admin can unlock'
+                            }, status=status.HTTP_403_FORBIDDEN)
+                    except:
+                        return Response({
+                            'success': False,
+                            'error': 'not_authorized',
+                            'message': 'Only the lock owner or an admin can unlock'
+                        }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Unlock
+            tracking.locked_by = None
+            tracking.locked_at = None
+            tracking.save(update_fields=['locked_by', 'locked_at'])
+            
+            print(f'[Monlam Lock] Example {pk} unlocked by {request.user.username}')
+            
+            return Response({
+                'success': True,
+                'message': 'Example unlocked'
+            })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['get'], url_path='lock-status')
+    def lock_status(self, request, project_id=None, pk=None):
+        """
+        Check lock status of an example.
+        
+        GET /v1/projects/{project_id}/tracking/{example_id}/lock-status/
+        """
+        from datetime import timedelta
+        
+        try:
+            tracking = AnnotationTracking.objects.filter(
+                project_id=project_id,
+                example_id=pk
+            ).select_related('locked_by').first()
+            
+            if not tracking or not tracking.locked_by:
+                return Response({
+                    'is_locked': False,
+                    'locked_by': None,
+                    'can_edit': True
+                })
+            
+            # Check if lock is still valid
+            lock_expiry = tracking.locked_at + timedelta(minutes=30) if tracking.locked_at else timezone.now()
+            if timezone.now() >= lock_expiry:
+                # Lock expired
+                return Response({
+                    'is_locked': False,
+                    'locked_by': None,
+                    'can_edit': True,
+                    'message': 'Lock expired'
+                })
+            
+            # Lock is valid
+            is_own_lock = tracking.locked_by == request.user
+            return Response({
+                'is_locked': True,
+                'locked_by': tracking.locked_by.username,
+                'locked_at': tracking.locked_at,
+                'expires_at': lock_expiry,
+                'expires_in_minutes': int((lock_expiry - timezone.now()).total_seconds() / 60),
+                'is_own_lock': is_own_lock,
+                'can_edit': is_own_lock
             })
         
         except Exception as e:

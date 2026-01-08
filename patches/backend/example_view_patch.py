@@ -65,6 +65,7 @@ def patch_example_view():
                 
                 # Apply filtering for annotators
                 from assignment.simple_tracking import AnnotationTracking
+                from datetime import timedelta
                 
                 # Get all tracking records for this project
                 tracking_qs = AnnotationTracking.objects.filter(project_id=project_id)
@@ -75,6 +76,14 @@ def patch_example_view():
                 
                 for tracking in tracking_qs:
                     example_id = tracking.example_id
+                    
+                    # LOCKING: Hide examples locked by others (within 30 min)
+                    if tracking.locked_by and tracking.locked_by != user:
+                        if tracking.locked_at:
+                            lock_expiry = tracking.locked_at + timedelta(minutes=30)
+                            if timezone.now() < lock_expiry:
+                                hide_ids.add(example_id)
+                                continue  # Skip other checks, this is locked
                     
                     # Pending = show (not yet annotated)
                     if tracking.status == 'pending':
