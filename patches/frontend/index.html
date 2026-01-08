@@ -1180,10 +1180,11 @@
             return;
         }
         
-        // CRITICAL: Check if already enhanced for THIS specific project (page-level flag)
-        const enhanceKey = `monlam_dataset_enhanced_${projectId}_${window.location.pathname}`;
-        if (window[enhanceKey]) {
-            console.log('[Monlam Dataset] Table already enhanced for this page, skipping');
+        // Check if table ACTUALLY has our columns (not just a flag)
+        // Vue re-renders destroy the DOM, so we must check the actual table
+        const existingHeaders = document.querySelector('.monlam-status-header');
+        if (existingHeaders) {
+            console.log('[Monlam Dataset] Table already has enhancement headers, skipping');
             return;
         }
         
@@ -1329,8 +1330,6 @@
                 const success = enhanceTable();
                 
                 if (success) {
-                    // Mark as complete for THIS specific page
-                    window[enhanceKey] = true;
                     console.log('[Monlam Dataset] ✅ Enhancement complete after', attempt, 'attempts');
                     
                     // Set up MutationObserver to handle new rows (e.g., pagination)
