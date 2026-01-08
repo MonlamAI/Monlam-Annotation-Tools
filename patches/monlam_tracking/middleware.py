@@ -164,37 +164,48 @@ class VisibilityMiddleware:
         
         # No tracking = unannotated = show
         if not tracking:
+            print(f'[Visibility] Example has no tracking → SHOW')
             return True
+        
+        example_id = tracking.example_id
+        status = tracking.status
+        annotated_by = tracking.annotated_by
+        
+        print(f'[Visibility] Example {example_id}: status={status}, annotated_by={annotated_by}, user={user}')
         
         # Check locking first
         if tracking.locked_by:
             if tracking.locked_by == user:
-                # Locked by current user = show
+                print(f'[Visibility] Example {example_id}: Locked by me → SHOW')
                 return True
             else:
-                # Locked by someone else - check expiry
                 if tracking.locked_at:
                     lock_expiry = tracking.locked_at + timedelta(minutes=30)
                     if timezone.now() < lock_expiry:
-                        # Still locked by someone else = hide
+                        print(f'[Visibility] Example {example_id}: Locked by {tracking.locked_by} → HIDE')
                         return False
         
         # Pending = show
-        if tracking.status == 'pending':
+        if status == 'pending':
+            print(f'[Visibility] Example {example_id}: Pending → SHOW')
             return True
         
         # Rejected and annotated by current user = show (needs to fix)
-        if tracking.status == 'rejected' and tracking.annotated_by == user:
+        if status == 'rejected' and annotated_by == user:
+            print(f'[Visibility] Example {example_id}: Rejected by me → SHOW')
             return True
         
         # Annotated by someone else = hide
-        if tracking.annotated_by and tracking.annotated_by != user:
+        if annotated_by and annotated_by != user:
+            print(f'[Visibility] Example {example_id}: Annotated by {annotated_by}, not me → HIDE')
             return False
         
         # Annotated by current user and submitted/approved = hide
-        if tracking.annotated_by == user and tracking.status in ['submitted', 'approved']:
+        if annotated_by == user and status in ['submitted', 'approved']:
+            print(f'[Visibility] Example {example_id}: Annotated by me, {status} → HIDE')
             return False
         
         # Default: show
+        print(f'[Visibility] Example {example_id}: Default → SHOW')
         return True
 
