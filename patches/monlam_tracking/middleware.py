@@ -53,10 +53,12 @@ class VisibilityMiddleware:
             return response
         
         # IMPORTANT: Don't filter if it's a single-item request (for annotation page)
-        # Check query params - if limit=1 or offset is specific, don't filter
+        # Check query params - if limit=1 exactly (not limit=10, limit=100, etc.)
         query_string = request.META.get('QUERY_STRING', '')
-        if 'limit=1' in query_string:
-            log(f'[Monlam Middleware] Single item request, skipping filter')
+        # Use regex to match limit=1 exactly (followed by & or end of string)
+        import re
+        if re.search(r'limit=1(&|$)', query_string):
+            log(f'[Monlam Middleware] Single item request (limit=1), skipping filter')
             return response
         
         log(f'[Monlam Middleware] 🔍 Processing {request.path} for user {request.user}')
