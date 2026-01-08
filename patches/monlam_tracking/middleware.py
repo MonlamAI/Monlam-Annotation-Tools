@@ -25,11 +25,16 @@ class VisibilityMiddleware:
     """
     
     def __init__(self, get_response):
+        print('[Monlam MW] 🚀 VisibilityMiddleware initialized!')
         self.get_response = get_response
         # Regex to match examples API endpoint
         self.examples_pattern = re.compile(r'^/v1/projects/(\d+)/examples/?$')
     
     def __call__(self, request):
+        # Debug: Log EVERY request to see if middleware is active
+        if '/examples' in request.path:
+            print(f'[Monlam MW] 📥 Request: {request.method} {request.path}')
+        
         response = self.get_response(request)
         
         # Only process GET requests to examples API
@@ -146,15 +151,12 @@ class VisibilityMiddleware:
             
             # Get current page's confirmed states
             example_ids = [ex.get('id') for ex in results if ex.get('id')]
-            print(f'[Monlam Middleware] Page example IDs: {example_ids[:10]}...')
-            
             confirmed_states = ExampleState.objects.filter(
                 example_id__in=example_ids
             ).select_related('confirmed_by')
             
             # Map: example_id -> confirmed_by user
             confirmed_map = {state.example_id: state.confirmed_by for state in confirmed_states}
-            print(f'[Monlam Middleware] Confirmed on this page: {list(confirmed_map.keys())}')
             
             # Also get our tracking data for locking and review status
             from assignment.simple_tracking import AnnotationTracking
