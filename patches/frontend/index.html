@@ -1164,8 +1164,9 @@
                 const status = await statusResp.json();
                 
                 if (status.is_locked && !status.is_own_lock) {
-                    // Locked by someone else!
-                    showLockedByOtherModal(status.locked_by, status.expires_in_minutes);
+                    // Locked by someone else - auto-navigate to next available!
+                    console.log('[Monlam Lock] Example locked by', status.locked_by, '- finding next...');
+                    await navigateToNextAvailableExample(projectId, exampleId);
                     return;
                 }
             }
@@ -1186,11 +1187,12 @@
                     window.monlamLockedExample = { projectId, exampleId };
                     showLockIndicator(lockData.expires_in_minutes);
                 } else if (lockData.error === 'locked_by_other') {
-                    showLockedByOtherModal(lockData.locked_by, lockData.expires_in_minutes);
+                    // Auto-navigate to next available
+                    await navigateToNextAvailableExample(projectId, exampleId);
                 }
             } else if (lockResp.status === 409) {
-                const lockData = await lockResp.json();
-                showLockedByOtherModal(lockData.locked_by, lockData.expires_in_minutes);
+                // Auto-navigate to next available
+                await navigateToNextAvailableExample(projectId, exampleId);
             }
             
         } catch (error) {
@@ -1271,6 +1273,127 @@
             <span>Locked for editing (${expiresInMinutes}m)</span>
         `;
         document.body.appendChild(indicator);
+    }
+    
+    async function navigateToNextAvailableExample(projectId, currentExampleId) {
+        /**
+         * When current example is locked, find and navigate to next available.
+         * Uses Doccano's ?confirmed=false filter for unconfirmed examples.
+         */
+        console.log('[Monlam Lock] 🔍 Finding next available example...');
+        
+        // Prevent multiple navigation attempts
+        if (window.monlamNavigatingToNext) {
+            console.log('[Monlam Lock] Already navigating, skipping');
+            return;
+        }
+        window.monlamNavigatingToNext = true;
+        
+        try {
+            // Get all unconfirmed examples
+            const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000&confirmed=false`);
+            if (!examplesResp.ok) {
+                console.error('[Monlam Lock] Failed to fetch examples');
+                showNoAvailableExamplesMessage(projectId);
+                return;
+            }
+            
+            const examplesData = await examplesResp.json();
+            const examples = examplesData.results || [];
+            
+            if (examples.length === 0) {
+                console.log('[Monlam Lock] No unconfirmed examples available');
+                showNoAvailableExamplesMessage(projectId);
+                return;
+            }
+            
+            // Find current example's index
+            const currentIndex = examples.findIndex(e => e.id == currentExampleId);
+            
+            // Try to find next unlocked example (starting after current)
+            for (let i = 1; i <= examples.length; i++) {
+                const nextIndex = (currentIndex + i) % examples.length;
+                const nextExample = examples[nextIndex];
+                
+                if (nextExample.id == currentExampleId) {
+                    // Wrapped around to same example - all locked
+                    continue;
+                }
+                
+                // Check if this example is unlocked
+                const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/lock-status/`);
+                if (lockResp.ok) {
+                    const lockStatus = await lockResp.json();
+                    if (!lockStatus.is_locked) {
+                        // Found an unlocked example!
+                        console.log('[Monlam Lock] ✅ Found available example:', nextExample.id, 'at index', nextIndex);
+                        
+                        // Navigate to it
+                        const path = window.location.pathname;
+                        const basePath = path.replace(/\?.*$/, '').split('?')[0];
+                        window.location.replace(`${basePath}?page=${nextIndex}`);
+                        return;
+                    }
+                }
+            }
+            
+            // All examples are locked
+            console.log('[Monlam Lock] All examples are currently locked');
+            showAllLockedMessage(projectId);
+            
+        } catch (error) {
+            console.error('[Monlam Lock] Error finding next example:', error);
+        } finally {
+            window.monlamNavigatingToNext = false;
+        }
+    }
+    
+    function showNoAvailableExamplesMessage(projectId) {
+        const msg = document.createElement('div');
+        msg.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; padding: 32px; border-radius: 12px; text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 10000;
+        `;
+        msg.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 16px;">🎉</div>
+            <h2 style="margin: 0 0 16px 0; color: #333;">All Done!</h2>
+            <p style="color: #666; margin-bottom: 24px;">
+                All examples have been annotated.<br>
+                Great work!
+            </p>
+            <button onclick="window.location.href='/projects/${projectId}/dataset'" style="
+                padding: 12px 24px; background: #4CAF50; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 16px;
+            ">Back to Dataset</button>
+        `;
+        document.body.appendChild(msg);
+    }
+    
+    function showAllLockedMessage(projectId) {
+        const msg = document.createElement('div');
+        msg.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; padding: 32px; border-radius: 12px; text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 10000;
+        `;
+        msg.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+            <h2 style="margin: 0 0 16px 0; color: #333;">All Examples Busy</h2>
+            <p style="color: #666; margin-bottom: 24px;">
+                All available examples are currently being edited<br>
+                by other annotators. Please wait a moment.
+            </p>
+            <button onclick="window.location.reload()" style="
+                padding: 12px 24px; background: #1976d2; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-right: 8px;
+            ">Retry</button>
+            <button onclick="window.location.href='/projects/${projectId}/dataset'" style="
+                padding: 12px 24px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 16px;
+            ">Back to Dataset</button>
+        `;
+        document.body.appendChild(msg);
     }
     
     function showLockedByOtherModal(lockedByUsername, expiresInMinutes) {
