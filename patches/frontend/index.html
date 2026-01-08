@@ -568,7 +568,20 @@
     
     function enableAudioLoop() {
         const path = window.location.pathname;
-        const isAnnotationPage = path.includes('/speech-to-text') || path.match(/\/projects\/\d+\/\d+$/);
+        
+        // ONLY enable on actual annotation pages (NOT dataset, NOT other pages)
+        // Annotation pages have query params like ?page=0 and specific paths
+        const isDatasetPage = path.includes('/dataset');
+        const isAnnotationPage = !isDatasetPage && (
+            path.includes('/speech-to-text') || 
+            path.includes('/sequence-labeling') ||
+            path.includes('/text-classification') ||
+            path.includes('/seq2seq') ||
+            path.includes('/image-classification') ||
+            path.includes('/bounding-box') ||
+            path.includes('/segmentation') ||
+            path.includes('/image-captioning')
+        );
         
         // Disconnect previous observer if exists
         if (audioObserver) {
@@ -578,12 +591,16 @@
         
         // STOP and reset ALL audio elements when NOT on annotation page
         if (!isAnnotationPage) {
-            console.log('[Monlam Audio] Not on annotation page - stopping all audio');
+            // Stop any playing audio on non-annotation pages (like dataset table)
             document.querySelectorAll('audio[data-monlam-loop]').forEach(audio => {
                 audio.pause();
                 audio.currentTime = 0;
                 audio.loop = false;
                 audio.removeAttribute('data-monlam-loop');
+            });
+            // Also stop any audio without our marker
+            document.querySelectorAll('audio').forEach(audio => {
+                audio.loop = false;
             });
             return;
         }
