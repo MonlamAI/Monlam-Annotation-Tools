@@ -1028,6 +1028,7 @@
     
     // ========================================
     // FEATURE: AUTO-SKIP CONFIRMED EXAMPLES FOR ANNOTATORS
+    // Uses same logic as visibility middleware (ExampleState + Locking)
     // ========================================
     async function autoSkipConfirmedExamples() {
         const path = window.location.pathname;
@@ -1040,19 +1041,21 @@
         
         if (!isAnnotationPage) return;
         
-        // Don't run for privileged users (they can see all)
+        // Prevent running multiple times
+        if (window.monlamSkipRunning) return;
+        window.monlamSkipRunning = true;
+        
         try {
             const projectMatch = path.match(/\/projects\/(\d+)/);
             if (!projectMatch) return;
             const projectId = projectMatch[1];
             
-            // Check user role
+            // Check user role - privileged users don't skip
             const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
             if (!roleResp.ok) return;
             const roleData = await roleResp.json();
             const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
             
-            // Skip for admins/managers/approvers
             if (roleName.includes('admin') || roleName.includes('manager') || roleName.includes('approver')) {
                 console.log('[Monlam Skip] User is privileged, no auto-skip');
                 return;
@@ -1068,62 +1071,108 @@
             
             if (!exampleId) return;
             
-            console.log('[Monlam Skip] Checking if example', exampleId, 'is confirmed...');
+            console.log('[Monlam Skip] Checking example', exampleId, '...');
             
-            // Check if this example is confirmed by anyone
+            // Get current user info
             const meResp = await fetch('/v1/me');
             if (!meResp.ok) return;
             const meData = await meResp.json();
-            const myUserId = meData.id;
             
-            // Fetch example state
-            const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000`);
-            if (!examplesResp.ok) return;
-            const examplesData = await examplesResp.json();
+            // Check lock status first (coherent with locking logic)
+            const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
+            if (lockResp.ok) {
+                const lockData = await lockResp.json();
+                if (lockData.is_locked && !lockData.is_own_lock) {
+                    // Locked by someone else - locking function will handle this
+                    console.log('[Monlam Skip] Example locked by', lockData.locked_by, '- locking handler will show modal');
+                    return;
+                }
+            }
             
-            // Find the first unconfirmed example
-            const examples = examplesData.results || [];
-            const currentExample = examples.find(e => e.id == exampleId);
-            
-            // Check if current example is confirmed
-            // The example has `is_confirmed` field or we need to check states
-            // For now, check via tracking status
-            const trackingResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/status/`);
-            if (trackingResp.ok) {
-                const trackingData = await trackingResp.json();
-                const status = trackingData.status;
-                const annotatedBy = trackingData.annotated_by;
+            // Check tracking status (uses same data as visibility filter)
+            const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/status/`);
+            if (statusResp.ok) {
+                const statusData = await statusResp.json();
                 
-                // If submitted/approved, and not pending or rejected-by-me, skip to next
-                if (status === 'submitted' || status === 'approved') {
-                    console.log('[Monlam Skip] Example', exampleId, 'is already', status, '- finding next...');
+                // Check if example should be skipped:
+                // - Submitted/approved by anyone = skip
+                // - Rejected by me = DON'T skip (I need to fix it)
+                const shouldSkip = 
+                    (statusData.status === 'submitted' || statusData.status === 'approved') &&
+                    !(statusData.status === 'rejected' && statusData.annotated_by === meData.username);
+                
+                if (shouldSkip) {
+                    console.log('[Monlam Skip] Example', exampleId, 'is', statusData.status, '- finding next available...');
                     
-                    // Find next unconfirmed example
+                    // Get all examples to find next available
+                    const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000`);
+                    if (!examplesResp.ok) return;
+                    const examplesData = await examplesResp.json();
+                    const examples = examplesData.results || [];
+                    
                     const currentIndex = examples.findIndex(e => e.id == exampleId);
+                    
+                    // Look for next available example
                     for (let i = currentIndex + 1; i < examples.length; i++) {
                         const nextExample = examples[i];
-                        // Check if this one is available
-                        const nextTrackingResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/status/`);
-                        if (nextTrackingResp.ok) {
-                            const nextTracking = await nextTrackingResp.json();
-                            if (nextTracking.status === 'pending' || 
-                                (nextTracking.status === 'rejected' && nextTracking.annotated_by === meData.username)) {
-                                // Navigate to this example
-                                console.log('[Monlam Skip] Navigating to unconfirmed example', nextExample.id);
-                                const newUrl = path.replace(/page=\d+/, `page=${i}`);
-                                window.location.href = newUrl.includes('page=') ? newUrl : `${path}?page=${i}`;
-                                return;
+                        const nextStatusResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/status/`);
+                        
+                        let isAvailable = true;
+                        if (nextStatusResp.ok) {
+                            const nextStatus = await nextStatusResp.json();
+                            // Available if: pending, or rejected-by-me
+                            isAvailable = 
+                                nextStatus.status === 'pending' ||
+                                (nextStatus.status === 'rejected' && nextStatus.annotated_by === meData.username);
+                            
+                            // Also check if locked by someone else
+                            if (isAvailable && nextStatus.is_locked && nextStatus.locked_by !== meData.username) {
+                                isAvailable = false;
                             }
+                        }
+                        
+                        if (isAvailable) {
+                            console.log('[Monlam Skip] ➡️ Navigating to available example at index', i);
+                            const newUrl = path.replace(/page=\d+/, `page=${i}`);
+                            window.location.href = newUrl.includes('page=') ? newUrl : `${path}?page=${i}`;
+                            return;
                         }
                     }
                     
-                    // No more examples, show message
-                    alert('All examples have been annotated! 🎉');
+                    // Wrap around to beginning
+                    for (let i = 0; i < currentIndex; i++) {
+                        const nextExample = examples[i];
+                        const nextStatusResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/status/`);
+                        
+                        let isAvailable = true;
+                        if (nextStatusResp.ok) {
+                            const nextStatus = await nextStatusResp.json();
+                            isAvailable = 
+                                nextStatus.status === 'pending' ||
+                                (nextStatus.status === 'rejected' && nextStatus.annotated_by === meData.username);
+                            if (isAvailable && nextStatus.is_locked && nextStatus.locked_by !== meData.username) {
+                                isAvailable = false;
+                            }
+                        }
+                        
+                        if (isAvailable) {
+                            console.log('[Monlam Skip] ➡️ Navigating to available example at index', i);
+                            const newUrl = path.replace(/page=\d+/, `page=${i}`);
+                            window.location.href = newUrl.includes('page=') ? newUrl : `${path}?page=${i}`;
+                            return;
+                        }
+                    }
+                    
+                    // All examples done!
+                    console.log('[Monlam Skip] 🎉 All examples completed!');
+                    alert('🎉 All available examples have been annotated!\n\nGreat job!');
                     window.location.href = `/projects/${projectId}/dataset`;
                 }
             }
         } catch (error) {
             console.error('[Monlam Skip] Error:', error);
+        } finally {
+            window.monlamSkipRunning = false;
         }
     }
     
