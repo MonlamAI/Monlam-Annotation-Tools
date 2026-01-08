@@ -1309,14 +1309,38 @@
             return;
         }
         
-        console.log('[Monlam Lock] On annotation page, checking lock status...');
+        // Get project ID first
+        const projectMatch = path.match(/\/projects\/(\d+)/);
+        if (!projectMatch) return;
+        const projectId = projectMatch[1];
+        
+        // Check user's role - ONLY annotators need locking
+        try {
+            const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
+            if (roleResp.ok) {
+                const roleData = await roleResp.json();
+                const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
+                
+                const isAnnotatorOnly = roleName.includes('annotator') && 
+                                        !roleName.includes('admin') && 
+                                        !roleName.includes('manager') && 
+                                        !roleName.includes('approver');
+                
+                if (!isAnnotatorOnly) {
+                    console.log('[Monlam Lock] User is', roleName, '- skipping locking (reviewers can view all)');
+                    // Remove lock indicator if present
+                    const indicator = document.querySelector('.monlam-lock-indicator');
+                    if (indicator) indicator.remove();
+                    return;
+                }
+            }
+        } catch (e) {
+            console.log('[Monlam Lock] Could not check role:', e);
+        }
+        
+        console.log('[Monlam Lock] User is annotator, checking lock status...');
         
         try {
-            // Get project ID
-            const projectMatch = path.match(/\/projects\/(\d+)/);
-            if (!projectMatch) return;
-            const projectId = projectMatch[1];
-            
             // Get example ID (retry a few times as it may take a moment to load)
             let exampleId = null;
             for (let i = 0; i < 10; i++) {
