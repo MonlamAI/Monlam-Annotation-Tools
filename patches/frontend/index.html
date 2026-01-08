@@ -1028,14 +1028,25 @@
     
     // ========================================
     // FEATURE: AUTO-FILTER + HIDE ANNOTATE BUTTONS FOR ANNOTATORS
-    // Uses Doccano's native ?confirmed=false filter
-    // Hides row "Annotate" buttons so annotators use "Start Annotation"
+    // Uses Doccano's native isChecked=false filter
+    // Applies to BOTH dataset page AND annotation pages
     // ========================================
     async function setDefaultFilterForAnnotators() {
         const path = window.location.pathname;
         
-        // Only run on dataset page
-        if (!path.includes('/dataset')) return;
+        // Run on dataset page OR annotation pages
+        const isDatasetPage = path.includes('/dataset');
+        const isAnnotationPage = path.includes('/speech-to-text') || 
+                                  path.includes('/sequence-labeling') ||
+                                  path.includes('/document-classification') ||
+                                  path.includes('/seq2seq') ||
+                                  path.includes('/intent-detection-and-slot-filling') ||
+                                  path.includes('/image-classification') ||
+                                  path.includes('/bounding-box') ||
+                                  path.includes('/segmentation') ||
+                                  path.includes('/image-captioning');
+        
+        if (!isDatasetPage && !isAnnotationPage) return;
         
         try {
             const projectMatch = path.match(/\/projects\/(\d+)/);
@@ -1054,19 +1065,19 @@
                                !roleName.includes('approver');
             
             if (isAnnotator) {
-                console.log('[Monlam Filter] 🔍 User is annotator');
+                console.log('[Monlam Filter] 🔍 User is annotator on', isDatasetPage ? 'dataset' : 'annotation', 'page');
                 
-                // 1. Click "Undone" filter button in Doccano toolbar
+                // 1. Set filter to "Undone" (isChecked=false) - works on both pages
                 clickUndoneFilter();
                 
-                // 2. Hide "Annotate" buttons on rows - annotators should use "Start Annotation"
-                hideAnnotateButtonsForAnnotators();
-                
-                // Keep checking for new buttons (pagination changes)
-                setInterval(hideAnnotateButtonsForAnnotators, 1000);
+                // 2. Hide "Annotate" buttons on dataset page only
+                if (isDatasetPage) {
+                    hideAnnotateButtonsForAnnotators();
+                    setInterval(hideAnnotateButtonsForAnnotators, 1000);
+                }
                 
             } else {
-                console.log('[Monlam Filter] User is privileged, showing all + annotate buttons');
+                console.log('[Monlam Filter] User is privileged, showing all');
             }
         } catch (error) {
             console.error('[Monlam Filter] Error:', error);
