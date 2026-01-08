@@ -117,13 +117,24 @@ class VisibilityMiddleware:
             if not results:
                 return response
             
-            # Get tracking data
+            # Get CONFIRMATION data from Doccano's ExampleState
+            from examples.models import ExampleState
+            
+            # Get all confirmed examples in this project
+            example_ids = [ex.get('id') for ex in results if ex.get('id')]
+            confirmed_states = ExampleState.objects.filter(
+                example_id__in=example_ids
+            ).select_related('confirmed_by')
+            
+            # Map: example_id -> confirmed_by user
+            confirmed_map = {state.example_id: state.confirmed_by for state in confirmed_states}
+            
+            # Also get our tracking data for locking and review status
             from assignment.simple_tracking import AnnotationTracking
-            
             tracking_qs = AnnotationTracking.objects.filter(
-                project_id=project_id
-            ).select_related('annotated_by', 'locked_by')
-            
+                project_id=project_id,
+                example_id__in=example_ids
+            ).select_related('locked_by')
             tracking_map = {t.example_id: t for t in tracking_qs}
             
             # Filter results
@@ -133,9 +144,10 @@ class VisibilityMiddleware:
                 if example_id is None:
                     continue
                 
+                confirmed_by = confirmed_map.get(example_id)
                 tracking = tracking_map.get(example_id)
                 
-                if self._should_show_example(tracking, user):
+                if self._should_show_example(example_id, confirmed_by, tracking, user):
                     filtered_results.append(example)
             
             # Update response
@@ -157,24 +169,19 @@ class VisibilityMiddleware:
             
         except Exception as e:
             print(f'[Monlam Middleware] Filter error: {e}')
+            import traceback
+            traceback.print_exc()
             return response
     
-    def _should_show_example(self, tracking, user):
-        """Determine if an example should be visible to this user."""
+    def _should_show_example(self, example_id, confirmed_by, tracking, user):
+        """
+        Determine if an example should be visible to this user.
         
-        # No tracking = unannotated = show
-        if not tracking:
-            print(f'[Visibility] Example has no tracking → SHOW')
-            return True
+        Uses Doccano's ExampleState (confirmation) as the source of truth.
+        """
         
-        example_id = tracking.example_id
-        status = tracking.status
-        annotated_by = tracking.annotated_by
-        
-        print(f'[Visibility] Example {example_id}: status={status}, annotated_by={annotated_by}, user={user}')
-        
-        # Check locking first
-        if tracking.locked_by:
+        # Check locking first (from our tracking)
+        if tracking and tracking.locked_by:
             if tracking.locked_by == user:
                 print(f'[Visibility] Example {example_id}: Locked by me → SHOW')
                 return True
@@ -185,25 +192,25 @@ class VisibilityMiddleware:
                         print(f'[Visibility] Example {example_id}: Locked by {tracking.locked_by} → HIDE')
                         return False
         
-        # Pending = show
-        if status == 'pending':
-            print(f'[Visibility] Example {example_id}: Pending → SHOW')
+        # Not confirmed = available for annotation = SHOW
+        if not confirmed_by:
+            print(f'[Visibility] Example {example_id}: Not confirmed → SHOW')
             return True
         
-        # Rejected and annotated by current user = show (needs to fix)
-        if status == 'rejected' and annotated_by == user:
-            print(f'[Visibility] Example {example_id}: Rejected by me → SHOW')
+        # Confirmed by current user = already done by me = HIDE
+        if confirmed_by == user:
+            print(f'[Visibility] Example {example_id}: Confirmed by me → HIDE')
+            return False
+        
+        # Confirmed by someone else = HIDE
+        if confirmed_by != user:
+            print(f'[Visibility] Example {example_id}: Confirmed by {confirmed_by.username} → HIDE')
+            return False
+        
+        # Check if rejected (needs re-annotation)
+        if tracking and tracking.status == 'rejected' and tracking.annotated_by == user:
+            print(f'[Visibility] Example {example_id}: Rejected, needs my fix → SHOW')
             return True
-        
-        # Annotated by someone else = hide
-        if annotated_by and annotated_by != user:
-            print(f'[Visibility] Example {example_id}: Annotated by {annotated_by}, not me → HIDE')
-            return False
-        
-        # Annotated by current user and submitted/approved = hide
-        if annotated_by == user and status in ['submitted', 'approved']:
-            print(f'[Visibility] Example {example_id}: Annotated by me, {status} → HIDE')
-            return False
         
         # Default: show
         print(f'[Visibility] Example {example_id}: Default → SHOW')
