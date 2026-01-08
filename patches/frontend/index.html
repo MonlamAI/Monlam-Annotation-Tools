@@ -1277,12 +1277,29 @@
                 statusHeader.className = 'monlam-status-header monlam-status-col-header';
                 statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                 
-                // Insert after the 3rd column (positions 4, 5, 6)
-                const thirdHeader = headers[2];
-                thirdHeader.insertAdjacentElement('afterend', annotatedHeader);
+                // Find the Action header (usually last column)
+                const actionHeader = Array.from(headers).find(h => 
+                    h.textContent.toLowerCase().includes('action') || 
+                    h.textContent.toLowerCase().includes('annotate')
+                );
+                
+                // Move Action header right after Audio (column 2), then add our columns
+                // New order: Checkbox | ID | Audio | Action | Annotated By | Reviewed By | Status | ...
+                const thirdHeader = headers[2]; // Audio column
+                
+                if (actionHeader) {
+                    // Move Action header to be after Audio
+                    thirdHeader.insertAdjacentElement('afterend', actionHeader);
+                    // Then add our columns after Action
+                    actionHeader.insertAdjacentElement('afterend', annotatedHeader);
+                } else {
+                    // Fallback: insert after Audio if no Action header found
+                    thirdHeader.insertAdjacentElement('afterend', annotatedHeader);
+                }
+                
                 annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
                 reviewedHeader.insertAdjacentElement('afterend', statusHeader);
-                console.log('[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6');
+                console.log('[Monlam Dataset] ✅ Headers reordered: Audio → Action → Annotated By → Reviewed By → Status');
                 
                 // Add data cells to rows
                 const dataRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
@@ -1335,9 +1352,25 @@
                     statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                     statusCell.innerHTML = `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`;
                     
-                    // Insert after the 3rd cell
-                    const thirdCell = cells[2];
-                    thirdCell.insertAdjacentElement('afterend', annotatedCell);
+                    // Find and move the Action cell (usually last cell with button/link)
+                    const actionCell = Array.from(cells).find(c => 
+                        c.querySelector('a[href*="speech-to-text"], a[href*="sequence-labeling"], button, .v-btn') ||
+                        c.textContent.toLowerCase().includes('annotate')
+                    );
+                    
+                    // Move Action cell right after Audio (cell 2), then add our cells
+                    const thirdCell = cells[2]; // Audio cell
+                    
+                    if (actionCell && actionCell !== thirdCell) {
+                        // Move Action cell to be after Audio
+                        thirdCell.insertAdjacentElement('afterend', actionCell);
+                        // Then add our cells after Action
+                        actionCell.insertAdjacentElement('afterend', annotatedCell);
+                    } else {
+                        // Fallback: insert after Audio if no Action cell found
+                        thirdCell.insertAdjacentElement('afterend', annotatedCell);
+                    }
+                    
                     annotatedCell.insertAdjacentElement('afterend', reviewedCell);
                     reviewedCell.insertAdjacentElement('afterend', statusCell);
                 });
