@@ -12,8 +12,14 @@ How it works:
 
 import json
 import re
+import sys
 from datetime import timedelta
 from django.utils import timezone
+
+
+def log(msg):
+    """Force immediate output to stderr"""
+    print(msg, file=sys.stderr, flush=True)
 
 
 class VisibilityMiddleware:
@@ -25,7 +31,7 @@ class VisibilityMiddleware:
     """
     
     def __init__(self, get_response):
-        print('[Monlam MW] 🚀 VisibilityMiddleware initialized!')
+        log('[Monlam MW] 🚀 VisibilityMiddleware initialized!')
         self.get_response = get_response
         # Regex to match examples API endpoint
         self.examples_pattern = re.compile(r'^/v1/projects/(\d+)/examples/?$')
@@ -33,7 +39,7 @@ class VisibilityMiddleware:
     def __call__(self, request):
         # Debug: Log EVERY request to see if middleware is active
         if '/examples' in request.path:
-            print(f'[Monlam MW] 📥 Request: {request.method} {request.path}')
+            log(f'[Monlam MW] 📥 Request: {request.method} {request.path}')
         
         response = self.get_response(request)
         
@@ -50,19 +56,19 @@ class VisibilityMiddleware:
         # Check query params - if limit=1 or offset is specific, don't filter
         query_string = request.META.get('QUERY_STRING', '')
         if 'limit=1' in query_string:
-            print(f'[Monlam Middleware] Single item request, skipping filter')
+            log(f'[Monlam Middleware] Single item request, skipping filter')
             return response
         
-        print(f'[Monlam Middleware] 🔍 Processing {request.path} for user {request.user}')
+        log(f'[Monlam Middleware] 🔍 Processing {request.path} for user {request.user}')
         
         # Don't filter if not authenticated
         if not request.user.is_authenticated:
-            print('[Monlam Middleware] User not authenticated, skipping filter')
+            log('[Monlam Middleware] User not authenticated, skipping filter')
             return response
         
         # Superusers see everything
         if request.user.is_superuser:
-            print('[Monlam Middleware] Superuser, showing all')
+            log('[Monlam Middleware] Superuser, showing all')
             return response
         
         project_id = match.group(1)
@@ -70,15 +76,15 @@ class VisibilityMiddleware:
         try:
             # Check user's role
             if self._is_privileged_user(request.user, project_id):
-                print(f'[Monlam Middleware] User {request.user.username} is privileged, showing all')
+                log(f'[Monlam Middleware] User {request.user.username} is privileged, showing all')
                 return response
             
-            print(f'[Monlam Middleware] User {request.user.username} is annotator, filtering...')
+            log(f'[Monlam Middleware] User {request.user.username} is annotator, filtering...')
             # Filter the response for annotators
             return self._filter_response(response, request.user, project_id)
             
         except Exception as e:
-            print(f'[Monlam Middleware] Error: {e}')
+            log(f'[Monlam Middleware] Error: {e}')
             import traceback
             traceback.print_exc()
             # On error, return original response (fail open for safety)
@@ -147,7 +153,7 @@ class VisibilityMiddleware:
             # Total visible = all examples - confirmed by others - confirmed by me
             total_visible = len(all_project_examples) - len(all_confirmed) - len(my_confirmed)
             
-            print(f'[Monlam Middleware] Total: {len(all_project_examples)}, Confirmed by others: {len(all_confirmed)}, By me: {len(my_confirmed)}, Visible: {total_visible}')
+            log(f'[Monlam Middleware] Total: {len(all_project_examples)}, Confirmed by others: {len(all_confirmed)}, By me: {len(my_confirmed)}, Visible: {total_visible}')
             
             # Get current page's confirmed states
             example_ids = [ex.get('id') for ex in results if ex.get('id')]
@@ -192,12 +198,12 @@ class VisibilityMiddleware:
                 if header.lower() not in ['content-length', 'content-type']:
                     new_response[header] = value
             
-            print(f'[Monlam Middleware] Page filtered: {len(results)} → {len(filtered_results)}, Total visible: {total_visible}')
+            log(f'[Monlam Middleware] Page filtered: {len(results)} → {len(filtered_results)}, Total visible: {total_visible}')
             
             return new_response
             
         except Exception as e:
-            print(f'[Monlam Middleware] Filter error: {e}')
+            log(f'[Monlam Middleware] Filter error: {e}')
             import traceback
             traceback.print_exc()
             return response
@@ -212,36 +218,36 @@ class VisibilityMiddleware:
         # Check locking first (from our tracking)
         if tracking and tracking.locked_by:
             if tracking.locked_by == user:
-                print(f'[Visibility] Example {example_id}: Locked by me → SHOW')
+                log(f'[Visibility] Example {example_id}: Locked by me → SHOW')
                 return True
             else:
                 if tracking.locked_at:
                     lock_expiry = tracking.locked_at + timedelta(minutes=30)
                     if timezone.now() < lock_expiry:
-                        print(f'[Visibility] Example {example_id}: Locked by {tracking.locked_by} → HIDE')
+                        log(f'[Visibility] Example {example_id}: Locked by {tracking.locked_by} → HIDE')
                         return False
         
         # Not confirmed = available for annotation = SHOW
         if not confirmed_by:
-            print(f'[Visibility] Example {example_id}: Not confirmed → SHOW')
+            log(f'[Visibility] Example {example_id}: Not confirmed → SHOW')
             return True
         
         # Confirmed by current user = already done by me = HIDE
         if confirmed_by == user:
-            print(f'[Visibility] Example {example_id}: Confirmed by me → HIDE')
+            log(f'[Visibility] Example {example_id}: Confirmed by me → HIDE')
             return False
         
         # Confirmed by someone else = HIDE
         if confirmed_by != user:
-            print(f'[Visibility] Example {example_id}: Confirmed by {confirmed_by.username} → HIDE')
+            log(f'[Visibility] Example {example_id}: Confirmed by {confirmed_by.username} → HIDE')
             return False
         
         # Check if rejected (needs re-annotation)
         if tracking and tracking.status == 'rejected' and tracking.annotated_by == user:
-            print(f'[Visibility] Example {example_id}: Rejected, needs my fix → SHOW')
+            log(f'[Visibility] Example {example_id}: Rejected, needs my fix → SHOW')
             return True
         
         # Default: show
-        print(f'[Visibility] Example {example_id}: Default → SHOW')
+        log(f'[Visibility] Example {example_id}: Default → SHOW')
         return True
 
