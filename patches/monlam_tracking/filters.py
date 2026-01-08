@@ -49,17 +49,25 @@ class AnnotationVisibilityFilter(filters.BaseFilterBackend):
             # Check user's role in project
             try:
                 member = Member.objects.get(user=user, project=project)
-                role_name = member.role.name
+                role_name = member.role.name.lower() if member.role.name else ''
                 
-                # These roles see all examples:
-                # - project_admin
-                # - project_manager  
-                # - annotation_approver
-                if role_name in ['project_admin', 'project_manager', 'annotation_approver']:
+                # These roles see all examples (case-insensitive, flexible matching):
+                # - project_admin, admin
+                # - project_manager, manager  
+                # - annotation_approver, approver
+                is_privileged = (
+                    'admin' in role_name or
+                    'manager' in role_name or
+                    'approver' in role_name or
+                    'approval' in role_name
+                )
+                
+                if is_privileged:
+                    print(f'[Monlam Filter] User {user.username} is {role_name} (privileged) - seeing all')
                     return queryset
                 
                 # annotator role gets filtered (continues below)
-                print(f'[Monlam Filter] User {user.username} is {role_name} - applying filters')
+                print(f'[Monlam Filter] User {user.username} is {role_name} - applying visibility filters')
                 
             except Member.DoesNotExist:
                 # Not a project member, apply restrictive filtering
