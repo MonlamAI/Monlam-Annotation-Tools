@@ -1075,90 +1075,82 @@
     
     function clickUndoneFilter() {
         /**
-         * Click Doccano's "Undone" filter button in the toolbar.
+         * Set Doccano's filter to "Undone" (isChecked=false) via Vue Router.
          * This shows only unconfirmed examples.
+         * 
+         * Based on Doccano's ToolbarLaptop.vue:
+         * - Filter stored in URL query param: isChecked
+         * - Values: '' (All), 'true' (Done), 'false' (Undone)
+         * - Changed via: $router.push({ query: { isChecked: 'false' } })
          */
         
-        // Try multiple times as Vue may still be rendering
         let attempts = 0;
-        const maxAttempts = 10;
+        const maxAttempts = 15;
         
-        const tryClick = () => {
+        const trySetFilter = () => {
             attempts++;
             
-            // Method 1: Find button group and click "Undone"
-            const buttons = document.querySelectorAll('.v-btn-toggle button, .v-btn-toggle .v-btn, [role="group"] button');
-            for (const btn of buttons) {
-                const text = btn.textContent?.toLowerCase() || '';
-                if (text.includes('undone') || text.includes('未完了')) {
-                    console.log('[Monlam Filter] ✅ Found and clicking "Undone" button');
-                    btn.click();
-                    return true;
-                }
+            // Check current filter value
+            const currentIsChecked = new URLSearchParams(window.location.search).get('isChecked');
+            
+            // If already set to 'false', we're done
+            if (currentIsChecked === 'false') {
+                console.log('[Monlam Filter] ✅ Filter already set to Undone');
+                return;
             }
             
-            // Method 2: Find by aria-label or data attributes
-            const undoneBtn = document.querySelector('[aria-label*="undone" i], [data-value="undone"], .v-btn:not(.v-btn--active)');
-            if (undoneBtn) {
-                const text = undoneBtn.textContent?.toLowerCase() || '';
-                if (text.includes('undone')) {
-                    console.log('[Monlam Filter] ✅ Found "Undone" button via aria-label');
-                    undoneBtn.click();
-                    return true;
-                }
-            }
-            
-            // Method 3: Find filter menu and select undone
-            const filterBtns = document.querySelectorAll('.v-toolbar button, .v-toolbar .v-btn');
-            for (const btn of filterBtns) {
-                const text = btn.textContent?.toLowerCase() || '';
-                if (text.includes('filter') || text.includes('undone')) {
-                    console.log('[Monlam Filter] Checking button:', text);
-                }
-            }
-            
-            // Method 4: Try to find via Vue's internal state
-            if (window.$nuxt && window.$nuxt.$store) {
+            // Method 1: Use Vue Router (the official Doccano way)
+            if (window.$nuxt && window.$nuxt.$router && window.$nuxt.$route) {
                 try {
-                    // Some Doccano versions store filter in Vuex
-                    const store = window.$nuxt.$store;
-                    if (store.commit) {
-                        store.commit('SET_FILTER', { confirmed: false });
-                        console.log('[Monlam Filter] ✅ Set filter via Vuex');
-                        return true;
+                    const currentQuery = window.$nuxt.$route.query || {};
+                    
+                    // Only set if not already 'false'
+                    if (currentQuery.isChecked !== 'false') {
+                        console.log('[Monlam Filter] 🔄 Setting isChecked=false via Vue Router');
+                        
+                        window.$nuxt.$router.push({
+                            query: {
+                                ...currentQuery,
+                                page: currentQuery.page || '0',
+                                isChecked: 'false',
+                                q: currentQuery.q || ''
+                            }
+                        }).then(() => {
+                            console.log('[Monlam Filter] ✅ Filter set to Undone via Vue Router');
+                        }).catch((err) => {
+                            // NavigationDuplicated is ok
+                            if (err.name !== 'NavigationDuplicated') {
+                                console.log('[Monlam Filter] Router error:', err.message);
+                            }
+                        });
+                        
+                        return;
                     }
                 } catch (e) {
-                    // Vuex method not available
+                    console.log('[Monlam Filter] Vue Router method failed:', e.message);
                 }
             }
             
-            // Method 5: Directly modify URL and reload data
-            const urlParams = new URLSearchParams(window.location.search);
-            if (!urlParams.has('isChecked') || urlParams.get('isChecked') !== 'false') {
-                urlParams.set('isChecked', 'false');
-                const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
-                console.log('[Monlam Filter] Setting URL filter:', newUrl);
-                window.history.replaceState({}, '', newUrl);
-                
-                // Trigger Vue to reload with new params
-                if (window.$nuxt && window.$nuxt.$router) {
-                    window.$nuxt.$router.replace({ 
-                        query: { ...window.$nuxt.$route.query, isChecked: 'false' }
-                    }).catch(() => {});
-                }
-            }
-            
+            // Retry if Vue not ready yet
             if (attempts < maxAttempts) {
-                setTimeout(tryClick, 500);
+                setTimeout(trySetFilter, 500);
             } else {
-                console.log('[Monlam Filter] Could not find filter button after', maxAttempts, 'attempts');
+                console.log('[Monlam Filter] ⚠️ Could not set filter after', maxAttempts, 'attempts');
+                
+                // Last resort: Direct URL change with page reload
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('isChecked') !== 'false') {
+                    urlParams.set('isChecked', 'false');
+                    urlParams.set('page', urlParams.get('page') || '0');
+                    const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+                    console.log('[Monlam Filter] Last resort: redirecting to', newUrl);
+                    window.location.href = newUrl;
+                }
             }
-            
-            return false;
         };
         
-        // Start trying after Vue has rendered
-        setTimeout(tryClick, 500);
+        // Start after Vue has had time to initialize
+        setTimeout(trySetFilter, 800);
     }
     
     function hideAnnotateButtonsForAnnotators() {
@@ -2046,4 +2038,5 @@
   </script>
 </body>
 
+</html>
 </html>
