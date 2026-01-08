@@ -563,80 +563,107 @@
         }
     }
     
-    // FEATURE 1: AUDIO AUTO-LOOP
-    let audioObserver = null; // Store observer to disconnect it later
+    // FEATURE 1: AUDIO AUTO-LOOP (ONLY on annotation pages)
+    let audioObserver = null;
+    
+    function isOnAnnotationPage() {
+        const path = window.location.pathname;
+        // Dataset page = NO loop
+        if (path.includes('/dataset')) return false;
+        // Metrics/completion pages = NO loop
+        if (path.includes('/metrics') || path.includes('/completion')) return false;
+        // Members page = NO loop  
+        if (path.includes('/members')) return false;
+        // Settings = NO loop
+        if (path.includes('/settings')) return false;
+        // Labels = NO loop
+        if (path.includes('/labels')) return false;
+        
+        // Only these specific annotation task types get loop
+        return path.includes('/speech-to-text') || 
+               path.includes('/sequence-labeling') ||
+               path.includes('/text-classification') ||
+               path.includes('/seq2seq') ||
+               path.includes('/image-classification') ||
+               path.includes('/bounding-box') ||
+               path.includes('/segmentation') ||
+               path.includes('/image-captioning');
+    }
+    
+    function stopAllAudio() {
+        document.querySelectorAll('audio').forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.loop = false;
+            audio.autoplay = false;
+            audio.removeAttribute('data-monlam-loop');
+        });
+    }
     
     function enableAudioLoop() {
-        const path = window.location.pathname;
-        
-        // ONLY enable on actual annotation pages (NOT dataset, NOT other pages)
-        // Annotation pages have query params like ?page=0 and specific paths
-        const isDatasetPage = path.includes('/dataset');
-        const isAnnotationPage = !isDatasetPage && (
-            path.includes('/speech-to-text') || 
-            path.includes('/sequence-labeling') ||
-            path.includes('/text-classification') ||
-            path.includes('/seq2seq') ||
-            path.includes('/image-classification') ||
-            path.includes('/bounding-box') ||
-            path.includes('/segmentation') ||
-            path.includes('/image-captioning')
-        );
-        
-        // Disconnect previous observer if exists
+        // ALWAYS disconnect previous observer first
         if (audioObserver) {
             audioObserver.disconnect();
             audioObserver = null;
         }
         
-        // STOP and reset ALL audio elements when NOT on annotation page
-        if (!isAnnotationPage) {
-            // Stop any playing audio on non-annotation pages (like dataset table)
-            document.querySelectorAll('audio[data-monlam-loop]').forEach(audio => {
-                audio.pause();
-                audio.currentTime = 0;
-                audio.loop = false;
-                audio.removeAttribute('data-monlam-loop');
-            });
-            // Also stop any audio without our marker
-            document.querySelectorAll('audio').forEach(audio => {
-                audio.loop = false;
-            });
+        // Check page type
+        const shouldEnableLoop = isOnAnnotationPage();
+        
+        if (!shouldEnableLoop) {
+            // NOT on annotation page - stop all audio
+            console.log('[Monlam Audio] Not on annotation page, stopping audio');
+            stopAllAudio();
             return;
         }
         
-        console.log('[Monlam Audio] Enabling audio loop...');
+        console.log('[Monlam Audio] On annotation page, enabling loop...');
         
         function applyLoop(audio) {
-            // Only apply to audio on annotation pages
+            // Double-check we're still on annotation page (SPA navigation might have happened)
+            if (!isOnAnnotationPage()) {
+                stopAllAudio();
+                return;
+            }
+            
             if (!audio.hasAttribute('data-monlam-loop')) {
                 audio.loop = true;
                 audio.setAttribute('data-monlam-loop', 'true');
                 
                 if (audio.readyState >= 2) {
                     audio.play().catch(e => {
-                        console.log('[Monlam Audio] Auto-play blocked, waiting for interaction');
-                        document.addEventListener('click', () => audio.play(), { once: true });
+                        console.log('[Monlam Audio] Auto-play blocked, waiting for user click');
                     });
                 } else {
                     audio.addEventListener('canplay', () => {
-                        audio.play().catch(e => {
-                            document.addEventListener('click', () => audio.play(), { once: true });
-                        });
+                        // Check again before playing
+                        if (isOnAnnotationPage()) {
+                            audio.play().catch(() => {});
+                        }
                     }, { once: true });
                 }
-                
-                console.log('[Monlam Audio] Loop enabled');
             }
         }
         
+        // Wait for audio element to appear, then apply loop
         waitForElements('audio', (audioElements) => {
-            audioElements.forEach(applyLoop);
+            if (isOnAnnotationPage()) {
+                audioElements.forEach(applyLoop);
+            }
         });
         
-        // Only set up observer on annotation pages
+        // Observer for dynamically added audio (only on annotation pages)
         audioObserver = new MutationObserver(() => {
-            document.querySelectorAll('audio:not([data-monlam-loop])').forEach(applyLoop);
+            if (isOnAnnotationPage()) {
+                document.querySelectorAll('audio:not([data-monlam-loop])').forEach(applyLoop);
+            } else {
+                // If we navigated away, stop everything
+                stopAllAudio();
+                if (audioObserver) {
+                    audioObserver.disconnect();
+                    audioObserver = null;
+                }
+            }
         });
         audioObserver.observe(document.body, { childList: true, subtree: true });
     }
