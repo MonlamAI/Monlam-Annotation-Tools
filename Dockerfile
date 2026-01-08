@@ -102,25 +102,15 @@ RUN if ! grep -q "assignment.tracking_urls" /doccano/backend/config/urls.py; the
 # TODO: Create proper Python patch file for examples/views.py
 
 # ============================================
-# MONLAM TRACKING - VISIBILITY FILTERING APP
+# MONLAM TRACKING - AUTO-TRACKING SIGNALS ONLY
 # ============================================
-# Copy the Monlam Tracking app (proper Django app for visibility filtering)
+# Copy the Monlam Tracking app (for auto-tracking annotations)
+# NOTE: Visibility filtering removed - use Doccano's native assignment system
 COPY patches/monlam_tracking /doccano/backend/monlam_tracking
 
-# Copy the Example view patch (direct patching approach)
-COPY patches/backend/example_view_patch.py /doccano/backend/backend/example_view_patch.py
-
-# Register the Monlam Tracking app in settings (BEFORE other apps for proper filter registration)
-RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Visibility filtering\n/" /doccano/backend/config/settings/base.py || \
+# Register the Monlam Tracking app in settings
+RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Auto-tracking\n/" /doccano/backend/config/settings/base.py || \
     echo "INSTALLED_APPS += ['monlam_tracking']" >> /doccano/backend/config/settings/base.py
-
-# Add REST_FRAMEWORK filter backend for visibility filtering (ROBUST approach)
-RUN echo "" >> /doccano/backend/config/settings/base.py && \
-    echo "# Monlam: Add visibility filter to REST Framework" >> /doccano/backend/config/settings/base.py && \
-    echo "REST_FRAMEWORK = getattr(globals(), 'REST_FRAMEWORK', {})" >> /doccano/backend/config/settings/base.py && \
-    echo "REST_FRAMEWORK.setdefault('DEFAULT_FILTER_BACKENDS', [])" >> /doccano/backend/config/settings/base.py && \
-    echo "if 'monlam_tracking.filters.AnnotationVisibilityFilter' not in REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS']:" >> /doccano/backend/config/settings/base.py && \
-    echo "    REST_FRAMEWORK['DEFAULT_FILTER_BACKENDS'].append('monlam_tracking.filters.AnnotationVisibilityFilter')" >> /doccano/backend/config/settings/base.py
 
 # ============================================
 # MONLAM UI - PROFESSIONAL DJANGO INTEGRATION
