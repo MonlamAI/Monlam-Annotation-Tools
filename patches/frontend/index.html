@@ -522,31 +522,72 @@
   <script src="/static/_nuxt/50aa8ea.js"></script>
   <script src="/static/_nuxt/bd0aa1f.js"></script>
   
-  <!-- FIX: Patch $translateRole IMMEDIATELY after Vue loads -->
+  <!-- FIX: Patch role translation for project_manager -->
   <script>
   (function() {
-    // This runs right after Vue scripts but before app mounts
-    if (window.Vue && window.Vue.prototype) {
-      const originalTranslateRole = window.Vue.prototype.$translateRole;
-      window.Vue.prototype.$translateRole = function(role, mapping) {
-        // Add project_manager support
-        if (role === 'project_manager') {
-          return 'Project Manager';
+    'use strict';
+    
+    // Role translation map
+    const ROLE_MAP = {
+      'project_admin': 'Project Admin',
+      'annotator': 'Annotator', 
+      'annotation_approver': 'Annotation Approver',
+      'project_manager': 'Project Manager'
+    };
+    
+    // Method 1: Intercept role API responses and add translatedName
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      return originalFetch.apply(this, args).then(response => {
+        const url = args[0];
+        if (typeof url === 'string' && url.includes('/v1/roles')) {
+          const clonedResponse = response.clone();
+          clonedResponse.json().then(data => {
+            // Data might be array or {results: array}
+            const roles = Array.isArray(data) ? data : (data.results || []);
+            roles.forEach(role => {
+              if (role.name && !role.translatedName) {
+                role.translatedName = ROLE_MAP[role.name] || 
+                  role.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+              }
+            });
+          }).catch(() => {});
         }
-        // Call original for other roles
-        if (originalTranslateRole) {
-          return originalTranslateRole.call(this, role, mapping);
-        }
-        // Fallback mapping
-        const roleMap = {
-          'project_admin': 'Project Admin',
-          'annotator': 'Annotator',
-          'annotation_approver': 'Annotation Approver'
-        };
-        return roleMap[role] || role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      };
-      console.log('[Monlam] ✅ $translateRole patched for project_manager');
-    }
+        return response;
+      });
+    };
+    
+    // Method 2: Patch Vue component after mount
+    document.addEventListener('DOMContentLoaded', function() {
+      // Watch for role select elements and fix their display
+      const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          mutation.addedNodes.forEach(function(node) {
+            if (node.nodeType === 1) {
+              // Find role dropdown items showing "undefined" or wrong text
+              const items = node.querySelectorAll ? 
+                node.querySelectorAll('.v-list-item, .v-select-list .v-list-item__title') : [];
+              items.forEach(function(item) {
+                const text = item.textContent.trim();
+                if (text === 'undefined' || text === 'No Role Defined' || text.includes('undefined')) {
+                  // Check if this is the project_manager role
+                  const parent = item.closest('.v-list-item');
+                  if (parent) {
+                    // Replace with Project Manager
+                    item.textContent = 'Project Manager';
+                    console.log('[Monlam] Fixed role display: undefined → Project Manager');
+                  }
+                }
+              });
+            }
+          });
+        });
+      });
+      
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+    
+    console.log('[Monlam] Role translation fix loaded');
   })();
   </script>
   
