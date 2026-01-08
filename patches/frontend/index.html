@@ -557,35 +557,45 @@
       });
     };
     
-    // Method 2: Patch Vue component after mount
-    document.addEventListener('DOMContentLoaded', function() {
-      // Watch for role select elements and fix their display
-      const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          mutation.addedNodes.forEach(function(node) {
-            if (node.nodeType === 1) {
-              // Find role dropdown items showing "undefined" or wrong text
-              const items = node.querySelectorAll ? 
-                node.querySelectorAll('.v-list-item, .v-select-list .v-list-item__title') : [];
-              items.forEach(function(item) {
-                const text = item.textContent.trim();
-                if (text === 'undefined' || text === 'No Role Defined' || text.includes('undefined')) {
-                  // Check if this is the project_manager role
-                  const parent = item.closest('.v-list-item');
-                  if (parent) {
-                    // Replace with Project Manager
-                    item.textContent = 'Project Manager';
-                    console.log('[Monlam] Fixed role display: undefined → Project Manager');
-                  }
-                }
-              });
-            }
-          });
-        });
-      });
+    // Method 2: Fix role dropdown text
+    function fixRoleDropdown() {
+      // Patterns that indicate "undefined" role (project_manager)
+      const undefinedPatterns = [
+        'undefined',
+        'No Role Defined',
+        'Role Defined',
+        'མིན།',  // Tibetan "no/not"
+        'མིན། Role Defined'
+      ];
       
-      observer.observe(document.body, { childList: true, subtree: true });
+      document.querySelectorAll('.v-list-item__title, .v-list-item__content').forEach(function(item) {
+        const text = item.textContent.trim();
+        const isUndefinedRole = undefinedPatterns.some(pattern => text.includes(pattern));
+        
+        if (isUndefinedRole) {
+          // Find the title element specifically
+          const titleEl = item.classList.contains('v-list-item__title') ? 
+            item : item.querySelector('.v-list-item__title');
+          if (titleEl) {
+            titleEl.textContent = 'Project Manager';
+            console.log('[Monlam] Fixed role: "' + text + '" → "Project Manager"');
+          }
+        }
+      });
+    }
+    
+    // Run on page load and when dropdown opens
+    document.addEventListener('DOMContentLoaded', fixRoleDropdown);
+    
+    // Watch for dropdown to open
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.addedNodes.length > 0) {
+          setTimeout(fixRoleDropdown, 50);
+        }
+      });
     });
+    observer.observe(document.body, { childList: true, subtree: true });
     
     console.log('[Monlam] Role translation fix loaded');
   })();
