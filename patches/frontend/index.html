@@ -2173,30 +2173,41 @@
     }
     
     // ========================================
-    // FEATURE: Redirect Project Home to Projects List
+    // FEATURE: Intercept "Home" sidebar click to go to Projects List
     // ========================================
-    function redirectProjectHomeToProjectsList() {
-        const path = window.location.pathname;
-        
-        // Check if on project home page (pattern: /projects/{id}/ or /projects/{id})
-        const projectHomeMatch = path.match(/^\/projects\/(\d+)\/?$/);
-        
-        if (projectHomeMatch) {
-            console.log('[Monlam] Redirecting project home to projects list');
-            window.location.replace('/projects/');
-            return true;
-        }
-        return false;
+    function interceptHomeSidebarClick() {
+        // Use MutationObserver to watch for sidebar clicks
+        document.addEventListener('click', function(e) {
+            // Check if click is on a sidebar menu item
+            const listItem = e.target.closest('.v-list-item');
+            if (!listItem) return;
+            
+            // Check if it's in the sidebar (has the v-list parent)
+            const sidebar = listItem.closest('.v-navigation-drawer, .v-list');
+            if (!sidebar) return;
+            
+            // Get the text content
+            const titleEl = listItem.querySelector('.v-list-item__title');
+            if (!titleEl) return;
+            
+            const text = titleEl.textContent.trim();
+            
+            // Check if it's the "Home" item (མདུན་ངོས། or Home)
+            if (text === 'མདུན་ངོས།' || text === 'Home') {
+                console.log('[Monlam] Intercepted Home click, redirecting to projects list');
+                e.preventDefault();
+                e.stopPropagation();
+                window.location.href = '/projects/';
+            }
+        }, true); // Use capture phase to intercept before Vue handles it
     }
     
     function init() {
         console.log('[Monlam] 🚀 Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
         
-        // Redirect project home to projects list
-        if (redirectProjectHomeToProjectsList()) {
-            return; // Stop further initialization, we're redirecting
-        }
+        // Intercept Home sidebar click to go to projects list
+        interceptHomeSidebarClick();
         
         // Set up metrics redirect IMMEDIATELY (before Vue Router)
         setupMetricsRedirect();
@@ -2223,11 +2234,6 @@
             if (currentPath !== lastPath) {
                 lastPath = currentPath;
                 console.log('[Monlam] 🔄 Navigation detected:', currentPath);
-                
-                // Redirect project home to projects list
-                if (redirectProjectHomeToProjectsList()) {
-                    return;
-                }
                 
                 // Reset page-specific flags (but not global ones)
                 // The enhance functions will check their own page-specific flags
