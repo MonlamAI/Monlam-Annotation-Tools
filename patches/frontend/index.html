@@ -2173,41 +2173,177 @@
     }
     
     // ========================================
-    // FEATURE: Intercept "Home" sidebar click to go to Projects List
+    // FEATURE: Custom Project Home Page
     // ========================================
-    function interceptHomeSidebarClick() {
-        // Use MutationObserver to watch for sidebar clicks
-        document.addEventListener('click', function(e) {
-            // Check if click is on a sidebar menu item
-            const listItem = e.target.closest('.v-list-item');
-            if (!listItem) return;
+    function customizeProjectHomePage() {
+        const path = window.location.pathname;
+        
+        // Check if on project home page (pattern: /projects/{id}/ or /projects/{id})
+        const projectHomeMatch = path.match(/^\/projects\/(\d+)\/?$/);
+        if (!projectHomeMatch) return;
+        
+        const projectId = projectHomeMatch[1];
+        
+        // Wait for the stepper (YouTube video container) to appear
+        const checkAndReplace = () => {
+            const stepper = document.querySelector('.v-stepper');
+            const card = document.querySelector('.v-card');
             
-            // Check if it's in the sidebar (has the v-list parent)
-            const sidebar = listItem.closest('.v-navigation-drawer, .v-list');
-            if (!sidebar) return;
-            
-            // Get the text content
-            const titleEl = listItem.querySelector('.v-list-item__title');
-            if (!titleEl) return;
-            
-            const text = titleEl.textContent.trim();
-            
-            // Check if it's the "Home" item (མདུན་ངོས། or Home)
-            if (text === 'མདུན་ངོས།' || text === 'Home') {
-                console.log('[Monlam] Intercepted Home click, redirecting to projects list');
-                e.preventDefault();
-                e.stopPropagation();
-                window.location.href = '/projects/';
+            if (stepper || (card && card.querySelector('.v-stepper'))) {
+                console.log('[Monlam] Replacing project home with custom instructions');
+                
+                // Find the main content container
+                const mainContent = document.querySelector('.v-main__wrap') || 
+                                   document.querySelector('.container') ||
+                                   stepper?.closest('.v-card');
+                
+                if (mainContent) {
+                    // Get project name from the page or API
+                    const projectTitle = document.querySelector('.v-toolbar-title, .v-btn span')?.textContent || 'Project';
+                    
+                    mainContent.innerHTML = `
+                        <div style="padding: 24px; max-width: 1200px; margin: 0 auto; font-family: MonlamTBslim, 'Noto Sans Tibetan', Roboto, sans-serif;">
+                            
+                            <!-- Welcome Header -->
+                            <div style="background: linear-gradient(135deg, #1976d2, #42a5f5); color: white; padding: 32px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                                <h1 style="margin: 0; font-size: 2rem;">
+                                    👋 བཀྲ་ཤིས་བདེ་ལེགས། Welcome!
+                                </h1>
+                            </div>
+                            
+                            <!-- Quick Actions -->
+                            <div style="background: white; padding: 24px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                <h2 style="margin-top: 0; color: #333;">
+                                    ⚡ མྱུར་སྤྱོད་བྱེད་སྒོ། / Quick Actions
+                                </h2>
+                                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                                    <button onclick="window.location.href='/projects/${projectId}/speech-to-text'" 
+                                            style="background: #1976d2; color: white; border: none; padding: 16px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                        ▶️ མཆན་འགྲེལ་འགོ་འཛུགས། / Start Annotation
+                                    </button>
+                                    <button onclick="window.location.href='/projects/${projectId}/dataset'" 
+                                            style="background: white; color: #1976d2; border: 2px solid #1976d2; padding: 16px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                        📊 གཞི་གྲངས། / Dataset
+                                    </button>
+                                    <button onclick="window.location.href='/monlam/${projectId}/completion/'" 
+                                            style="background: white; color: #666; border: 2px solid #666; padding: 16px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                        📈 གྲུབ་ཐོ། / Statistics
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Instructions Grid -->
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
+                                
+                                <!-- Annotator Instructions -->
+                                <div style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 4px solid #2196f3;">
+                                    <h2 style="margin-top: 0; color: #1565c0;">
+                                        ✏️ ལས་མིའི་ལམ་སྟོན། / Annotator Instructions
+                                    </h2>
+                                    <h3 style="color: #1976d2; margin-bottom: 16px;">
+                                        མཆན་འགྲེལ་ཇི་ལྟར་རྒྱག་དགོས་མིན། / How to Annotate
+                                    </h3>
+                                    
+                                    <div style="border-left: 2px solid #2196f3; padding-left: 16px; margin-bottom: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #1976d2;">གོམ་པ་དང་པོ། / Step 1:</strong><br>
+                                            'མཆན་འགྲེལ་འགོ་འཛུགས་'ཞེས་པར་གནོན་ནས་འགོ་འཛུགས་བྱེད་དགོས།<br>
+                                            <span style="color: #666;">Click 'Start Annotation' to begin</span>
+                                        </p>
+                                    </div>
+                                    
+                                    <div style="border-left: 2px solid #2196f3; padding-left: 16px; margin-bottom: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #1976d2;">གོམ་པ་གཉིས་པ། / Step 2:</strong><br>
+                                            སྒྲ་ལ་ཉན་ནས་ཡིག་ཐོག་གི་འབྲི་རྩོམ་ལ་ཞིབ་བཤེར་བྱེད་དགོས།<br>
+                                            <span style="color: #666;">Listen to the audio and check the transcription</span>
+                                        </p>
+                                    </div>
+                                    
+                                    <div style="border-left: 2px solid #2196f3; padding-left: 16px; margin-bottom: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #1976d2;">གོམ་པ་གསུམ་པ། / Step 3:</strong><br>
+                                            དགོས་ངེས་ཡིན་ན་ཡིག་རྩོམ་ལ་བཟོ་བཅོས་རྒྱག་པ།<br>
+                                            <span style="color: #666;">Edit the text if needed</span>
+                                        </p>
+                                    </div>
+                                    
+                                    <div style="border-left: 2px solid #4caf50; padding-left: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #388e3c;">གོམ་པ་བཞི་པ། / Step 4:</strong><br>
+                                            ར་སྤྲོད་བྱེད་པའི་ཆེད་དུ་རྟགས་ (✓) ལ་གནོན་ནས་མདུན་དུ་འགྲོ་དགོས།<br>
+                                            <span style="color: #666;">Click the checkmark (✓) to confirm and move to next</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Reviewer Instructions -->
+                                <div style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 4px solid #ff9800;">
+                                    <h2 style="margin-top: 0; color: #e65100;">
+                                        ✅ ཚན་པའི་འགན་འཛིན་གྱི་ལམ་སྟོན། / Reviewer Instructions
+                                    </h2>
+                                    <h3 style="color: #f57c00; margin-bottom: 16px;">
+                                        ཞིབ་བཤེར་ཇི་ལྟར་བྱེད་དགོས་མིན། / How to Review
+                                    </h3>
+                                    
+                                    <div style="border-left: 2px solid #ff9800; padding-left: 16px; margin-bottom: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #f57c00;">གོམ་པ་དང་པོ། / Step 1:</strong><br>
+                                            གཞི་གྲངས་ཚོགས་ལ་འགྲོ་ནས་ 'གྲུབ་ཟིན་པ་'ཞེས་པར་ལ་གཟིགས་དགོས།<br>
+                                            <span style="color: #666;">Go to Dataset and filter by 'Done'</span>
+                                        </p>
+                                    </div>
+                                    
+                                    <div style="border-left: 2px solid #ff9800; padding-left: 16px; margin-bottom: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #f57c00;">གོམ་པ་གཉིས་པ། / Step 2:</strong><br>
+                                            མཆན་འགྲེལ་རེ་རེ་བཞིན་དག་ཚད་ལ་ཞིབ་བཤེར་བྱེད་པ།<br>
+                                            <span style="color: #666;">Check each annotation for accuracy</span>
+                                        </p>
+                                    </div>
+                                    
+                                    <div style="border-left: 2px solid #4caf50; padding-left: 16px;">
+                                        <p style="margin: 8px 0;">
+                                            <strong style="color: #388e3c;">གོམ་པ་གསུམ་པ། / Step 3:</strong><br>
+                                            'འགྲིག' ཡང་ན་ 'མ་འགྲིག' ཞེས་པར་འོས་འཚམ་ལྟར་གནོན་དགོས།<br>
+                                            <span style="color: #666;">Click 'Approve' or 'Reject' as appropriate</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Footer Note -->
+                            <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin-top: 24px; text-align: center;">
+                                <p style="margin: 0; color: #666;">
+                                    ❓ རོགས་རམ་དགོས་སམ། ཁྱེད་ཀྱི་ཚན་པའི་འགན་འཛིན་ཡང་ན་དམིགས་འབེན་འགན་འཛིན་ལ་འབྲེལ་བ་གནང་རོགས།<br>
+                                    <span style="color: #999;">Need help? Contact your project administrator.</span>
+                                </p>
+                            </div>
+                        </div>
+                    `;
+                    return true;
+                }
             }
-        }, true); // Use capture phase to intercept before Vue handles it
+            return false;
+        };
+        
+        // Try immediately and then with retries
+        if (!checkAndReplace()) {
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if (checkAndReplace() || attempts++ > 20) {
+                    clearInterval(interval);
+                }
+            }, 200);
+        }
     }
     
     function init() {
         console.log('[Monlam] 🚀 Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
         
-        // Intercept Home sidebar click to go to projects list
-        interceptHomeSidebarClick();
+        // Customize project home page (replace YouTube videos with instructions)
+        customizeProjectHomePage();
         
         // Set up metrics redirect IMMEDIATELY (before Vue Router)
         setupMetricsRedirect();
