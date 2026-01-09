@@ -383,7 +383,8 @@ def has_analytics_access(user):
     
     # Check if user has manager/admin/approver role in any project
     try:
-        from roles.models import Role, Member
+        from roles.models import Role
+        from projects.models import Member
         
         # Get role IDs for privileged roles
         privileged_roles = Role.objects.filter(
