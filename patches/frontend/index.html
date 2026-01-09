@@ -977,7 +977,6 @@
                         const data = await resp.json();
                         
                         const statusText = statusDisplay.querySelector('.status-text');
-                        statusText.textContent = data.status.toUpperCase();
                         
                         // Color code status
                         const statusColors = {
@@ -990,11 +989,31 @@
                         statusDisplay.style.background = statusColors[data.status] ? statusColors[data.status] + '20' : '#e3f2fd';
                         statusDisplay.style.color = statusColors[data.status] || '#1976d2';
                         
-                        // Show annotator info
-                        if (data.annotated_by) {
-                            statusDisplay.querySelector('.status-text').textContent = 
-                                `${data.status.toUpperCase()} by ${data.annotated_by}`;
+                        // Build detailed status text
+                        let statusInfo = data.status.toUpperCase();
+                        
+                        // Show who reviewed (for approved/rejected)
+                        if (data.status === 'approved' && data.reviewed_by) {
+                            statusInfo = `✅ APPROVED by ${data.reviewed_by}`;
+                            if (data.reviewed_at) {
+                                const reviewDate = new Date(data.reviewed_at).toLocaleDateString();
+                                statusInfo += ` on ${reviewDate}`;
+                            }
+                        } else if (data.status === 'rejected' && data.reviewed_by) {
+                            statusInfo = `❌ REJECTED by ${data.reviewed_by}`;
+                            if (data.reviewed_at) {
+                                const reviewDate = new Date(data.reviewed_at).toLocaleDateString();
+                                statusInfo += ` on ${reviewDate}`;
+                            }
+                            if (data.review_notes) {
+                                statusInfo += ` - "${data.review_notes}"`;
+                            }
+                        } else if (data.annotated_by) {
+                            // Show annotator for pending/submitted
+                            statusInfo = `${data.status.toUpperCase()} - Annotated by ${data.annotated_by}`;
                         }
+                        
+                        statusText.textContent = statusInfo;
                     } catch (error) {
                         console.error('[Monlam Approve] Error fetching status:', error);
                         statusDisplay.querySelector('.status-text').textContent = 'Error loading status';
