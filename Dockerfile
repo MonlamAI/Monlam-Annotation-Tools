@@ -73,6 +73,9 @@ COPY patches/backend/review_api.py /doccano/backend/examples/review_api.py
 # Custom WhiteNoise storage with proper MIME types
 COPY patches/backend/whitenoise_config.py /doccano/backend/config/whitenoise_config.py
 
+# MONLAM: Patched create_roles command (adds project_manager role)
+COPY patches/backend/create_roles.py /doccano/backend/roles/management/commands/create_roles.py
+
 # Example JSONL files (required for import options to appear)
 COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
@@ -159,36 +162,46 @@ COPY patches/frontend/index.html /doccano/backend/staticfiles/index.html
 COPY patches/frontend/200.html /doccano/backend/staticfiles/200.html
 
 # ============================================
-# PATCH: Add project_manager to role translation
+# PATCH: Add project_manager role support
 # ============================================
-# Find and patch the compiled JS that contains translateRole function
+# Two things need patching in the compiled JS:
+# 1. The i18n translation strings (add projectManager:"Project Manager")
+# 2. The translateRole function (add project_manager case)
+
+# STEP 1: Add projectManager to the i18n roles object
+# Pattern: annotationApprover:"Annotation Approver",undefined:
+# Replace: annotationApprover:"Annotation Approver",projectManager:"Project Manager",undefined:
+RUN for f in /doccano/backend/staticfiles/_nuxt/*.js /doccano/backend/client/dist/_nuxt/*.js /doccano/backend/client/dist/static/_nuxt/*.js; do \
+    if [ -f "$f" ] && grep -q 'annotationApprover:"Annotation Approver"' "$f" 2>/dev/null; then \
+        echo "Adding projectManager i18n string to $f..."; \
+        sed -i 's/annotationApprover:"Annotation Approver",undefined:/annotationApprover:"Annotation Approver",projectManager:"Project Manager",undefined:/g' "$f"; \
+    fi; \
+    done || true
+
+# STEP 2: Patch translateRole function
 # Pattern: "annotation_approver"===e?t.annotationApprover:t.undefined
-# Replace with: adds project_manager check before falling through to undefined
-
-# Method 1: Direct string replacement in staticfiles
-RUN for f in /doccano/backend/staticfiles/_nuxt/*.js; do \
-    if grep -q "annotation_approver" "$f" 2>/dev/null; then \
-        echo "Patching $f for project_manager..."; \
-        sed -i 's/annotation_approver"===\([a-z]\)?t\.annotationApprover:t\.undefined/annotation_approver"===\1?t.annotationApprover:"project_manager"===\1?"Project Manager":t.undefined/g' "$f"; \
-        sed -i 's/annotation_approver"===\([a-z]\)?n\.annotationApprover:n\.undefined/annotation_approver"===\1?n.annotationApprover:"project_manager"===\1?"Project Manager":n.undefined/g' "$f"; \
+# Replace: adds project_manager check before falling through to undefined
+RUN for f in /doccano/backend/staticfiles/_nuxt/*.js /doccano/backend/client/dist/_nuxt/*.js /doccano/backend/client/dist/static/_nuxt/*.js; do \
+    if [ -f "$f" ] && grep -q "annotation_approver" "$f" 2>/dev/null; then \
+        echo "Patching translateRole in $f for project_manager..."; \
+        sed -i 's/annotation_approver"===\([a-z]\)?t\.annotationApprover:t\.undefined/annotation_approver"===\1?t.annotationApprover:"project_manager"===\1?t.projectManager:t.undefined/g' "$f"; \
+        sed -i 's/annotation_approver"===\([a-z]\)?n\.annotationApprover:n\.undefined/annotation_approver"===\1?n.annotationApprover:"project_manager"===\1?n.projectManager:n.undefined/g' "$f"; \
     fi; \
     done || true
 
-# Method 2: Direct string replacement in client/dist
-RUN for f in /doccano/backend/client/dist/_nuxt/*.js; do \
-    if grep -q "annotation_approver" "$f" 2>/dev/null; then \
-        echo "Patching $f for project_manager..."; \
-        sed -i 's/annotation_approver"===\([a-z]\)?t\.annotationApprover:t\.undefined/annotation_approver"===\1?t.annotationApprover:"project_manager"===\1?"Project Manager":t.undefined/g' "$f"; \
-        sed -i 's/annotation_approver"===\([a-z]\)?n\.annotationApprover:n\.undefined/annotation_approver"===\1?n.annotationApprover:"project_manager"===\1?"Project Manager":n.undefined/g' "$f"; \
+# STEP 3: Alternative patterns (some minifiers use different variable names)
+RUN for f in /doccano/backend/staticfiles/_nuxt/*.js /doccano/backend/client/dist/_nuxt/*.js; do \
+    if [ -f "$f" ] && grep -q "annotationApprover:t.undefined\|annotationApprover:n.undefined" "$f" 2>/dev/null; then \
+        echo "Patching alt pattern in $f..."; \
+        sed -i 's/annotationApprover:t\.undefined/annotationApprover:"project_manager"===e?t.projectManager:t.undefined/g' "$f" 2>/dev/null || true; \
+        sed -i 's/annotationApprover:n\.undefined/annotationApprover:"project_manager"===e?n.projectManager:n.undefined/g' "$f" 2>/dev/null || true; \
     fi; \
     done || true
 
-# Method 3: Also try alternative pattern (some minifiers use different var names)
-RUN grep -rl "annotation_approver.*annotationApprover" /doccano/backend/staticfiles/_nuxt/ 2>/dev/null | while read f; do \
-    echo "Also patching (alt pattern) $f..."; \
-    sed -i 's/:t\.undefined/:("project_manager"===e?"Project Manager":t.undefined)/g' "$f" 2>/dev/null || true; \
-    sed -i 's/:n\.undefined/:("project_manager"===e?"Project Manager":n.undefined)/g' "$f" 2>/dev/null || true; \
-    done || true
+# STEP 4: Verify patches were applied
+RUN echo "=== Verifying project_manager patches ===" && \
+    grep -l "projectManager" /doccano/backend/staticfiles/_nuxt/*.js 2>/dev/null | wc -l && \
+    echo "files patched with projectManager string"
 
 # ============================================
 # DELETE ROBOTO FONTS - Force fallback to MonlamTBslim
