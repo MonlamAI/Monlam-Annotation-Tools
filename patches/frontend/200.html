@@ -955,19 +955,17 @@
         // Wait for the stepper (YouTube video container) to appear
         const checkAndReplace = () => {
             const stepper = document.querySelector('.v-stepper');
-            const card = document.querySelector('.v-card');
             
-            if (stepper || (card && card.querySelector('.v-stepper'))) {
+            if (stepper) {
                 console.log('[Monlam] Replacing project home with custom instructions');
                 
-                // Find the main content container
-                const mainContent = document.querySelector('.v-main__wrap') || 
-                                   document.querySelector('.container') ||
-                                   stepper?.closest('.v-card');
+                // Find the card containing the stepper (NOT the entire main content)
+                const cardToReplace = stepper.closest('.v-card');
                 
-                if (mainContent) {
-                    mainContent.innerHTML = `
-                        <div style="padding: 24px; max-width: 1200px; margin: 0 auto; font-family: MonlamTBslim, 'Noto Sans Tibetan', Roboto, sans-serif;">
+                if (cardToReplace) {
+                    // Replace only the card content (not the sidebar)
+                    cardToReplace.innerHTML = `
+                        <div style="padding: 24px; font-family: MonlamTBslim, 'Noto Sans Tibetan', Roboto, sans-serif;">
                             
                             <!-- Welcome Header -->
                             <div style="background: linear-gradient(135deg, #1976d2, #42a5f5); color: white; padding: 32px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
@@ -982,15 +980,15 @@
                                     ⚡ མྱུར་སྤྱོད་བྱེད་སྒོ། / Quick Actions
                                 </h2>
                                 <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                    <button onclick="window.location.href='/projects/${projectId}/speech-to-text'" 
+                                    <button id="monlam-start-btn"
                                             style="background: #1976d2; color: white; border: none; padding: 16px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                                         ▶️ མཆན་འགྲེལ་འགོ་འཛུགས། / Start Annotation
                                     </button>
-                                    <button onclick="window.location.href='/projects/${projectId}/dataset'" 
+                                    <button id="monlam-dataset-btn"
                                             style="background: white; color: #1976d2; border: 2px solid #1976d2; padding: 16px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                                         📊 གཞི་གྲངས། / Dataset
                                     </button>
-                                    <button onclick="window.location.href='/monlam/${projectId}/completion/'" 
+                                    <button id="monlam-stats-btn"
                                             style="background: white; color: #666; border: 2px solid #666; padding: 16px 32px; border-radius: 8px; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                                         📈 གྲུབ་ཐོ། / Statistics
                                     </button>
@@ -1086,6 +1084,51 @@
                             </div>
                         </div>
                     `;
+                    
+                    // Attach click handlers to our custom buttons
+                    setTimeout(() => {
+                        // Start Annotation button - click the sidebar button
+                        const startBtn = document.getElementById('monlam-start-btn');
+                        if (startBtn) {
+                            startBtn.onclick = () => {
+                                // Find and click the sidebar "Start Annotation" button
+                                const sidebarStartBtn = document.querySelector('.v-navigation-drawer .v-btn.primary, .v-list .v-btn.primary');
+                                if (sidebarStartBtn) {
+                                    sidebarStartBtn.click();
+                                } else {
+                                    // Fallback: navigate directly
+                                    window.location.href = '/projects/' + projectId + '/speech-to-text';
+                                }
+                            };
+                        }
+                        
+                        // Dataset button - click the sidebar item
+                        const datasetBtn = document.getElementById('monlam-dataset-btn');
+                        if (datasetBtn) {
+                            datasetBtn.onclick = () => {
+                                // Find and click the sidebar "Dataset" item
+                                const sidebarItems = document.querySelectorAll('.v-list-item');
+                                for (const item of sidebarItems) {
+                                    const title = item.querySelector('.v-list-item__title');
+                                    if (title && (title.textContent.includes('གཞི་གྲངས') || title.textContent.includes('Dataset'))) {
+                                        item.click();
+                                        return;
+                                    }
+                                }
+                                // Fallback
+                                window.location.href = '/projects/' + projectId + '/dataset';
+                            };
+                        }
+                        
+                        // Statistics button
+                        const statsBtn = document.getElementById('monlam-stats-btn');
+                        if (statsBtn) {
+                            statsBtn.onclick = () => {
+                                window.location.href = '/monlam/' + projectId + '/completion/';
+                            };
+                        }
+                    }, 100);
+                    
                     return true;
                 }
             }
