@@ -69,5 +69,14 @@ urlpatterns = [
         views.analytics_api,
         name='analytics-api'
     ),
+    
+    # ============================================
+    # CHANGE PASSWORD (Global - for all users)
+    # ============================================
+    path(
+        'change-password/',
+        views.change_password,
+        name='change-password'
+    ),
 ]
 

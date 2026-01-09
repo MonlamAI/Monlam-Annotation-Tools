@@ -2120,6 +2120,59 @@
     }
     
     // ========================================
+    // FEATURE: Add "Change Password" to User Menu
+    // ========================================
+    function addChangePasswordLink() {
+        // Watch for the user dropdown menu to appear
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) {
+                        // Look for the v-list that contains sign out
+                        const signOutItems = node.querySelectorAll ? 
+                            node.querySelectorAll('.v-list-item') : [];
+                        
+                        signOutItems.forEach((item) => {
+                            const title = item.querySelector('.v-list-item__title');
+                            if (title && (title.textContent.includes('Sign Out') || 
+                                         title.textContent.includes('ཕྱིར་འཐོན།') ||
+                                         title.textContent.includes('Ausloggen') ||
+                                         title.textContent.includes('Déconnexion') ||
+                                         title.textContent.includes('注销'))) {
+                                
+                                // Check if we already added the link
+                                const parent = item.parentElement;
+                                if (parent && !parent.querySelector('.monlam-change-password')) {
+                                    // Create Change Password item
+                                    const changePasswordItem = document.createElement('div');
+                                    changePasswordItem.className = 'v-list-item v-list-item--link theme--light monlam-change-password';
+                                    changePasswordItem.style.cursor = 'pointer';
+                                    changePasswordItem.innerHTML = `
+                                        <div class="v-list-item__icon">
+                                            <i class="v-icon mdi mdi-lock-reset theme--light"></i>
+                                        </div>
+                                        <div class="v-list-item__content">
+                                            <div class="v-list-item__title">གསང་ཨང་བསྒྱུར་བ། (Change Password)</div>
+                                        </div>
+                                    `;
+                                    changePasswordItem.onclick = () => {
+                                        window.location.href = '/monlam/change-password/';
+                                    };
+                                    
+                                    // Insert before Sign Out
+                                    parent.insertBefore(changePasswordItem, item);
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+        });
+        
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+    
+    // ========================================
     // FEATURE: Redirect Project Home to Projects List
     // ========================================
     function redirectProjectHomeToProjectsList() {
@@ -2147,6 +2200,9 @@
         
         // Set up metrics redirect IMMEDIATELY (before Vue Router)
         setupMetricsRedirect();
+        
+        // Add "Change Password" link to user dropdown
+        addChangePasswordLink();
         
         // Set default filter for annotators FIRST (before other features)
         setDefaultFilterForAnnotators();

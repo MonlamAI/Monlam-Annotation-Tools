@@ -348,6 +348,19 @@ def api_completion_stats(request, project_id):
 
 
 # ============================================
+# CHANGE PASSWORD
+# ============================================
+
+@login_required
+def change_password(request):
+    """
+    Password change page for users.
+    Uses dj_rest_auth's /v1/auth/password/change/ API.
+    """
+    return render(request, 'monlam_ui/change_password.html')
+
+
+# ============================================
 # ANALYTICS DASHBOARD
 # ============================================
 
