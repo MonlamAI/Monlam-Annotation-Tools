@@ -953,6 +953,13 @@
                 
                 // Get CSRF token
                 function getCsrfToken() {
+                    // Try cookie first (most reliable)
+                    const cookies = document.cookie.split(';');
+                    for (const cookie of cookies) {
+                        const [name, value] = cookie.trim().split('=');
+                        if (name === 'csrftoken') return value;
+                    }
+                    // Fallback to input field
                     const token = document.querySelector('[name=csrfmiddlewaretoken]');
                     return token ? token.value : '';
                 }
