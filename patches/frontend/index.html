@@ -2119,9 +2119,31 @@
         }
     }
     
+    // ========================================
+    // FEATURE: Redirect Project Home to Projects List
+    // ========================================
+    function redirectProjectHomeToProjectsList() {
+        const path = window.location.pathname;
+        
+        // Check if on project home page (pattern: /projects/{id}/ or /projects/{id})
+        const projectHomeMatch = path.match(/^\/projects\/(\d+)\/?$/);
+        
+        if (projectHomeMatch) {
+            console.log('[Monlam] Redirecting project home to projects list');
+            window.location.replace('/projects/');
+            return true;
+        }
+        return false;
+    }
+    
     function init() {
         console.log('[Monlam] 🚀 Initializing features...');
         console.log('[Monlam] Current path:', window.location.pathname);
+        
+        // Redirect project home to projects list
+        if (redirectProjectHomeToProjectsList()) {
+            return; // Stop further initialization, we're redirecting
+        }
         
         // Set up metrics redirect IMMEDIATELY (before Vue Router)
         setupMetricsRedirect();
@@ -2145,6 +2167,11 @@
             if (currentPath !== lastPath) {
                 lastPath = currentPath;
                 console.log('[Monlam] 🔄 Navigation detected:', currentPath);
+                
+                // Redirect project home to projects list
+                if (redirectProjectHomeToProjectsList()) {
+                    return;
+                }
                 
                 // Reset page-specific flags (but not global ones)
                 // The enhance functions will check their own page-specific flags
