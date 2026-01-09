@@ -1183,8 +1183,27 @@
     // Uses Doccano's native isChecked=false filter
     // Applies to BOTH dataset page AND annotation pages
     // ========================================
+    let filterCheckInProgress = false;
+    let lastFilterCheckPath = '';
+    
     async function setDefaultFilterForAnnotators() {
         const path = window.location.pathname;
+        
+        // Prevent concurrent/duplicate runs
+        if (filterCheckInProgress) {
+            console.log('[Monlam Filter] ⏳ Already checking, skipping');
+            return;
+        }
+        
+        // Prevent running multiple times for same path
+        const fullPath = path + window.location.search;
+        if (lastFilterCheckPath === fullPath) {
+            console.log('[Monlam Filter] ⏳ Already processed this path, skipping');
+            return;
+        }
+        
+        filterCheckInProgress = true;
+        lastFilterCheckPath = fullPath;
         
         // Run on dataset page OR annotation pages
         const isDatasetPage = path.includes('/dataset');
@@ -1211,10 +1230,21 @@
             const roleData = await roleResp.json();
             const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
             
+            // DEBUG: Log the full role data
+            console.log('[Monlam Filter] 📋 Role data from API:', JSON.stringify(roleData));
+            console.log('[Monlam Filter] 📋 Role name detected:', roleName);
+            
             const isAnnotator = roleName.includes('annotator') && 
                                !roleName.includes('admin') && 
                                !roleName.includes('manager') && 
                                !roleName.includes('approver');
+            
+            // Also check if we're privileged (manager, admin, approver)
+            const isPrivileged = roleName.includes('admin') || 
+                                roleName.includes('manager') || 
+                                roleName.includes('approver');
+            
+            console.log('[Monlam Filter] 📋 isAnnotator:', isAnnotator, 'isPrivileged:', isPrivileged);
             
             if (isAnnotator) {
                 console.log('[Monlam Filter] 🔍 User is annotator on', isDatasetPage ? 'dataset' : 'annotation', 'page');
@@ -1229,10 +1259,12 @@
                 }
                 
             } else {
-                console.log('[Monlam Filter] User is privileged, showing all');
+                console.log('[Monlam Filter] ✨ User is privileged (' + roleName + '), showing all examples');
             }
         } catch (error) {
             console.error('[Monlam Filter] Error:', error);
+        } finally {
+            filterCheckInProgress = false;
         }
     }
     
