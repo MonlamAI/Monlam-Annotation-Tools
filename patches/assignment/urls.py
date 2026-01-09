@@ -14,6 +14,7 @@ from .completion_views import (
 )
 from .comprehensive_example_api import ComprehensiveExampleViewSet
 from .example_filtering import ExampleLockingViewSet
+from .tracking_api import AnnotationTrackingViewSet
 
 urlpatterns = [
     # ===== Assignment URLs =====

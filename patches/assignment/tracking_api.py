@@ -121,15 +121,11 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         
         POST /v1/projects/{project_id}/tracking/{example_id}/reject/
         {
-            "review_notes": "Needs correction"
+            "review_notes": "Needs correction (optional)"
         }
         """
         review_notes = request.data.get('review_notes', '')
-        if not review_notes:
-            return Response(
-                {'error': 'review_notes is required for rejection'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # Notes are now optional for rejection
         
         try:
             with transaction.atomic():

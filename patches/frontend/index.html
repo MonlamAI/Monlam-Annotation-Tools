@@ -994,7 +994,7 @@
                     }
                 }
                 
-                // Approve handler
+                // Approve handler - NO notes required
                 approveBtn.onclick = async () => {
                     const exampleId = getCurrentExampleId();
                     if (!exampleId) {
@@ -1002,9 +1002,7 @@
                         return;
                     }
                     
-                    const notes = prompt('Approval notes (optional):');
-                    if (notes === null) return; // User cancelled
-                    
+                    // Approve directly without asking for notes
                     try {
                         approveBtn.disabled = true;
                         approveBtn.textContent = 'Approving...';
@@ -1015,7 +1013,7 @@
                                 'Content-Type': 'application/json',
                                 'X-CSRFToken': getCsrfToken()
                             },
-                            body: JSON.stringify({ review_notes: notes })
+                            body: JSON.stringify({ review_notes: '' })
                         });
                         
                         const data = await resp.json();
@@ -1042,11 +1040,8 @@
                         return;
                     }
                     
-                    const notes = prompt('Rejection reason (required):');
-                    if (!notes) {
-                        alert('Rejection reason is required.');
-                        return;
-                    }
+                    const notes = prompt('Rejection reason (optional):') || '';
+                    // Notes are optional - proceed even if empty
                     
                     try {
                         rejectBtn.disabled = true;

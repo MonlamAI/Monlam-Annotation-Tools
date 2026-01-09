@@ -7,5 +7,8 @@ from django.urls import path, include
 urlpatterns += [
     # Assignment and Completion Tracking APIs
     path('v1/projects/<int:project_id>/assignments/', include('assignment.urls')),
+    
+    # Tracking API (approve/reject/status/lock)
+    path('v1/projects/<int:project_id>/tracking/', include('assignment.tracking_urls')),
 ]
 
