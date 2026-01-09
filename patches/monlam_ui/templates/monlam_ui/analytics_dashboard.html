@@ -193,6 +193,19 @@
                         </v-card>
                     </v-col>
                 </v-row>
+                
+                <!-- Time Tracking Row -->
+                <v-row class="mt-2" v-if="data.summary.total_time_seconds > 0">
+                    <v-col cols="12" sm="6" md="4">
+                        <v-card class="stat-card" color="cyan lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="cyan darken-2">mdi-clock-outline</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.total_time_formatted ]]</div>
+                                <div class="text--secondary">Total Time Spent</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
 
                 <!-- Charts Row -->
                 <v-row v-if="data && !loading" class="mt-4">
@@ -371,7 +384,9 @@
                     { text: 'Rejected', value: 'rejected' },
                     { text: 'Pending Review', value: 'pending' },
                     { text: 'Approval Rate', value: 'approval_rate', width: 150 },
-                    { text: 'Avg/Day', value: 'avg_per_day' }
+                    { text: 'Avg/Day', value: 'avg_per_day' },
+                    { text: 'Total Time', value: 'total_time_formatted' },
+                    { text: 'Avg Time/Example', value: 'avg_time_formatted' }
                 ],
                 projectHeaders: [
                     { text: 'Project', value: 'name' },

@@ -529,6 +529,7 @@ def analytics_api(request):
                     'approved': 0,
                     'rejected': 0,
                     'pending': 0,
+                    'total_time_seconds': 0,  # NEW: Total time spent
                     'first_date': state.confirmed_at.date(),
                     'last_date': state.confirmed_at.date()
                 }
@@ -538,7 +539,8 @@ def analytics_api(request):
             if state.confirmed_at.date() > annotator_stats[username]['last_date']:
                 annotator_stats[username]['last_date'] = state.confirmed_at.date()
     
-    # Add tracking status
+    # Add tracking status and time spent
+    total_time_all = 0
     if tracking:
         for t in tracking:
             if t.annotated_by and t.annotated_by.username in annotator_stats:
@@ -546,6 +548,11 @@ def analytics_api(request):
                     annotator_stats[t.annotated_by.username]['approved'] += 1
                 elif t.status == 'rejected':
                     annotator_stats[t.annotated_by.username]['rejected'] += 1
+                
+                # Add time spent
+                if hasattr(t, 'time_spent_seconds') and t.time_spent_seconds:
+                    annotator_stats[t.annotated_by.username]['total_time_seconds'] += t.time_spent_seconds
+                    total_time_all += t.time_spent_seconds
     
     # Calculate derived stats
     for username, stats in annotator_stats.items():
@@ -559,6 +566,21 @@ def analytics_api(request):
         # Days active
         days = (stats['last_date'] - stats['first_date']).days + 1
         stats['avg_per_day'] = stats['total'] / days if days > 0 else 0
+        
+        # Format time spent
+        total_seconds = stats['total_time_seconds']
+        if total_seconds > 0:
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            stats['total_time_formatted'] = f"{hours}h {minutes}m"
+            stats['avg_time_per_example'] = round(total_seconds / stats['total']) if stats['total'] > 0 else 0
+            avg_mins = stats['avg_time_per_example'] // 60
+            avg_secs = stats['avg_time_per_example'] % 60
+            stats['avg_time_formatted'] = f"{avg_mins}m {avg_secs}s"
+        else:
+            stats['total_time_formatted'] = 'N/A'
+            stats['avg_time_per_example'] = 0
+            stats['avg_time_formatted'] = 'N/A'
         
         # Remove date objects (not JSON serializable)
         del stats['first_date']
@@ -625,7 +647,9 @@ def analytics_api(request):
             'pending': pending_count,
             'approved': approved_count,
             'rejected': rejected_count,
-            'active_annotators': active_annotators
+            'active_annotators': active_annotators,
+            'total_time_seconds': total_time_all,
+            'total_time_formatted': f"{total_time_all // 3600}h {(total_time_all % 3600) // 60}m" if total_time_all > 0 else 'N/A'
         },
         'annotators': annotator_list,
         'projects': project_stats,

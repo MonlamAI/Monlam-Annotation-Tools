@@ -56,13 +56,26 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     tracking.annotated_by = request.user
                     tracking.annotated_at = timezone.now()
                     tracking.status = 'submitted'
+                    
+                    # Calculate time spent if we have started_at
+                    if tracking.started_at:
+                        time_diff = timezone.now() - tracking.started_at
+                        tracking.time_spent_seconds = int(time_diff.total_seconds())
+                    
                     tracking.save()
+                
+                # Calculate time spent for new records too
+                time_spent = None
+                if tracking.started_at and tracking.annotated_at:
+                    time_diff = tracking.annotated_at - tracking.started_at
+                    time_spent = int(time_diff.total_seconds())
                 
                 return Response({
                     'success': True,
                     'status': tracking.status,
                     'annotated_by': tracking.annotated_by.username if tracking.annotated_by else None,
-                    'annotated_at': tracking.annotated_at
+                    'annotated_at': tracking.annotated_at,
+                    'time_spent_seconds': time_spent
                 })
         
         except Exception as e:
@@ -270,6 +283,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     defaults={
                         'locked_by': request.user,
                         'locked_at': timezone.now(),
+                        'started_at': timezone.now(),  # Track when annotation started
                         'status': 'pending'
                     }
                 )

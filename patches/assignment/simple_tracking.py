@@ -42,6 +42,10 @@ class AnnotationTracking(models.Model):
     
     annotated_at = models.DateTimeField(null=True, blank=True)
     
+    # Time tracking
+    started_at = models.DateTimeField(null=True, blank=True)  # When annotator started
+    time_spent_seconds = models.IntegerField(null=True, blank=True)  # Calculated duration
+    
     # Who reviewed this example
     reviewed_by = models.ForeignKey(
         User,
