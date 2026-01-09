@@ -559,42 +559,65 @@
     
     // Method 2: Fix role dropdown text everywhere
     function fixRoleDropdown() {
-      // Patterns that indicate "undefined" role (project_manager)
+      // Valid role names that should NOT be replaced
+      const validRoles = ['Project Admin', 'Annotator', 'Annotation Approver', 'Project Manager',
+                          'project_admin', 'annotator', 'annotation_approver', 'project_manager'];
+      
+      // Patterns that indicate "undefined" role (project_manager showing incorrectly)
       const undefinedPatterns = [
         'undefined',
+        'Undefined', 
         'No Role Defined',
         'Role Defined',
-        'མིན།',  // Tibetan "no/not"
-        'མིན། Role Defined',
-        'Undefined'
+        'མིན།',  // Tibetan "no/not" - translation of "undefined"
       ];
       
+      // Helper to check if text needs fixing
+      function needsFix(text) {
+        // If it's already a valid role, don't fix
+        if (validRoles.some(role => text === role)) return false;
+        // If it contains undefined patterns, fix it
+        if (undefinedPatterns.some(pattern => text.includes(pattern))) return true;
+        // If text is exactly "མིན།" or variations
+        if (text.startsWith('མིན།')) return true;
+        return false;
+      }
+      
       // Fix in list items (dropdowns)
-      document.querySelectorAll('.v-list-item__title, .v-list-item__content, .v-select__selection, .v-chip__content').forEach(function(item) {
+      document.querySelectorAll('.v-list-item__title, .v-list-item__content, .v-select__selection, .v-chip__content, .v-select__selection-text').forEach(function(item) {
         const text = item.textContent.trim();
-        const isUndefinedRole = undefinedPatterns.some(pattern => text.includes(pattern));
         
-        if (isUndefinedRole) {
-          // Find the title element specifically
-          const titleEl = item.classList.contains('v-list-item__title') ? 
-            item : (item.querySelector('.v-list-item__title') || item);
-          if (titleEl && titleEl.childNodes.length <= 1) {
-            titleEl.textContent = 'Project Manager';
-            console.log('[Monlam] Fixed role: "' + text + '" → "Project Manager"');
+        if (needsFix(text)) {
+          // For elements that directly contain the text
+          if (item.childNodes.length <= 2) {
+            const oldText = item.textContent;
+            item.textContent = 'Project Manager';
+            console.log('[Monlam] Fixed role: "' + oldText + '" → "Project Manager"');
           }
         }
       });
       
       // Also fix in select/autocomplete dropdowns that may show role options
       document.querySelectorAll('.v-menu__content .v-list-item').forEach(function(item) {
-        const text = item.textContent.trim();
-        const isUndefinedRole = undefinedPatterns.some(pattern => text.includes(pattern));
-        
-        if (isUndefinedRole) {
-          const titleEl = item.querySelector('.v-list-item__title');
-          if (titleEl) {
+        const titleEl = item.querySelector('.v-list-item__title');
+        if (titleEl) {
+          const text = titleEl.textContent.trim();
+          if (needsFix(text)) {
+            const oldText = titleEl.textContent;
             titleEl.textContent = 'Project Manager';
-            console.log('[Monlam] Fixed dropdown role: "' + text + '" → "Project Manager"');
+            console.log('[Monlam] Fixed dropdown role: "' + oldText + '" → "Project Manager"');
+          }
+        }
+      });
+      
+      // Extra: Fix any element that exactly shows the broken pattern
+      document.querySelectorAll('*').forEach(function(el) {
+        if (el.children.length === 0 && el.textContent) {
+          const text = el.textContent.trim();
+          // Very specific match for the broken display
+          if (text === 'མིན། Role Defined' || text === 'མིན།' || text === 'མིན། role defined') {
+            el.textContent = 'Project Manager';
+            console.log('[Monlam] Fixed exact match: "' + text + '" → "Project Manager"');
           }
         }
       });

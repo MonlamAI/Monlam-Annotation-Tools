@@ -558,28 +558,51 @@
     
     // Method 2: Fix role dropdown text everywhere
     function fixRoleDropdown() {
-      var undefinedPatterns = ['undefined', 'No Role Defined', 'Role Defined', 'མིན།', 'མིན། Role Defined', 'Undefined'];
+      // Valid role names that should NOT be replaced
+      var validRoles = ['Project Admin', 'Annotator', 'Annotation Approver', 'Project Manager',
+                        'project_admin', 'annotator', 'annotation_approver', 'project_manager'];
       
-      document.querySelectorAll('.v-list-item__title, .v-list-item__content, .v-select__selection, .v-chip__content').forEach(function(item) {
+      // Patterns that indicate "undefined" role (project_manager showing incorrectly)
+      var undefinedPatterns = ['undefined', 'Undefined', 'No Role Defined', 'Role Defined', 'མིན།'];
+      
+      // Helper to check if text needs fixing
+      function needsFix(text) {
+        // If it's already a valid role, don't fix
+        if (validRoles.some(function(role) { return text === role; })) return false;
+        // If it contains undefined patterns, fix it
+        if (undefinedPatterns.some(function(pattern) { return text.includes(pattern); })) return true;
+        // If text starts with "མིན།"
+        if (text.indexOf('མིན།') === 0) return true;
+        return false;
+      }
+      
+      // Fix in list items (dropdowns)
+      document.querySelectorAll('.v-list-item__title, .v-list-item__content, .v-select__selection, .v-chip__content, .v-select__selection-text').forEach(function(item) {
         var text = item.textContent.trim();
-        var isUndefinedRole = undefinedPatterns.some(function(pattern) { return text.includes(pattern); });
-        
-        if (isUndefinedRole) {
-          var titleEl = item.classList.contains('v-list-item__title') ? item : (item.querySelector('.v-list-item__title') || item);
-          if (titleEl && titleEl.childNodes.length <= 1) {
-            titleEl.textContent = 'Project Manager';
-          }
+        if (needsFix(text) && item.childNodes.length <= 2) {
+          var oldText = item.textContent;
+          item.textContent = 'Project Manager';
+          console.log('[Monlam] Fixed role: "' + oldText + '" → "Project Manager"');
         }
       });
       
+      // Fix in dropdown menus
       document.querySelectorAll('.v-menu__content .v-list-item').forEach(function(item) {
-        var text = item.textContent.trim();
-        var isUndefinedRole = undefinedPatterns.some(function(pattern) { return text.includes(pattern); });
-        
-        if (isUndefinedRole) {
-          var titleEl = item.querySelector('.v-list-item__title');
-          if (titleEl) {
-            titleEl.textContent = 'Project Manager';
+        var titleEl = item.querySelector('.v-list-item__title');
+        if (titleEl && needsFix(titleEl.textContent.trim())) {
+          var oldText = titleEl.textContent;
+          titleEl.textContent = 'Project Manager';
+          console.log('[Monlam] Fixed dropdown role: "' + oldText + '" → "Project Manager"');
+        }
+      });
+      
+      // Extra: Fix any leaf element with exact broken pattern
+      document.querySelectorAll('*').forEach(function(el) {
+        if (el.children.length === 0 && el.textContent) {
+          var text = el.textContent.trim();
+          if (text === 'མིན། Role Defined' || text === 'མིན།' || text === 'མིན། role defined') {
+            el.textContent = 'Project Manager';
+            console.log('[Monlam] Fixed exact: "' + text + '" → "Project Manager"');
           }
         }
       });
