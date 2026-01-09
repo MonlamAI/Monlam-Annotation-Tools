@@ -941,30 +941,50 @@
     }
     
     // ========================================
-    // FEATURE: Custom Project Home Page
+    // FEATURE: Custom Project Home Page (Graceful)
     // ========================================
+    let projectHomeCustomized = false;
+    
     function customizeProjectHomePage() {
-        const path = window.location.pathname;
-        
-        // Check if on project home page (pattern: /projects/{id}/ or /projects/{id})
-        const projectHomeMatch = path.match(/^\/projects\/(\d+)\/?$/);
-        if (!projectHomeMatch) return;
-        
-        const projectId = projectHomeMatch[1];
-        
-        // Wait for the stepper (YouTube video container) to appear
-        const checkAndReplace = () => {
-            const stepper = document.querySelector('.v-stepper');
+        try {
+            const path = window.location.pathname;
             
-            if (stepper) {
-                console.log('[Monlam] Replacing project home with custom instructions');
+            // Check if on project home page (pattern: /projects/{id}/ or /projects/{id})
+            const projectHomeMatch = path.match(/^\/projects\/(\d+)\/?$/);
+            if (!projectHomeMatch) {
+                projectHomeCustomized = false; // Reset flag when leaving page
+                return;
+            }
+            
+            // Already customized this page
+            if (projectHomeCustomized && document.getElementById('monlam-home-content')) {
+                return;
+            }
+            
+            const projectId = projectHomeMatch[1];
+            
+            // Wait for the stepper (YouTube video container) to appear
+            const checkAndReplace = () => {
+                // Don't run if already customized
+                if (document.getElementById('monlam-home-content')) {
+                    return true;
+                }
                 
-                // Find the card containing the stepper (NOT the entire main content)
-                const cardToReplace = stepper.closest('.v-card');
+                const stepper = document.querySelector('.v-stepper');
                 
-                if (cardToReplace) {
-                    // Replace only the card content (not the sidebar)
-                    cardToReplace.innerHTML = `
+                if (stepper) {
+                    console.log('[Monlam Home] Customizing project home page');
+                    
+                    // Find the card containing the stepper (NOT the entire main content)
+                    const cardToReplace = stepper.closest('.v-card');
+                    
+                    if (cardToReplace) {
+                        // Mark as customized
+                        projectHomeCustomized = true;
+                        
+                        // Replace only the card content (not the sidebar)
+                        cardToReplace.innerHTML = `
+                            <div id="monlam-home-content" style="padding: 24px; font-family: MonlamTBslim, 'Noto Sans Tibetan', Roboto, sans-serif;">
                         <div style="padding: 24px; font-family: MonlamTBslim, 'Noto Sans Tibetan', Roboto, sans-serif;">
                             
                             <!-- Welcome Header -->
@@ -1135,14 +1155,17 @@
             return false;
         };
         
-        // Try immediately and then with retries
-        if (!checkAndReplace()) {
-            let attempts = 0;
-            const interval = setInterval(() => {
-                if (checkAndReplace() || attempts++ > 20) {
-                    clearInterval(interval);
-                }
-            }, 200);
+            // Try immediately and then with limited retries
+            if (!checkAndReplace()) {
+                let attempts = 0;
+                const interval = setInterval(() => {
+                    if (checkAndReplace() || attempts++ > 10) {
+                        clearInterval(interval);
+                    }
+                }, 300);
+            }
+        } catch (e) {
+            console.error('[Monlam Home] Error customizing home page:', e);
         }
     }
     
