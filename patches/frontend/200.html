@@ -522,6 +522,89 @@
   <script src="/static/_nuxt/50aa8ea.js"></script>
   <script src="/static/_nuxt/bd0aa1f.js"></script>
   
+  <!-- FIX: Patch role translation for project_manager -->
+  <script>
+  (function() {
+    'use strict';
+    
+    // Role translation map
+    var roleMap = {
+      'project_admin': 'Project Admin',
+      'annotator': 'Annotator', 
+      'annotation_approver': 'Annotation Approver',
+      'project_manager': 'Project Manager'
+    };
+    
+    // Method 1: Intercept role API responses and add translatedName
+    var originalFetch = window.fetch;
+    window.fetch = function() {
+      return originalFetch.apply(this, arguments).then(function(response) {
+        var url = arguments[0] && arguments[0].url ? arguments[0].url : arguments[0];
+        if (typeof url === 'string' && url.includes('/roles')) {
+          return response.clone().json().then(function(data) {
+            if (Array.isArray(data)) {
+              data.forEach(function(role) {
+                if (role.name && roleMap[role.name]) {
+                  role.translatedName = roleMap[role.name];
+                }
+              });
+            }
+            return new Response(JSON.stringify(data), response);
+          }).catch(function() { return response; });
+        }
+        return response;
+      });
+    };
+    
+    // Method 2: Fix role dropdown text everywhere
+    function fixRoleDropdown() {
+      var undefinedPatterns = ['undefined', 'No Role Defined', 'Role Defined', 'མིན།', 'མིན། Role Defined', 'Undefined'];
+      
+      document.querySelectorAll('.v-list-item__title, .v-list-item__content, .v-select__selection, .v-chip__content').forEach(function(item) {
+        var text = item.textContent.trim();
+        var isUndefinedRole = undefinedPatterns.some(function(pattern) { return text.includes(pattern); });
+        
+        if (isUndefinedRole) {
+          var titleEl = item.classList.contains('v-list-item__title') ? item : (item.querySelector('.v-list-item__title') || item);
+          if (titleEl && titleEl.childNodes.length <= 1) {
+            titleEl.textContent = 'Project Manager';
+          }
+        }
+      });
+      
+      document.querySelectorAll('.v-menu__content .v-list-item').forEach(function(item) {
+        var text = item.textContent.trim();
+        var isUndefinedRole = undefinedPatterns.some(function(pattern) { return text.includes(pattern); });
+        
+        if (isUndefinedRole) {
+          var titleEl = item.querySelector('.v-list-item__title');
+          if (titleEl) {
+            titleEl.textContent = 'Project Manager';
+          }
+        }
+      });
+    }
+    
+    document.addEventListener('DOMContentLoaded', fixRoleDropdown);
+    
+    var observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.addedNodes.length > 0) {
+          setTimeout(fixRoleDropdown, 50);
+          setTimeout(fixRoleDropdown, 200);
+        }
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    setInterval(function() {
+      if (window.location.pathname.includes('/members')) {
+        fixRoleDropdown();
+      }
+    }, 1000);
+  })();
+  </script>
+  
   <!-- Monlam Features - Inline for Maximum Reliability -->
   <script>
 (function() {

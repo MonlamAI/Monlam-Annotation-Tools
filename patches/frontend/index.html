@@ -557,7 +557,7 @@
       });
     };
     
-    // Method 2: Fix role dropdown text
+    // Method 2: Fix role dropdown text everywhere
     function fixRoleDropdown() {
       // Patterns that indicate "undefined" role (project_manager)
       const undefinedPatterns = [
@@ -565,20 +565,36 @@
         'No Role Defined',
         'Role Defined',
         'མིན།',  // Tibetan "no/not"
-        'མིན། Role Defined'
+        'མིན། Role Defined',
+        'Undefined'
       ];
       
-      document.querySelectorAll('.v-list-item__title, .v-list-item__content').forEach(function(item) {
+      // Fix in list items (dropdowns)
+      document.querySelectorAll('.v-list-item__title, .v-list-item__content, .v-select__selection, .v-chip__content').forEach(function(item) {
         const text = item.textContent.trim();
         const isUndefinedRole = undefinedPatterns.some(pattern => text.includes(pattern));
         
         if (isUndefinedRole) {
           // Find the title element specifically
           const titleEl = item.classList.contains('v-list-item__title') ? 
-            item : item.querySelector('.v-list-item__title');
-          if (titleEl) {
+            item : (item.querySelector('.v-list-item__title') || item);
+          if (titleEl && titleEl.childNodes.length <= 1) {
             titleEl.textContent = 'Project Manager';
             console.log('[Monlam] Fixed role: "' + text + '" → "Project Manager"');
+          }
+        }
+      });
+      
+      // Also fix in select/autocomplete dropdowns that may show role options
+      document.querySelectorAll('.v-menu__content .v-list-item').forEach(function(item) {
+        const text = item.textContent.trim();
+        const isUndefinedRole = undefinedPatterns.some(pattern => text.includes(pattern));
+        
+        if (isUndefinedRole) {
+          const titleEl = item.querySelector('.v-list-item__title');
+          if (titleEl) {
+            titleEl.textContent = 'Project Manager';
+            console.log('[Monlam] Fixed dropdown role: "' + text + '" → "Project Manager"');
           }
         }
       });
@@ -592,10 +608,18 @@
       mutations.forEach(function(mutation) {
         if (mutation.addedNodes.length > 0) {
           setTimeout(fixRoleDropdown, 50);
+          setTimeout(fixRoleDropdown, 200);  // Double check after Vue updates
         }
       });
     });
     observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Also run periodically when on members page
+    setInterval(function() {
+      if (window.location.pathname.includes('/members')) {
+        fixRoleDropdown();
+      }
+    }, 1000);
     
     console.log('[Monlam] Role translation fix loaded');
   })();
