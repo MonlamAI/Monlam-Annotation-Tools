@@ -75,13 +75,13 @@ def project_landing(request, project_id):
     - Completion Dashboard
     - Standard Project
     """
-    from projects.models import Project
+    from projects.models import Project, Member
     
     project = get_object_or_404(Project, pk=project_id)
     
     # Check access
     if not request.user.is_superuser:
-        if not project.members.filter(id=request.user.id).exists():
+        if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return render(request, '403.html', status=403)
     
     context = {
@@ -103,15 +103,14 @@ def completion_dashboard(request, project_id):
     - Per-approver review status
     - Examples completion matrix
     """
-    from projects.models import Project
-    from assignment.models_separate import Assignment
+    from projects.models import Project, Member
     
     project = get_object_or_404(Project, pk=project_id)
     
     # Check if user has access to this project
     if not request.user.is_superuser:
-        # Check if user is a member of this project
-        if not project.members.filter(id=request.user.id).exists():
+        # Check if user is a member of this project (via role_mappings)
+        if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return render(request, '403.html', status=403)
     
     context = {
@@ -132,13 +131,13 @@ def enhanced_dataset(request, project_id):
     - Annotation Status
     - Approval Status
     """
-    from projects.models import Project
+    from projects.models import Project, Member
     
     project = get_object_or_404(Project, pk=project_id)
     
     # Check access
     if not request.user.is_superuser:
-        if not project.members.filter(id=request.user.id).exists():
+        if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return render(request, '403.html', status=403)
     
     # Get project type and convert to URL format
@@ -180,7 +179,7 @@ def annotation_with_approval(request, project_id, example_id):
     - Approve/Reject buttons for approvers and project managers
     - Audio auto-loop for STT projects
     """
-    from projects.models import Project
+    from projects.models import Project, Member
     from examples.models import Example
     from assignment.models_separate import Assignment
     
@@ -189,7 +188,7 @@ def annotation_with_approval(request, project_id, example_id):
     
     # Check access
     if not request.user.is_superuser:
-        if not project.members.filter(id=request.user.id).exists():
+        if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return render(request, '403.html', status=403)
     
     # Get assignment for this example
@@ -216,7 +215,7 @@ def api_dataset_assignments(request, project_id):
     API endpoint to get all assignments for dataset view
     Returns assignment data for each example in the project
     """
-    from projects.models import Project
+    from projects.models import Project, Member
     from assignment.models_separate import Assignment
     from assignment.serializers import AssignmentSerializer
     
@@ -224,7 +223,7 @@ def api_dataset_assignments(request, project_id):
     
     # Check access
     if not request.user.is_superuser:
-        if not project.members.filter(id=request.user.id).exists():
+        if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
     
     assignments = Assignment.objects.filter(
@@ -251,7 +250,7 @@ def api_completion_stats(request, project_id):
     - ExampleState (Doccano's native confirmation via checkmark)
     - AnnotationTracking (our approve/reject workflow)
     """
-    from projects.models import Project
+    from projects.models import Project, Member
     from examples.models import ExampleState
     from assignment.simple_tracking import AnnotationTracking
     
@@ -259,7 +258,7 @@ def api_completion_stats(request, project_id):
     
     # Check access
     if not request.user.is_superuser:
-        if not project.members.filter(id=request.user.id).exists():
+        if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
     
     # Get overall stats
