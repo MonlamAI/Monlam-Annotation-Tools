@@ -76,6 +76,9 @@ COPY patches/backend/whitenoise_config.py /doccano/backend/config/whitenoise_con
 # MONLAM: Patched create_roles command (adds project_manager role)
 COPY patches/backend/create_roles.py /doccano/backend/roles/management/commands/create_roles.py
 
+# MONLAM: Patched permissions (adds project_manager to IsProjectMember)
+COPY patches/backend/project_permissions.py /doccano/backend/projects/permissions.py
+
 # Example JSONL files (required for import options to appear)
 COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
