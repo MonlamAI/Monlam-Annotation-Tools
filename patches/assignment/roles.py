@@ -32,26 +32,49 @@ class ProjectManagerMixin:
     """
     
     @staticmethod
+    def _get_member_role(user, project):
+        """
+        Get user's Member record and role name.
+        
+        Returns:
+            tuple: (member, role_name) or (None, None)
+        """
+        try:
+            from projects.models import Member
+            project_id = project.id if hasattr(project, 'id') else project
+            member = Member.objects.filter(
+                project_id=project_id, 
+                user=user
+            ).select_related('role').first()
+            
+            if member and member.role:
+                return (member, member.role.name.lower() if member.role.name else '')
+            return (member, None)
+        except Exception as e:
+            print(f'[Monlam Roles] Error getting member role: {e}')
+            return (None, None)
+    
+    @staticmethod
     def is_project_manager(user, project):
         """
         Check if user has Project Manager role or higher in the project.
         
         Args:
             user: User instance
-            project: Project instance
+            project: Project instance or project_id
             
         Returns:
             bool: True if user is project manager or admin
         """
-        try:
-            # Check if user is in project members
-            member = project.members.get(user=user)
-            role = member.role
-            
-            # Project Manager or Project Admin can access
-            return role in [ROLE_PROJECT_MANAGER, ROLE_PROJECT_ADMIN]
-        except:
+        if user.is_superuser:
+            return True
+        
+        _, role_name = ProjectManagerMixin._get_member_role(user, project)
+        if not role_name:
             return False
+        
+        # Project Manager or Project Admin can access
+        return 'manager' in role_name or 'admin' in role_name
     
     @staticmethod
     def is_approver_or_higher(user, project):
@@ -60,40 +83,34 @@ class ProjectManagerMixin:
         
         Args:
             user: User instance
-            project: Project instance
+            project: Project instance or project_id
             
         Returns:
             bool: True if user is approver, manager, or admin
         """
-        try:
-            member = project.members.get(user=user)
-            role = member.role
-            
-            return role in [
-                ROLE_ANNOTATION_APPROVER,
-                ROLE_PROJECT_MANAGER,
-                ROLE_PROJECT_ADMIN
-            ]
-        except:
+        if user.is_superuser:
+            return True
+        
+        _, role_name = ProjectManagerMixin._get_member_role(user, project)
+        if not role_name:
             return False
+        
+        return any(r in role_name for r in ['approver', 'manager', 'admin'])
     
     @staticmethod
     def get_user_role(user, project):
         """
-        Get the user's role in the project.
+        Get the user's role name in the project.
         
         Args:
             user: User instance
-            project: Project instance
+            project: Project instance or project_id
             
         Returns:
             str: Role name or None
         """
-        try:
-            member = project.members.get(user=user)
-            return member.role
-        except:
-            return None
+        _, role_name = ProjectManagerMixin._get_member_role(user, project)
+        return role_name
     
     @staticmethod
     def has_role_permission(user_role, required_role):

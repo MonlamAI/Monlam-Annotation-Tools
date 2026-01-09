@@ -5,6 +5,13 @@ Provides:
 - Auto-tracking when annotations are submitted
 - Approve/Reject endpoints for reviewers
 - Status tracking
+
+Permission Hierarchy:
+- Annotators: Can only mark_submitted and lock/unlock their own examples
+- Annotation Approvers: Can approve/reject annotations
+- Project Managers: Can approve/reject annotations + view analytics
+- Project Admins: Full access
+- Superusers: Full access
 """
 
 from rest_framework import viewsets, status
@@ -14,6 +21,37 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db import transaction
 from .simple_tracking import AnnotationTracking
+
+
+def has_approve_permission(user, project_id):
+    """
+    Check if user has permission to approve/reject annotations.
+    
+    Allowed roles:
+    - Superusers (always)
+    - Project Admins
+    - Annotation Approvers
+    - Project Managers
+    """
+    if user.is_superuser:
+        return True
+    
+    try:
+        from projects.models import Member
+        member = Member.objects.filter(user=user, project_id=project_id).first()
+        if not member or not member.role:
+            return False
+        
+        role_name = member.role.name.lower() if member.role.name else ''
+        
+        # These roles can approve/reject
+        if any(r in role_name for r in ['admin', 'approver', 'manager']):
+            return True
+        
+        return False
+    except Exception as e:
+        print(f'[Monlam] Permission check error: {e}')
+        return False
 
 
 class AnnotationTrackingViewSet(viewsets.ViewSet):
@@ -93,7 +131,17 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         {
             "review_notes": "Looks good!"
         }
+        
+        Requires: project_admin, annotation_approver, or project_manager role
         """
+        # Check permission
+        if not has_approve_permission(request.user, project_id):
+            return Response(
+                {'error': 'You do not have permission to approve annotations. '
+                         'Only Approvers, Project Managers, and Admins can approve.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         try:
             with transaction.atomic():
                 tracking, created = AnnotationTracking.objects.get_or_create(
@@ -136,7 +184,17 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         {
             "review_notes": "Needs correction (optional)"
         }
+        
+        Requires: project_admin, annotation_approver, or project_manager role
         """
+        # Check permission
+        if not has_approve_permission(request.user, project_id):
+            return Response(
+                {'error': 'You do not have permission to reject annotations. '
+                         'Only Approvers, Project Managers, and Admins can reject.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         review_notes = request.data.get('review_notes', '')
         # Notes are now optional for rejection
         
@@ -346,25 +404,13 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             
             # Check if user can unlock
             if tracking.locked_by and tracking.locked_by != request.user:
-                # Check if user is admin/superuser
-                if not request.user.is_superuser:
-                    # Check if user is project admin/manager
-                    try:
-                        from roles.models import Member
-                        member = Member.objects.get(user=request.user, project_id=project_id)
-                        role_name = member.role.name.lower() if member.role.name else ''
-                        if 'admin' not in role_name and 'manager' not in role_name:
-                            return Response({
-                                'success': False,
-                                'error': 'not_authorized',
-                                'message': 'Only the lock owner or an admin can unlock'
-                            }, status=status.HTTP_403_FORBIDDEN)
-                    except:
-                        return Response({
-                            'success': False,
-                            'error': 'not_authorized',
-                            'message': 'Only the lock owner or an admin can unlock'
-                        }, status=status.HTTP_403_FORBIDDEN)
+                # Only privileged users can unlock others' locks
+                if not has_approve_permission(request.user, project_id):
+                    return Response({
+                        'success': False,
+                        'error': 'not_authorized',
+                        'message': 'Only the lock owner, Approvers, Project Managers, or Admins can unlock'
+                    }, status=status.HTTP_403_FORBIDDEN)
             
             # Unlock
             tracking.locked_by = None
