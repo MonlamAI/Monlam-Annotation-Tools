@@ -141,13 +141,13 @@ class CanLockExample(permissions.BasePermission):
         
         # Check if locked by someone else
         if assignment.locked_by and assignment.locked_by != user:
-            # Check if lock is expired (30 minutes default)
+            # Check if lock is expired (5 minutes default)
             from django.utils import timezone
             from datetime import timedelta
             
             if assignment.locked_at:
                 lock_duration = timezone.now() - assignment.locked_at
-                if lock_duration < timedelta(minutes=30):
+                if lock_duration < timedelta(minutes=5):
                     # Still locked by someone else
                     return False
         

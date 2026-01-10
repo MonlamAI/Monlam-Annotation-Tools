@@ -278,11 +278,11 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     'is_locked': False
                 })
             
-            # Check if lock is still valid (30 minute expiry)
+            # Check if lock is still valid (5 minute expiry)
             is_locked = False
             locked_by_username = None
             if tracking.locked_by and tracking.locked_at:
-                lock_expiry = tracking.locked_at + timedelta(minutes=30)
+                lock_expiry = tracking.locked_at + timedelta(minutes=5)
                 if timezone.now() < lock_expiry:
                     is_locked = True
                     locked_by_username = tracking.locked_by.username
@@ -328,7 +328,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         
         POST /v1/projects/{project_id}/tracking/{example_id}/lock/
         
-        Locks expire after 30 minutes.
+        Locks expire after 5 minutes.
         Returns error if already locked by another user.
         """
         from datetime import timedelta
@@ -350,7 +350,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     # Check if already locked by someone else
                     if tracking.locked_by and tracking.locked_by != request.user:
                         # Check if lock is still valid
-                        lock_expiry = tracking.locked_at + timedelta(minutes=30) if tracking.locked_at else timezone.now()
+                        lock_expiry = tracking.locked_at + timedelta(minutes=5) if tracking.locked_at else timezone.now()
                         if timezone.now() < lock_expiry:
                             return Response({
                                 'success': False,
@@ -368,11 +368,14 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 
                 print(f'[Monlam Lock] Example {pk} locked by {request.user.username}')
                 
+                # Calculate expiry time dynamically
+                lock_expiry = tracking.locked_at + timedelta(minutes=5)
+                
                 return Response({
                     'success': True,
                     'locked_by': request.user.username,
                     'locked_at': tracking.locked_at,
-                    'expires_in_minutes': 30
+                    'expires_in_minutes': int((lock_expiry - timezone.now()).total_seconds() / 60)
                 })
         
         except Exception as e:
@@ -453,7 +456,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 })
             
             # Check if lock is still valid
-            lock_expiry = tracking.locked_at + timedelta(minutes=30) if tracking.locked_at else timezone.now()
+            lock_expiry = tracking.locked_at + timedelta(minutes=5) if tracking.locked_at else timezone.now()
             if timezone.now() >= lock_expiry:
                 # Lock expired
                 return Response({
