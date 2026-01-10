@@ -332,17 +332,6 @@
       'Loading...': 'སྣན་བཞིན་པ།...',
       'Loading... Please wait': 'སྣན་བཞིན་པ། སྒུག་རོགས།',
       
-      // Checkbox/Review tooltips
-      'Checked': 'བཅོས་ཟིན་པ།',
-      'Not Checked': 'བཅོས་དགོས་པ།',
-      'Not checked': 'བཅོས་དགོས་པ།',
-      'not checked': 'བཅོས་དགོས་པ།',
-      'Done': 'གྲུབ་ཟིན་པ།',
-      'Undone': 'མ་གྲུབ་པ།',
-      'All': 'ཚང་མ།',
-      // Fix broken patterns
-      'མིན།t བཅོས་ཟིན་པ།': 'བཅོས་དགོས་པ།',
-      'མིན།t': 'མིན།',
 
       // Labels/Annotation
       'Labels': 'ཁ་བྱང་།',
@@ -638,11 +627,11 @@
       }
     }, 1000);
     
-    // Fix broken translation patterns like "མིན།t བཅོས་ཟིན་པ།"
+    // Safety net: Fix broken translation patterns (only if translation file fails)
     function fixBrokenTranslations() {
       var fixes = {
-        'མིན།t བཅོས་ཟིན་པ།': 'བཅོས་དགོས་པ།',
-        'མིན།t གྲུབ་ཟིན་པ།': 'མ་གྲུབ་པ།',
+        'མིན།t བཅོས་ཟིན་པ།': 'ཞིབ་བཤེར་མ་བྱས་པ།',
+        'མིན།t གྲུབ་ཟིན་པ།': 'མ་གྲུབ།',
         'མིན།t': 'མིན།'
       };
       
@@ -666,7 +655,7 @@
       });
     }
     
-    setInterval(fixBrokenTranslations, 500);
+    setInterval(fixBrokenTranslations, 1000);
     
     // Expose globally for debugging
     window.fixRoleDropdown = fixRoleDropdown;
