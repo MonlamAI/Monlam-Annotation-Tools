@@ -89,17 +89,26 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     }
                 )
                 
-                # If already exists and not annotated yet, update it
-                if not created and not tracking.annotated_by:
+                # Always update annotated_by if not set (even if record already existed)
+                needs_save = False
+                if not tracking.annotated_by:
                     tracking.annotated_by = request.user
                     tracking.annotated_at = timezone.now()
+                    needs_save = True
+                
+                # Update status to submitted
+                if tracking.status != 'submitted':
                     tracking.status = 'submitted'
-                    
-                    # Calculate time spent if we have started_at
-                    if tracking.started_at:
-                        time_diff = timezone.now() - tracking.started_at
-                        tracking.time_spent_seconds = int(time_diff.total_seconds())
-                    
+                    needs_save = True
+                
+                # Calculate time spent if we have started_at
+                if tracking.started_at and not tracking.time_spent_seconds:
+                    time_diff = timezone.now() - tracking.started_at
+                    tracking.time_spent_seconds = int(time_diff.total_seconds())
+                    needs_save = True
+                
+                # Save if we made changes
+                if needs_save:
                     tracking.save()
                 
                 # Calculate time spent for new records too
@@ -342,6 +351,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                         'locked_by': request.user,
                         'locked_at': timezone.now(),
                         'started_at': timezone.now(),  # Track when annotation started
+                        'annotated_by': request.user,  # Set annotator when locking (they're starting)
                         'status': 'pending'
                     }
                 )
@@ -362,9 +372,20 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                             }, status=status.HTTP_409_CONFLICT)
                     
                     # Lock it for this user (or renew existing lock)
+                    update_fields = ['locked_by', 'locked_at']
+                    
+                    # Set annotated_by if not already set OR if status is still pending (no submission yet)
+                    # This handles the case where someone locked but didn't submit, and now someone else is taking over
+                    if not tracking.annotated_by or (tracking.status == 'pending' and tracking.annotated_by != request.user):
+                        tracking.annotated_by = request.user
+                        if not tracking.started_at:
+                            tracking.started_at = timezone.now()
+                            update_fields.append('started_at')
+                        update_fields.append('annotated_by')
+                    
                     tracking.locked_by = request.user
                     tracking.locked_at = timezone.now()
-                    tracking.save(update_fields=['locked_by', 'locked_at'])
+                    tracking.save(update_fields=update_fields)
                 
                 print(f'[Monlam Lock] Example {pk} locked by {request.user.username}')
                 
