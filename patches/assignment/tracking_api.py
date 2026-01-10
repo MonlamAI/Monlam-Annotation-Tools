@@ -374,14 +374,28 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     # Lock it for this user (or renew existing lock)
                     update_fields = ['locked_by', 'locked_at']
                     
-                    # Set annotated_by if not already set OR if status is still pending (no submission yet)
-                    # This handles the case where someone locked but didn't submit, and now someone else is taking over
-                    if not tracking.annotated_by or (tracking.status == 'pending' and tracking.annotated_by != request.user):
+                    # Set annotated_by ONLY if:
+                    # 1. Not already set (first time annotation), OR
+                    # 2. Status is 'pending' (no submission yet) - handles abandoned locks
+                    # 
+                    # DO NOT overwrite if status is 'submitted', 'approved', or 'rejected'
+                    # (work has already been done by someone else)
+                    if not tracking.annotated_by:
+                        # First time - set annotator
                         tracking.annotated_by = request.user
                         if not tracking.started_at:
                             tracking.started_at = timezone.now()
                             update_fields.append('started_at')
                         update_fields.append('annotated_by')
+                    elif tracking.status == 'pending' and tracking.annotated_by != request.user:
+                        # Status is still pending but different annotator - update to current user
+                        # This handles case where someone locked but didn't submit, and lock expired
+                        tracking.annotated_by = request.user
+                        if not tracking.started_at:
+                            tracking.started_at = timezone.now()
+                            update_fields.append('started_at')
+                        update_fields.append('annotated_by')
+                    # If status is 'submitted', 'approved', or 'rejected', don't change annotated_by
                     
                     tracking.locked_by = request.user
                     tracking.locked_at = timezone.now()
