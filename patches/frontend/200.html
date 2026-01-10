@@ -336,9 +336,13 @@
       'Checked': 'བཅོས་ཟིན་པ།',
       'Not Checked': 'བཅོས་དགོས་པ།',
       'Not checked': 'བཅོས་དགོས་པ།',
+      'not checked': 'བཅོས་དགོས་པ།',
       'Done': 'གྲུབ་ཟིན་པ།',
       'Undone': 'མ་གྲུབ་པ།',
       'All': 'ཚང་མ།',
+      // Fix broken patterns
+      'མིན།t བཅོས་ཟིན་པ།': 'བཅོས་དགོས་པ།',
+      'མིན།t': 'མིན།',
 
       // Labels/Annotation
       'Labels': 'ཁ་བྱང་།',
@@ -634,8 +638,39 @@
       }
     }, 1000);
     
+    // Fix broken translation patterns like "མིན།t བཅོས་ཟིན་པ།"
+    function fixBrokenTranslations() {
+      var fixes = {
+        'མིན།t བཅོས་ཟིན་པ།': 'བཅོས་དགོས་པ།',
+        'མིན།t གྲུབ་ཟིན་པ།': 'མ་གྲུབ་པ།',
+        'མིན།t': 'མིན།'
+      };
+      
+      document.querySelectorAll('*').forEach(function(el) {
+        if (el.children.length === 0 && el.textContent) {
+          var text = el.textContent;
+          var changed = false;
+          
+          Object.keys(fixes).forEach(function(broken) {
+            if (text.includes(broken)) {
+              text = text.replace(broken, fixes[broken]);
+              changed = true;
+            }
+          });
+          
+          if (changed) {
+            console.log('[Monlam] Fixed broken translation:', el.textContent, '→', text);
+            el.textContent = text;
+          }
+        }
+      });
+    }
+    
+    setInterval(fixBrokenTranslations, 500);
+    
     // Expose globally for debugging
     window.fixRoleDropdown = fixRoleDropdown;
+    window.fixBrokenTranslations = fixBrokenTranslations;
     
     console.log('[Monlam] Role translation fix loaded');
   })();
