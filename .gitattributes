@@ -1,0 +1,31 @@
+# Language detection for GitHub
+# This helps GitHub's linguist properly classify files
+
+# Vue.js files should be detected as Vue, not HTML
+*.vue linguist-detectable=true
+*.vue linguist-language=Vue
+
+# TypeScript files
+*.ts linguist-detectable=true
+*.tsx linguist-detectable=true
+
+# JavaScript files
+*.js linguist-detectable=true
+*.jsx linguist-detectable=true
+
+# Python files
+*.py linguist-detectable=true
+
+# HTML files (but not Vue templates)
+*.html linguist-detectable=true
+
+# Exclude vendor/dependencies from language stats
+doccano-src/** linguist-vendored=true
+node_modules/** linguist-vendored=true
+venv/** linguist-vendored=true
+.env linguist-generated=true
+
+# Documentation (already ignored, but just in case)
+*.md linguist-documentation=true
+README* linguist-documentation=true
+
