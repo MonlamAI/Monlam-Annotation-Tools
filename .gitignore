@@ -27,3 +27,6 @@ doccano-src/
 # Documentation files (keep locally, don't push to GitHub)
 *.md
 README*
+
+# Shell scripts (keep locally, don't push to GitHub)
+*.sh
