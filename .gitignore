@@ -30,3 +30,12 @@ README*
 
 # Shell scripts (keep locally, don't push to GitHub)
 *.sh
+
+# Utility/test scripts (keep locally, don't push to GitHub)
+backfill_tracking.py
+check_database.py
+check_tracking.py
+init_monlam.py
+reset_db.py
+scripts/create_assignments.py
+PUSH_READY.txt
