@@ -23,3 +23,7 @@ docker-compose.override.yml
 *.log
 logs/
 doccano-src/
+
+# Documentation files (keep locally, don't push to GitHub)
+*.md
+README*
