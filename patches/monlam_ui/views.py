@@ -567,6 +567,119 @@ def analytics_api(request):
                     annotator_stats[t.annotated_by.username]['total_time_seconds'] += t.time_spent_seconds
                     total_time_all += t.time_spent_seconds
     
+    # ============================================
+    # PAYMENT CALCULATION
+    # ============================================
+    from .payment_utils import count_tibetan_syllables, calculate_payment
+    
+    # Get examples with their metadata for payment calculation
+    examples_with_meta = Example.objects.filter(
+        id__in=example_ids
+    ).select_related('project').only('id', 'project', 'meta', 'text')
+    
+    # Build mapping of example_id -> (project_name, duration, text)
+    example_meta_map = {}
+    for ex in examples_with_meta:
+        duration = 0.0
+        if ex.meta and isinstance(ex.meta, dict):
+            # Try different possible keys for duration
+            duration = ex.meta.get('duration', ex.meta.get('audio_duration', 0.0))
+            if duration and isinstance(duration, (int, float)):
+                duration = float(duration) / 60.0  # Convert seconds to minutes
+        example_meta_map[ex.id] = {
+            'project_name': ex.project.name,
+            'duration_minutes': duration,
+            'text': ex.text or ''
+        }
+    
+    # Calculate payment per annotator (grouped by project)
+    annotator_payment_data = {}  # username -> {project_name -> {audio_minutes, approved_segments}}
+    reviewer_payment_data = {}   # username -> {project_name -> {reviewed_syllables}}
+    
+    # Process tracking data for payment calculation
+    if tracking:
+        for t in tracking:
+            if t.example_id not in example_meta_map:
+                continue
+            
+            ex_meta = example_meta_map[t.example_id]
+            project_name = ex_meta['project_name']
+            duration = ex_meta['duration_minutes']
+            text = ex_meta['text']
+            
+            # Annotator payment (for approved examples)
+            if t.annotated_by and t.status == 'approved':
+                username = t.annotated_by.username
+                if username not in annotator_payment_data:
+                    annotator_payment_data[username] = {}
+                if project_name not in annotator_payment_data[username]:
+                    annotator_payment_data[username][project_name] = {
+                        'audio_minutes': 0.0,
+                        'approved_segments': 0
+                    }
+                annotator_payment_data[username][project_name]['audio_minutes'] += duration
+                annotator_payment_data[username][project_name]['approved_segments'] += 1
+            
+            # Reviewer payment (for approved examples - same structure as annotators)
+            # Reviewers get the same payment as annotators: audio + segments/syllables
+            if t.reviewed_by and t.status == 'approved' and t.reviewed_by != t.annotated_by:
+                username = t.reviewed_by.username
+                if username not in reviewer_payment_data:
+                    reviewer_payment_data[username] = {}
+                if project_name not in reviewer_payment_data[username]:
+                    reviewer_payment_data[username][project_name] = {
+                        'audio_minutes': 0.0,
+                        'reviewed_segments': 0,  # Each reviewed example counts as a segment
+                        'reviewed_syllables': 0
+                    }
+                reviewer_payment_data[username][project_name]['audio_minutes'] += duration
+                reviewer_payment_data[username][project_name]['reviewed_segments'] += 1
+                # Count syllables from the annotation text
+                syllables = count_tibetan_syllables(text)
+                reviewer_payment_data[username][project_name]['reviewed_syllables'] += syllables
+    
+    # Calculate payments for annotators
+    for username, stats in annotator_stats.items():
+        stats['total_audio_minutes'] = 0.0
+        stats['total_syllables'] = 0
+        stats['total_rupees'] = 0.0
+        stats['payment_breakdown'] = []
+        
+        # Annotator payment
+        if username in annotator_payment_data:
+            for project_name, data in annotator_payment_data[username].items():
+                payment = calculate_payment(
+                    project_name=project_name,
+                    total_audio_minutes=data['audio_minutes'],
+                    approved_segments=data['approved_segments'],
+                    is_reviewer=False
+                )
+                stats['total_audio_minutes'] += data['audio_minutes']
+                stats['total_rupees'] += payment['total_rupees']
+                if payment['configured']:
+                    stats['payment_breakdown'].append(f"{project_name}: {payment['breakdown']}")
+        
+        # Reviewer payment (if user also reviewed - same structure as annotators)
+        if username in reviewer_payment_data:
+            for project_name, data in reviewer_payment_data[username].items():
+                # Reviewers get the same payment structure as annotators
+                # Use reviewed_segments for segment-based projects, reviewed_syllables for syllable-based projects
+                payment = calculate_payment(
+                    project_name=project_name,
+                    total_audio_minutes=data['audio_minutes'],
+                    approved_segments=data['reviewed_segments'],  # Use reviewed_segments for segment rate
+                    reviewed_syllables=data['reviewed_syllables'],  # Use reviewed_syllables for syllable rate
+                    is_reviewer=False  # Same calculation as annotators
+                )
+                stats['total_audio_minutes'] += data['audio_minutes']
+                stats['total_syllables'] += data['reviewed_syllables']
+                stats['total_rupees'] += payment['total_rupees']
+                if payment['configured']:
+                    stats['payment_breakdown'].append(f"{project_name} (Review): {payment['breakdown']}")
+        
+        stats['total_audio_minutes'] = round(stats['total_audio_minutes'], 2)
+        stats['total_rupees'] = round(stats['total_rupees'], 2)
+    
     # Calculate derived stats
     for username, stats in annotator_stats.items():
         stats['pending'] = stats['total'] - stats['approved'] - stats['rejected']
@@ -600,6 +713,11 @@ def analytics_api(request):
         del stats['last_date']
     
     annotator_list = sorted(annotator_stats.values(), key=lambda x: -x['total'])
+    
+    # Calculate payment summary
+    total_payment_rupees = sum(stats['total_rupees'] for stats in annotator_stats.values())
+    total_audio_minutes = sum(stats['total_audio_minutes'] for stats in annotator_stats.values())
+    total_syllables = sum(stats['total_syllables'] for stats in annotator_stats.values())
     
     # Per-project stats
     project_stats = []
@@ -662,7 +780,10 @@ def analytics_api(request):
             'rejected': rejected_count,
             'active_annotators': active_annotators,
             'total_time_seconds': total_time_all,
-            'total_time_formatted': f"{total_time_all // 3600}h {(total_time_all % 3600) // 60}m" if total_time_all > 0 else 'N/A'
+            'total_time_formatted': f"{total_time_all // 3600}h {(total_time_all % 3600) // 60}m" if total_time_all > 0 else 'N/A',
+            'total_payment_rupees': round(total_payment_rupees, 2),
+            'total_audio_minutes': round(total_audio_minutes, 2),
+            'total_syllables': total_syllables
         },
         'annotators': annotator_list,
         'projects': project_stats,

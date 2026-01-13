@@ -206,6 +206,37 @@
                         </v-card>
                     </v-col>
                 </v-row>
+                
+                <!-- Payment Summary Row -->
+                <v-row class="mt-2" v-if="data.summary.total_payment_rupees > 0">
+                    <v-col cols="12" sm="6" md="4">
+                        <v-card class="stat-card" color="green lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="green darken-2">mdi-currency-inr</v-icon>
+                                <div class="text-h4 mt-2">Rs. [[ data.summary.total_payment_rupees.toFixed(2) ]]</div>
+                                <div class="text--secondary">Total Payment</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="4" v-if="data.summary.total_audio_minutes > 0">
+                        <v-card class="stat-card" color="blue lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="blue darken-2">mdi-waveform</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.total_audio_minutes.toFixed(2) ]]</div>
+                                <div class="text--secondary">Total Audio Minutes</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="4" v-if="data.summary.total_syllables > 0">
+                        <v-card class="stat-card" color="orange lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="orange darken-2">mdi-text</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.total_syllables.toLocaleString() ]]</div>
+                                <div class="text--secondary">Total Syllables Reviewed</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
 
                 <!-- Charts Row -->
                 <v-row v-if="data && !loading" class="mt-4">
@@ -281,6 +312,31 @@
                                 </template>
                                 <template v-slot:item.avg_per_day="{ item }">
                                     [[ item.avg_per_day.toFixed(1) ]]
+                                </template>
+                                <template v-slot:item.total_audio_minutes="{ item }">
+                                    <span v-if="item.total_audio_minutes > 0">
+                                        [[ item.total_audio_minutes.toFixed(2) ]] min
+                                    </span>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                                <template v-slot:item.total_syllables="{ item }">
+                                    <span v-if="item.total_syllables > 0">
+                                        [[ item.total_syllables.toLocaleString() ]]
+                                    </span>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                                <template v-slot:item.total_rupees="{ item }">
+                                    <v-chip 
+                                        v-if="item.total_rupees > 0"
+                                        small 
+                                        color="success" 
+                                        dark
+                                        class="font-weight-bold"
+                                    >
+                                        <v-icon small left>mdi-currency-inr</v-icon>
+                                        [[ item.total_rupees.toFixed(2) ]]
+                                    </v-chip>
+                                    <span v-else class="text--disabled">-</span>
                                 </template>
                             </v-data-table>
                         </v-card>
@@ -386,7 +442,10 @@
                     { text: 'Approval Rate', value: 'approval_rate', width: 150 },
                     { text: 'Avg/Day', value: 'avg_per_day' },
                     { text: 'Total Time', value: 'total_time_formatted' },
-                    { text: 'Avg Time/Example', value: 'avg_time_formatted' }
+                    { text: 'Avg Time/Example', value: 'avg_time_formatted' },
+                    { text: 'Audio Minutes', value: 'total_audio_minutes', width: 120 },
+                    { text: 'Syllables Reviewed', value: 'total_syllables', width: 140 },
+                    { text: 'Total Payment (Rs.)', value: 'total_rupees', width: 150 }
                 ],
                 projectHeaders: [
                     { text: 'Project', value: 'name' },
