@@ -507,14 +507,25 @@ def analytics_api(request):
         confirmed_at__lte=end_datetime
     ).select_related('confirmed_by', 'example')
     
-    # Get tracking data
+    # Get tracking data - filter by date range for activity tracking
     try:
         from assignment.simple_tracking import AnnotationTracking
-        tracking = AnnotationTracking.objects.filter(
+        # Get tracking data within date range (based on annotated_at or reviewed_at)
+        # Include if annotated_at is in range OR reviewed_at is in range
+        tracking_in_range = AnnotationTracking.objects.filter(
+            project__in=projects
+        ).filter(
+            Q(annotated_at__isnull=False, annotated_at__gte=start_datetime, annotated_at__lte=end_datetime) |
+            Q(reviewed_at__isnull=False, reviewed_at__gte=start_datetime, reviewed_at__lte=end_datetime)
+        ).select_related('annotated_by', 'reviewed_by')
+        
+        # Also get all tracking for payment calculation (not filtered by date)
+        tracking_all = AnnotationTracking.objects.filter(
             project__in=projects
         ).select_related('annotated_by', 'reviewed_by')
     except:
-        tracking = []
+        tracking_in_range = []
+        tracking_all = []
     
     # Summary stats
     total_examples = len(example_ids)
@@ -523,14 +534,17 @@ def analytics_api(request):
     
     approved_count = 0
     rejected_count = 0
-    if tracking:
-        approved_count = tracking.filter(status='approved').count()
-        rejected_count = tracking.filter(status='rejected').count()
+    if tracking_all:
+        approved_count = tracking_all.filter(status='approved').count()
+        rejected_count = tracking_all.filter(status='rejected').count()
     
-    # Get unique annotators in this period
-    active_annotators = states.values('confirmed_by').distinct().count()
+    # Get unique annotators in this period (from both states and tracking)
+    annotator_usernames_from_states = set(states.values_list('confirmed_by__username', flat=True).distinct())
+    annotator_usernames_from_tracking = set(tracking_in_range.values_list('annotated_by__username', flat=True).distinct())
+    all_annotator_usernames = annotator_usernames_from_states | annotator_usernames_from_tracking
+    active_annotators = len(all_annotator_usernames)
     
-    # Per-annotator stats
+    # Per-annotator stats - build from states (confirmations in date range)
     annotator_stats = {}
     for state in states:
         if state.confirmed_by:
@@ -542,7 +556,7 @@ def analytics_api(request):
                     'approved': 0,
                     'rejected': 0,
                     'pending': 0,
-                    'total_time_seconds': 0,  # NEW: Total time spent
+                    'total_time_seconds': 0,
                     'first_date': state.confirmed_at.date(),
                     'last_date': state.confirmed_at.date()
                 }
@@ -552,10 +566,35 @@ def analytics_api(request):
             if state.confirmed_at.date() > annotator_stats[username]['last_date']:
                 annotator_stats[username]['last_date'] = state.confirmed_at.date()
     
-    # Add tracking status and time spent
+    # Add annotators from tracking who aren't in states (they annotated/reviewed in date range but confirmation was outside)
+    for t in tracking_in_range:
+        if t.annotated_by:
+            username = t.annotated_by.username
+            if username not in annotator_stats:
+                # Initialize with date from tracking
+                date_to_use = t.annotated_at.date() if t.annotated_at else today
+                annotator_stats[username] = {
+                    'username': username,
+                    'total': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                    'pending': 0,
+                    'total_time_seconds': 0,
+                    'first_date': date_to_use,
+                    'last_date': date_to_use
+                }
+            # Update dates if needed
+            if t.annotated_at:
+                track_date = t.annotated_at.date()
+                if track_date < annotator_stats[username]['first_date']:
+                    annotator_stats[username]['first_date'] = track_date
+                if track_date > annotator_stats[username]['last_date']:
+                    annotator_stats[username]['last_date'] = track_date
+    
+    # Add tracking status and time spent (from tracking_in_range for activity, tracking_all for payment)
     total_time_all = 0
-    if tracking:
-        for t in tracking:
+    if tracking_in_range:
+        for t in tracking_in_range:
             if t.annotated_by and t.annotated_by.username in annotator_stats:
                 if t.status == 'approved':
                     annotator_stats[t.annotated_by.username]['approved'] += 1
@@ -596,9 +635,9 @@ def analytics_api(request):
     annotator_payment_data = {}  # username -> {project_name -> {audio_minutes, approved_segments}}
     reviewer_payment_data = {}   # username -> {project_name -> {reviewed_syllables}}
     
-    # Process tracking data for payment calculation
-    if tracking:
-        for t in tracking:
+    # Process tracking data for payment calculation (use tracking_all for payment, not filtered by date)
+    if tracking_all:
+        for t in tracking_all:
             if t.example_id not in example_meta_map:
                 continue
             
@@ -748,9 +787,9 @@ def analytics_api(request):
         if state.confirmed_by:
             daily_activity[date_str]['users'].add(state.confirmed_by.username)
     
-    # Add tracking to daily activity
-    if tracking:
-        for t in tracking:
+    # Add tracking to daily activity (use tracking_in_range for daily stats)
+    if tracking_in_range:
+        for t in tracking_in_range:
             if t.reviewed_at:
                 date_str = t.reviewed_at.strftime('%Y-%m-%d')
                 if date_str in daily_activity:
@@ -771,10 +810,10 @@ def analytics_api(request):
             'active_users': len(day['users'])
         })
     
-    # Get reviewer stats (separate from annotators)
+    # Get reviewer stats (separate from annotators) - use tracking_in_range for activity
     reviewer_stats = {}
-    if tracking:
-        for t in tracking:
+    if tracking_in_range:
+        for t in tracking_in_range:
             if t.reviewed_by and t.status in ['approved', 'rejected']:
                 username = t.reviewed_by.username
                 if username not in reviewer_stats:
@@ -800,12 +839,12 @@ def analytics_api(request):
                 elif t.status == 'rejected':
                     reviewer_stats[username]['rejected'] += 1
     
-    # Calculate reviewer payments
+    # Calculate reviewer payments (use tracking_all for payment calculation)
     for username, stats in reviewer_stats.items():
         # Group by project for payment calculation
         reviewer_projects = {}
-        if tracking:
-            for t in tracking:
+        if tracking_all:
+            for t in tracking_all:
                 if t.reviewed_by and t.reviewed_by.username == username and t.status == 'approved':
                     if t.example_id in example_meta_map:
                         ex_meta = example_meta_map[t.example_id]
