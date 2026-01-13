@@ -56,7 +56,7 @@
                     </v-card-title>
                     <v-card-text class="pa-4">
                         <v-row>
-                            <v-col cols="12" sm="6" md="3">
+                            <v-col cols="12" sm="6" md="2">
                                 <v-select
                                     v-model="selectedProject"
                                     :items="projects"
@@ -69,7 +69,7 @@
                                     clearable
                                 ></v-select>
                             </v-col>
-                            <v-col cols="12" sm="6" md="3">
+                            <v-col cols="12" sm="6" md="2">
                                 <v-select
                                     v-model="dateRange"
                                     :items="dateRangeOptions"
@@ -78,6 +78,40 @@
                                     outlined
                                     dense
                                 ></v-select>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="2">
+                                <v-select
+                                    v-model="roleFilter"
+                                    :items="roleFilterOptions"
+                                    label="Role Type"
+                                    prepend-icon="mdi-account-group"
+                                    outlined
+                                    dense
+                                    clearable
+                                ></v-select>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="2">
+                                <v-select
+                                    v-model="statusFilter"
+                                    :items="statusFilterOptions"
+                                    label="Status"
+                                    prepend-icon="mdi-filter"
+                                    outlined
+                                    dense
+                                    clearable
+                                ></v-select>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="2">
+                                <v-text-field
+                                    v-model.number="minPayment"
+                                    label="Min Payment (Rs.)"
+                                    prepend-icon="mdi-currency-inr"
+                                    outlined
+                                    dense
+                                    type="number"
+                                    min="0"
+                                    clearable
+                                ></v-text-field>
                             </v-col>
                             <v-col cols="12" sm="6" md="3">
                                 <v-menu
@@ -278,7 +312,7 @@
                             </v-card-title>
                             <v-data-table
                                 :headers="annotatorHeaders"
-                                :items="data.annotators"
+                                :items="filteredAnnotators"
                                 :items-per-page="10"
                                 class="elevation-1"
                             >
@@ -312,6 +346,69 @@
                                 </template>
                                 <template v-slot:item.avg_per_day="{ item }">
                                     [[ item.avg_per_day.toFixed(1) ]]
+                                </template>
+                                <template v-slot:item.total_audio_minutes="{ item }">
+                                    <span v-if="item.total_audio_minutes > 0">
+                                        [[ item.total_audio_minutes.toFixed(2) ]] min
+                                    </span>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                                <template v-slot:item.total_syllables="{ item }">
+                                    <span v-if="item.total_syllables > 0">
+                                        [[ item.total_syllables.toLocaleString() ]]
+                                    </span>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                                <template v-slot:item.total_rupees="{ item }">
+                                    <v-chip 
+                                        v-if="item.total_rupees > 0"
+                                        small 
+                                        color="success" 
+                                        dark
+                                        class="font-weight-bold"
+                                    >
+                                        <v-icon small left>mdi-currency-inr</v-icon>
+                                        [[ item.total_rupees.toFixed(2) ]]
+                                    </v-chip>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                            </v-data-table>
+                        </v-card>
+                    </v-col>
+                </v-row>
+
+                <!-- Reviewers Performance Table -->
+                <v-row v-if="data && !loading && filteredReviewers.length > 0" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2">
+                            <v-card-title class="purple darken-1 white--text py-2">
+                                <v-icon left dark>mdi-account-check</v-icon>
+                                Reviewer Performance
+                            </v-card-title>
+                            <v-data-table
+                                :headers="reviewerHeaders"
+                                :items="filteredReviewers"
+                                :items-per-page="10"
+                                class="elevation-1"
+                            >
+                                <template v-slot:item.username="{ item }">
+                                    <v-chip small color="purple" dark>
+                                        <v-icon small left>mdi-account-check</v-icon>
+                                        [[ item.username ]]
+                                    </v-chip>
+                                </template>
+                                <template v-slot:item.total_reviewed="{ item }">
+                                    <strong>[[ item.total_reviewed ]]</strong>
+                                </template>
+                                <template v-slot:item.approved="{ item }">
+                                    <v-chip small :color="item.approved > 0 ? 'success' : 'grey'" dark>
+                                        [[ item.approved ]]
+                                    </v-chip>
+                                </template>
+                                <template v-slot:item.rejected="{ item }">
+                                    <v-chip small :color="item.rejected > 0 ? 'error' : 'grey'" dark>
+                                        [[ item.rejected ]]
+                                    </v-chip>
                                 </template>
                                 <template v-slot:item.total_audio_minutes="{ item }">
                                     <span v-if="item.total_audio_minutes > 0">
@@ -447,6 +544,15 @@
                     { text: 'Syllables Reviewed', value: 'total_syllables', width: 140 },
                     { text: 'Total Payment (Rs.)', value: 'total_rupees', width: 150 }
                 ],
+                reviewerHeaders: [
+                    { text: 'Reviewer', value: 'username' },
+                    { text: 'Total Reviewed', value: 'total_reviewed' },
+                    { text: 'Approved', value: 'approved' },
+                    { text: 'Rejected', value: 'rejected' },
+                    { text: 'Audio Minutes', value: 'total_audio_minutes', width: 120 },
+                    { text: 'Syllables Reviewed', value: 'total_syllables', width: 140 },
+                    { text: 'Total Payment (Rs.)', value: 'total_rupees', width: 150 }
+                ],
                 projectHeaders: [
                     { text: 'Project', value: 'name' },
                     { text: 'Total Examples', value: 'total' },
@@ -461,6 +567,56 @@
                     { text: 'Rejected', value: 'rejected' },
                     { text: 'Active Users', value: 'active_users' }
                 ]
+            },
+            computed: {
+                filteredAnnotators() {
+                    if (!this.data || !this.data.annotators) return [];
+                    let filtered = this.data.annotators;
+                    
+                    // Filter by role (if roleFilter is set, show only annotators)
+                    if (this.roleFilter === 'reviewer') {
+                        return []; // Reviewers shown separately
+                    }
+                    
+                    // Filter by status
+                    if (this.statusFilter === 'approved') {
+                        filtered = filtered.filter(a => a.approved > 0);
+                    } else if (this.statusFilter === 'rejected') {
+                        filtered = filtered.filter(a => a.rejected > 0);
+                    } else if (this.statusFilter === 'pending') {
+                        filtered = filtered.filter(a => a.pending > 0);
+                    }
+                    
+                    // Filter by minimum payment
+                    if (this.minPayment !== null && this.minPayment !== '') {
+                        filtered = filtered.filter(a => (a.total_rupees || 0) >= this.minPayment);
+                    }
+                    
+                    return filtered;
+                },
+                filteredReviewers() {
+                    if (!this.data || !this.data.reviewers) return [];
+                    let filtered = this.data.reviewers;
+                    
+                    // Filter by role (if roleFilter is set, show only reviewers)
+                    if (this.roleFilter === 'annotator') {
+                        return []; // Annotators shown separately
+                    }
+                    
+                    // Filter by status
+                    if (this.statusFilter === 'approved') {
+                        filtered = filtered.filter(r => r.approved > 0);
+                    } else if (this.statusFilter === 'rejected') {
+                        filtered = filtered.filter(r => r.rejected > 0);
+                    }
+                    
+                    // Filter by minimum payment
+                    if (this.minPayment !== null && this.minPayment !== '') {
+                        filtered = filtered.filter(r => (r.total_rupees || 0) >= this.minPayment);
+                    }
+                    
+                    return filtered;
+                }
             },
             async mounted() {
                 await this.loadProjects();
@@ -566,17 +722,34 @@
                 exportCSV() {
                     if (!this.data) return;
                     
-                    let csv = 'Annotator,Total,Approved,Rejected,Pending,Approval Rate\n';
+                    // Build CSV with all available fields
+                    let csv = 'Role,Username,Total Annotated,Approved,Rejected,Pending,Approval Rate,Avg/Day,Total Time,Avg Time/Example,Audio Minutes,Syllables Reviewed,Total Payment (Rs.),Payment Breakdown\n';
+                    
+                    // Add annotators
                     this.data.annotators.forEach(a => {
-                        csv += `${a.username},${a.total},${a.approved},${a.rejected},${a.pending},${a.approval_rate}%\n`;
+                        const paymentBreakdown = a.payment_breakdown ? a.payment_breakdown.join('; ') : '';
+                        csv += `Annotator,${a.username},${a.total},${a.approved},${a.rejected},${a.pending},${a.approval_rate}%,${a.avg_per_day.toFixed(1)},${a.total_time_formatted || 'N/A'},${a.avg_time_formatted || 'N/A'},${a.total_audio_minutes || 0},${a.total_syllables || 0},${a.total_rupees || 0},"${paymentBreakdown}"\n`;
                     });
                     
-                    const blob = new Blob([csv], { type: 'text/csv' });
+                    // Add reviewers (if available)
+                    if (this.data.reviewers && this.data.reviewers.length > 0) {
+                        this.data.reviewers.forEach(r => {
+                            const paymentBreakdown = r.payment_breakdown ? r.payment_breakdown.join('; ') : '';
+                            csv += `Reviewer,${r.username},${r.total_reviewed || 0},${r.approved || 0},${r.rejected || 0},0,${r.approved && r.total_reviewed ? Math.round((r.approved / r.total_reviewed) * 100) : 0}%,N/A,N/A,N/A,${r.total_audio_minutes || 0},${r.total_syllables || 0},${r.total_rupees || 0},"${paymentBreakdown}"\n`;
+                        });
+                    }
+                    
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `analytics_${new Date().toISOString().split('T')[0]}.csv`;
+                    const dateRange = this.dateRange === 'custom' && this.startDate && this.endDate 
+                        ? `${this.startDate}_to_${this.endDate}` 
+                        : this.dateRange;
+                    const projectFilter = this.selectedProject ? `_project_${this.selectedProject}` : '';
+                    a.download = `analytics_${dateRange}${projectFilter}_${new Date().toISOString().split('T')[0]}.csv`;
                     a.click();
+                    window.URL.revokeObjectURL(url);
                 },
                 printReport() {
                     window.print();

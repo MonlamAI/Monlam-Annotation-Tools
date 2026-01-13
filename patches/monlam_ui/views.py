@@ -771,6 +771,73 @@ def analytics_api(request):
             'active_users': len(day['users'])
         })
     
+    # Get reviewer stats (separate from annotators)
+    reviewer_stats = {}
+    if tracking:
+        for t in tracking:
+            if t.reviewed_by and t.status in ['approved', 'rejected']:
+                username = t.reviewed_by.username
+                if username not in reviewer_stats:
+                    reviewer_stats[username] = {
+                        'username': username,
+                        'total_reviewed': 0,
+                        'approved': 0,
+                        'rejected': 0,
+                        'total_audio_minutes': 0.0,
+                        'total_syllables': 0,
+                        'total_rupees': 0.0,
+                        'payment_breakdown': []
+                    }
+                reviewer_stats[username]['total_reviewed'] += 1
+                if t.status == 'approved':
+                    reviewer_stats[username]['approved'] += 1
+                    # Add payment data for reviewers (only for approved reviews)
+                    if t.example_id in example_meta_map:
+                        ex_meta = example_meta_map[t.example_id]
+                        reviewer_stats[username]['total_audio_minutes'] += ex_meta['duration_minutes']
+                        syllables = count_tibetan_syllables(ex_meta['text'])
+                        reviewer_stats[username]['total_syllables'] += syllables
+                elif t.status == 'rejected':
+                    reviewer_stats[username]['rejected'] += 1
+    
+    # Calculate reviewer payments
+    for username, stats in reviewer_stats.items():
+        # Group by project for payment calculation
+        reviewer_projects = {}
+        if tracking:
+            for t in tracking:
+                if t.reviewed_by and t.reviewed_by.username == username and t.status == 'approved':
+                    if t.example_id in example_meta_map:
+                        ex_meta = example_meta_map[t.example_id]
+                        project_name = ex_meta['project_name']
+                        if project_name not in reviewer_projects:
+                            reviewer_projects[project_name] = {
+                                'audio_minutes': 0.0,
+                                'reviewed_segments': 0,
+                                'reviewed_syllables': 0
+                            }
+                        reviewer_projects[project_name]['audio_minutes'] += ex_meta['duration_minutes']
+                        reviewer_projects[project_name]['reviewed_segments'] += 1
+                        reviewer_projects[project_name]['reviewed_syllables'] += count_tibetan_syllables(ex_meta['text'])
+        
+        # Calculate payment for each project
+        for project_name, data in reviewer_projects.items():
+            payment = calculate_payment(
+                project_name=project_name,
+                total_audio_minutes=data['audio_minutes'],
+                approved_segments=data['reviewed_segments'],
+                reviewed_syllables=data['reviewed_syllables'],
+                is_reviewer=False
+            )
+            stats['total_rupees'] += payment['total_rupees']
+            if payment['configured']:
+                stats['payment_breakdown'].append(f"{project_name}: {payment['breakdown']}")
+        
+        stats['total_audio_minutes'] = round(stats['total_audio_minutes'], 2)
+        stats['total_rupees'] = round(stats['total_rupees'], 2)
+    
+    reviewer_list = sorted(reviewer_stats.values(), key=lambda x: -x['total_reviewed'])
+    
     return JsonResponse({
         'summary': {
             'total_examples': total_examples,
@@ -786,6 +853,7 @@ def analytics_api(request):
             'total_syllables': total_syllables
         },
         'annotators': annotator_list,
+        'reviewers': reviewer_list,
         'projects': project_stats,
         'daily_activity': daily_list,
         'date_range': {
