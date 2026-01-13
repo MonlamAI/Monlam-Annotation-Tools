@@ -836,7 +836,7 @@ def analytics_api(request):
         stats['total_audio_minutes'] = round(stats['total_audio_minutes'], 2)
         stats['total_rupees'] = round(stats['total_rupees'], 2)
     
-    reviewer_list = sorted(reviewer_stats.values(), key=lambda x: -x['total_reviewed'])
+    reviewer_list = sorted(reviewer_stats.values(), key=lambda x: -x['total_reviewed']) if reviewer_stats else []
     
     return JsonResponse({
         'summary': {
@@ -852,10 +852,10 @@ def analytics_api(request):
             'total_audio_minutes': round(total_audio_minutes, 2),
             'total_syllables': total_syllables
         },
-        'annotators': annotator_list,
-        'reviewers': reviewer_list,
-        'projects': project_stats,
-        'daily_activity': daily_list,
+        'annotators': annotator_list if annotator_list else [],
+        'reviewers': reviewer_list if reviewer_list else [],
+        'projects': project_stats if project_stats else [],
+        'daily_activity': daily_list if daily_list else [],
         'date_range': {
             'start': start_date.isoformat(),
             'end': end_date.isoformat()

@@ -309,12 +309,15 @@
                             <v-card-title class="green darken-1 white--text py-2">
                                 <v-icon left dark>mdi-account-details</v-icon>
                                 Annotator Performance
+                                <v-spacer></v-spacer>
+                                <span class="text-caption">[[ filteredAnnotators.length ]] of [[ data.annotators ? data.annotators.length : 0 ]]</span>
                             </v-card-title>
                             <v-data-table
                                 :headers="annotatorHeaders"
                                 :items="filteredAnnotators"
                                 :items-per-page="10"
                                 class="elevation-1"
+                                no-data-text="No annotators found. Try adjusting your filters or date range."
                             >
                                 <template v-slot:item.username="{ item }">
                                     <v-chip small color="primary" dark>
@@ -378,7 +381,7 @@
                 </v-row>
 
                 <!-- Reviewers Performance Table -->
-                <v-row v-if="data && !loading && filteredReviewers.length > 0" class="mt-4">
+                <v-row v-if="data && !loading && data.reviewers && data.reviewers.length > 0" class="mt-4">
                     <v-col cols="12">
                         <v-card elevation="2">
                             <v-card-title class="purple darken-1 white--text py-2">
@@ -570,49 +573,67 @@
             },
             computed: {
                 filteredAnnotators() {
-                    if (!this.data || !this.data.annotators) return [];
-                    let filtered = this.data.annotators;
+                    if (!this.data || !this.data.annotators || !Array.isArray(this.data.annotators)) {
+                        return [];
+                    }
                     
-                    // Filter by role (if roleFilter is set, show only annotators)
+                    let filtered = [...this.data.annotators]; // Create a copy
+                    
+                    // Filter by role (if roleFilter is set to 'reviewer', hide annotators)
                     if (this.roleFilter === 'reviewer') {
                         return []; // Reviewers shown separately
                     }
+                    // If roleFilter is 'annotator' or null/undefined, show annotators
                     
-                    // Filter by status
-                    if (this.statusFilter === 'approved') {
-                        filtered = filtered.filter(a => a.approved > 0);
-                    } else if (this.statusFilter === 'rejected') {
-                        filtered = filtered.filter(a => a.rejected > 0);
-                    } else if (this.statusFilter === 'pending') {
-                        filtered = filtered.filter(a => a.pending > 0);
+                    // Filter by status (only if filter is explicitly set)
+                    if (this.statusFilter && this.statusFilter !== null) {
+                        if (this.statusFilter === 'approved') {
+                            filtered = filtered.filter(a => (a.approved || 0) > 0);
+                        } else if (this.statusFilter === 'rejected') {
+                            filtered = filtered.filter(a => (a.rejected || 0) > 0);
+                        } else if (this.statusFilter === 'pending') {
+                            filtered = filtered.filter(a => (a.pending || 0) > 0);
+                        }
                     }
                     
-                    // Filter by minimum payment
-                    if (this.minPayment !== null && this.minPayment !== '') {
-                        filtered = filtered.filter(a => (a.total_rupees || 0) >= this.minPayment);
+                    // Filter by minimum payment (only if filter is explicitly set)
+                    if (this.minPayment !== null && this.minPayment !== '' && this.minPayment !== undefined) {
+                        const minPay = parseFloat(this.minPayment);
+                        if (!isNaN(minPay) && minPay > 0) {
+                            filtered = filtered.filter(a => (a.total_rupees || 0) >= minPay);
+                        }
                     }
                     
                     return filtered;
                 },
                 filteredReviewers() {
-                    if (!this.data || !this.data.reviewers) return [];
-                    let filtered = this.data.reviewers;
+                    if (!this.data || !this.data.reviewers || !Array.isArray(this.data.reviewers)) {
+                        return [];
+                    }
                     
-                    // Filter by role (if roleFilter is set, show only reviewers)
+                    let filtered = [...this.data.reviewers]; // Create a copy
+                    
+                    // Filter by role (if roleFilter is set to 'annotator', hide reviewers)
                     if (this.roleFilter === 'annotator') {
                         return []; // Annotators shown separately
                     }
+                    // If roleFilter is 'reviewer' or null/undefined, show reviewers
                     
-                    // Filter by status
-                    if (this.statusFilter === 'approved') {
-                        filtered = filtered.filter(r => r.approved > 0);
-                    } else if (this.statusFilter === 'rejected') {
-                        filtered = filtered.filter(r => r.rejected > 0);
+                    // Filter by status (only if filter is explicitly set)
+                    if (this.statusFilter && this.statusFilter !== null) {
+                        if (this.statusFilter === 'approved') {
+                            filtered = filtered.filter(r => (r.approved || 0) > 0);
+                        } else if (this.statusFilter === 'rejected') {
+                            filtered = filtered.filter(r => (r.rejected || 0) > 0);
+                        }
                     }
                     
-                    // Filter by minimum payment
-                    if (this.minPayment !== null && this.minPayment !== '') {
-                        filtered = filtered.filter(r => (r.total_rupees || 0) >= this.minPayment);
+                    // Filter by minimum payment (only if filter is explicitly set)
+                    if (this.minPayment !== null && this.minPayment !== '' && this.minPayment !== undefined) {
+                        const minPay = parseFloat(this.minPayment);
+                        if (!isNaN(minPay) && minPay > 0) {
+                            filtered = filtered.filter(r => (r.total_rupees || 0) >= minPay);
+                        }
                     }
                     
                     return filtered;
