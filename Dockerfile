@@ -51,12 +51,8 @@ COPY patches/backend/celery_tasks.py /doccano/backend/data_import/celery_tasks.p
 # Fix external audio/image URLs (don't prepend /media/)
 COPY patches/backend/serializers.py /doccano/backend/examples/serializers.py
 
-# NOTE: Visibility filtering and auto-tracking disabled for now
-# These require deeper integration with Doccano's architecture
-# Will implement after core tracking system is working
-# 
-# For now, all users can see all examples (like before)
-# Tracking still works via tracking API endpoints
+# Visibility filtering patch (filters locked examples at queryset level)
+COPY patches/backend/examples_views_patch.py /doccano/backend/backend/examples_views_patch.py
 
 # Export correct audio URL instead of upload filename
 COPY patches/backend/export_models.py /doccano/backend/data_export/models.py

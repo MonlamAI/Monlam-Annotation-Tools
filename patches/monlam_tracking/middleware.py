@@ -106,8 +106,19 @@ class VisibilityMiddleware:
                 log(f'[Monlam Middleware] Could not parse response: {e}')
                 return response
             
-            # Get results list
-            results = data.get('results', [])
+            # Handle both list responses and paginated dict responses
+            if isinstance(data, list):
+                # Direct list response (e.g., from detail endpoint or non-paginated list)
+                results = data
+                is_paginated = False
+            elif isinstance(data, dict):
+                # Paginated response with 'results' key
+                results = data.get('results', [])
+                is_paginated = True
+            else:
+                # Unknown format, don't filter
+                return response
+            
             if not results:
                 return response
             
@@ -178,13 +189,18 @@ class VisibilityMiddleware:
                 if self._should_show_example(example_id, confirmed_by, tracking, user):
                     filtered_results.append(example)
             
-            # Update response with correct total count
-            data['results'] = filtered_results
-            data['count'] = total_visible  # Use calculated total, not just current page
+            # Update response based on format
+            if is_paginated:
+                # Paginated response - update results and count
+                data['results'] = filtered_results
+                data['count'] = total_visible  # Use calculated total, not just current page
+            else:
+                # Direct list response - replace with filtered list
+                data = filtered_results
             
             # Create new response
             from django.http import JsonResponse
-            new_response = JsonResponse(data)
+            new_response = JsonResponse(data, safe=not is_paginated)  # safe=False for dict, safe=True for list
             
             # Copy headers
             for header, value in response.items():

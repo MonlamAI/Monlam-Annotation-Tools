@@ -68,6 +68,8 @@ class ExampleVisibilityMixin:
         # Import tracking model
         try:
             from assignment.simple_tracking import AnnotationTracking
+            from django.utils import timezone
+            from datetime import timedelta
         except ImportError:
             # If tracking not available, return full queryset
             return queryset
@@ -75,14 +77,39 @@ class ExampleVisibilityMixin:
         # Get all tracking records for this project
         tracking_qs = AnnotationTracking.objects.filter(
             project=project
-        ).select_related('annotated_by', 'reviewed_by')
+        ).select_related('annotated_by', 'reviewed_by', 'locked_by')
         
         # Build filter conditions
         show_example_ids = []
         hide_example_ids = []
+        locked_by_others = set()
         
+        # First pass: Check for locked examples (highest priority)
         for tracking in tracking_qs:
             example_id = tracking.example_id
+            
+            # Check if locked by someone else
+            if tracking.locked_by and tracking.locked_by != user:
+                if tracking.locked_at:
+                    lock_expiry = tracking.locked_at + timedelta(minutes=5)
+                    if timezone.now() < lock_expiry:
+                        # Still locked by someone else - HIDE
+                        locked_by_others.add(example_id)
+                        hide_example_ids.append(example_id)
+                        continue  # Skip other checks for this example
+                    else:
+                        # Lock expired, clear it
+                        tracking.locked_by = None
+                        tracking.locked_at = None
+                        tracking.save(update_fields=['locked_by', 'locked_at'])
+        
+        # Second pass: Check tracking status (only for non-locked examples)
+        for tracking in tracking_qs:
+            example_id = tracking.example_id
+            
+            # Skip if already hidden due to locking
+            if example_id in locked_by_others:
+                continue
             
             # Show if pending (unannotated)
             if tracking.status == 'pending':
@@ -111,12 +138,12 @@ class ExampleVisibilityMixin:
         # Get all example IDs in this project
         all_example_ids = set(queryset.filter(project=project).values_list('id', flat=True))
         
-        # Examples with no tracking record = unannotated = show to everyone
+        # Examples with no tracking record = unannotated = show to everyone (unless locked)
         tracked_ids = set(t.example_id for t in tracking_qs)
         untracked_ids = all_example_ids - tracked_ids
         
-        # Final list: (explicitly shown + untracked) - explicitly hidden
-        final_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids)
+        # Final list: (explicitly shown + untracked) - explicitly hidden - locked by others
+        final_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids) - locked_by_others
         
         return queryset.filter(id__in=final_ids)
 
