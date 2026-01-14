@@ -26,9 +26,14 @@ class ExampleVisibilityMixin:
     def get_queryset(self):
         """
         Filter examples based on user role and tracking status
+        Includes lock filtering to prevent conflicts between annotators
         """
         queryset = super().get_queryset()
         user = self.request.user
+        
+        # Debug logging (can be removed in production)
+        import sys
+        print(f'[ExampleVisibilityMixin] get_queryset called for user {user.username}', file=sys.stderr, flush=True)
         
         if not user.is_authenticated:
             return queryset.none()
@@ -75,9 +80,17 @@ class ExampleVisibilityMixin:
             return queryset
         
         # Get all tracking records for this project
+        # Use project_id instead of project object to avoid issues
         tracking_qs = AnnotationTracking.objects.filter(
-            project=project
+            project_id=project_id
         ).select_related('annotated_by', 'reviewed_by', 'locked_by')
+        
+        # Get all example IDs in this project (queryset is already filtered by project from super())
+        all_example_ids = set(queryset.values_list('id', flat=True))
+        
+        if not all_example_ids:
+            # No examples in project, return empty
+            return queryset.none()
         
         # Build filter conditions
         show_example_ids = []
@@ -87,6 +100,10 @@ class ExampleVisibilityMixin:
         # First pass: Check for locked examples (highest priority)
         for tracking in tracking_qs:
             example_id = tracking.example_id
+            
+            # Skip if this example doesn't exist in the queryset
+            if example_id not in all_example_ids:
+                continue
             
             # Check if locked by someone else
             if tracking.locked_by and tracking.locked_by != user:
@@ -107,8 +124,8 @@ class ExampleVisibilityMixin:
         for tracking in tracking_qs:
             example_id = tracking.example_id
             
-            # Skip if already hidden due to locking
-            if example_id in locked_by_others:
+            # Skip if this example doesn't exist in the queryset or is locked
+            if example_id not in all_example_ids or example_id in locked_by_others:
                 continue
             
             # Show if pending (unannotated)
@@ -135,15 +152,30 @@ class ExampleVisibilityMixin:
             elif tracking.annotated_by and tracking.annotated_by != user:
                 hide_example_ids.append(example_id)
         
-        # Get all example IDs in this project
-        all_example_ids = set(queryset.filter(project=project).values_list('id', flat=True))
-        
         # Examples with no tracking record = unannotated = show to everyone (unless locked)
-        tracked_ids = set(t.example_id for t in tracking_qs)
+        tracked_ids = set(t.example_id for t in tracking_qs if t.example_id in all_example_ids)
         untracked_ids = all_example_ids - tracked_ids
         
         # Final list: (explicitly shown + untracked) - explicitly hidden - locked by others
         final_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids) - locked_by_others
+        
+        # Debug logging
+        import sys
+        print(f'[ExampleVisibilityMixin] User: {user.username}, Project: {project_id}', file=sys.stderr, flush=True)
+        print(f'[ExampleVisibilityMixin] Total examples: {len(all_example_ids)}, Tracked: {len(tracked_ids)}, Untracked: {len(untracked_ids)}', file=sys.stderr, flush=True)
+        print(f'[ExampleVisibilityMixin] Show: {len(show_example_ids)}, Hide: {len(hide_example_ids)}, Locked by others: {len(locked_by_others)}', file=sys.stderr, flush=True)
+        print(f'[ExampleVisibilityMixin] Final IDs: {len(final_ids)}', file=sys.stderr, flush=True)
+        
+        # Safety check: if final_ids is empty but there are untracked examples, something went wrong
+        # In that case, show untracked examples (they're unannotated and should be visible)
+        if not final_ids and untracked_ids:
+            print(f'[ExampleVisibilityMixin] ⚠️ WARNING: Final IDs empty but untracked exists, showing untracked only', file=sys.stderr, flush=True)
+            final_ids = untracked_ids - locked_by_others
+        
+        # If still empty, return empty queryset
+        if not final_ids:
+            print(f'[ExampleVisibilityMixin] ⚠️ No examples visible to user {user.username}', file=sys.stderr, flush=True)
+            return queryset.none()
         
         return queryset.filter(id__in=final_ids)
 
