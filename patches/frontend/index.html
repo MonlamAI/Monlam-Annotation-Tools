@@ -1513,6 +1513,18 @@
                 }
             }
             
+            // Check lock status FIRST before trying to lock (prevents showing locked examples)
+            const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
+            if (statusResp.ok) {
+                const status = await statusResp.json();
+                if (status.is_locked && !status.is_own_lock) {
+                    // Already locked by someone else - navigate away immediately
+                    console.log('[Monlam Lock] Example locked by', status.locked_by, '- navigating away...');
+                    await navigateToNextAvailableExample(projectId, exampleId);
+                    return;
+                }
+            }
+            
             // Try to lock the example immediately (atomic operation prevents race conditions)
             const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock/`, {
                 method: 'POST',
@@ -1543,20 +1555,6 @@
                     console.log('[Monlam Lock] Example already locked - finding next...');
                 }
                 await navigateToNextAvailableExample(projectId, exampleId);
-            } else {
-                // Other error - check status to see if locked
-                try {
-                    const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
-                    if (statusResp.ok) {
-                        const status = await statusResp.json();
-                        if (status.is_locked && !status.is_own_lock) {
-                            console.log('[Monlam Lock] Example locked by', status.locked_by, '- finding next...');
-                            await navigateToNextAvailableExample(projectId, exampleId);
-                        }
-                    }
-                } catch (e) {
-                    console.error('[Monlam Lock] Error checking lock status:', e);
-                }
             }
             
         } catch (error) {

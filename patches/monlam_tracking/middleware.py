@@ -194,13 +194,16 @@ class VisibilityMiddleware:
                 # Paginated response - update results and count
                 data['results'] = filtered_results
                 data['count'] = total_visible  # Use calculated total, not just current page
+                response_data = data
+                safe_param = True  # Dict can use safe=True (default)
             else:
                 # Direct list response - replace with filtered list
-                data = filtered_results
+                response_data = filtered_results
+                safe_param = False  # List requires safe=False
             
             # Create new response
             from django.http import JsonResponse
-            new_response = JsonResponse(data, safe=not is_paginated)  # safe=False for dict, safe=True for list
+            new_response = JsonResponse(response_data, safe=safe_param)
             
             # Copy headers
             for header, value in response.items():
