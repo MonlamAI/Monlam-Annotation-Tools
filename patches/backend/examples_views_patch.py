@@ -53,18 +53,34 @@ class ExampleVisibilityMixin:
         except Project.DoesNotExist:
             return queryset.none()
         
-        # Check if user is project member
-        if not project.members.filter(id=user.id).exists():
+        # Check if user is project member using Doccano's Member model
+        from projects.models import Member
+        try:
+            member = Member.objects.filter(project=project, user=user).first()
+            if not member:
+                # User is not a project member
+                return queryset.none()
+            
+            # Check if user is project creator or has admin role (they see everything)
+            role_name = member.role.name.lower() if member.role and member.role.name else ''
+            is_project_admin = (
+                project.created_by == user or
+                'admin' in role_name or
+                'manager' in role_name
+            )
+            
+            if is_project_admin:
+                return queryset
+            
+            # Check if user is approver (they also see everything for reviewing)
+            is_approver = 'approver' in role_name
+            if is_approver:
+                return queryset
+        except Exception as e:
+            import sys
+            print(f'[ExampleVisibilityMixin] Error checking membership: {e}', file=sys.stderr, flush=True)
+            # If we can't check membership, be safe and return empty
             return queryset.none()
-        
-        # Check if user is project creator or admin (they see everything)
-        is_project_admin = (
-            project.created_by == user or
-            user in project.admins.all() if hasattr(project, 'admins') else False
-        )
-        
-        if is_project_admin:
-            return queryset
         
         # Try to determine if user is a reviewer/approver
         # For now, assume non-admins who aren't project admins might be annotators
