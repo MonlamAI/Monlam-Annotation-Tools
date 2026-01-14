@@ -163,10 +163,10 @@ class ExampleLockingViewSet(viewsets.ViewSet):
         
         # Check if already locked by someone else
         if assignment.locked_by and assignment.locked_by != request.user:
-            # Check if lock is expired (10 minutes)
+            # Check if lock is expired (5 minutes - matches tracking API)
             if assignment.locked_at:
                 lock_duration = timezone.now() - assignment.locked_at
-                if lock_duration < timedelta(minutes=10):
+                if lock_duration < timedelta(minutes=5):
                     return Response(
                         {
                             'error': 'Example is locked by another user',
@@ -264,9 +264,9 @@ class ExampleLockingViewSet(viewsets.ViewSet):
             })
         
         if assignment.locked_by:
-            # Check if lock is expired
+            # Check if lock is expired (5 minutes - matches tracking API)
             lock_duration = timezone.now() - assignment.locked_at
-            if lock_duration >= timedelta(minutes=10):
+            if lock_duration >= timedelta(minutes=5):
                 # Lock expired
                 assignment.locked_by = None
                 assignment.locked_at = None

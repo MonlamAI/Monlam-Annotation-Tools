@@ -1513,20 +1513,7 @@
                 }
             }
             
-            // Check lock status first
-            const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
-            if (statusResp.ok) {
-                const status = await statusResp.json();
-                
-                if (status.is_locked && !status.is_own_lock) {
-                    // Locked by someone else - auto-navigate to next available!
-                    console.log('[Monlam Lock] Example locked by', status.locked_by, '- finding next...');
-                    await navigateToNextAvailableExample(projectId, exampleId);
-                    return;
-                }
-            }
-            
-            // Try to lock the example
+            // Try to lock the example immediately (atomic operation prevents race conditions)
             const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock/`, {
                 method: 'POST',
                 headers: {
@@ -1538,16 +1525,38 @@
             if (lockResp.ok) {
                 const lockData = await lockResp.json();
                 if (lockData.success) {
+                    // Successfully locked!
                     console.log('[Monlam Lock] ✅ Locked example', exampleId);
                     window.monlamLockedExample = { projectId, exampleId };
                     showLockIndicator(lockData.expires_in_minutes);
                 } else if (lockData.error === 'locked_by_other') {
-                    // Auto-navigate to next available
+                    // Locked by someone else - auto-navigate to next available!
+                    console.log('[Monlam Lock] Example locked by', lockData.locked_by, '- finding next...');
                     await navigateToNextAvailableExample(projectId, exampleId);
                 }
             } else if (lockResp.status === 409) {
-                // Auto-navigate to next available
+                // Conflict - already locked by someone else
+                try {
+                    const conflictData = await lockResp.json();
+                    console.log('[Monlam Lock] Example locked by', conflictData.locked_by || 'another user', '- finding next...');
+                } catch (e) {
+                    console.log('[Monlam Lock] Example already locked - finding next...');
+                }
                 await navigateToNextAvailableExample(projectId, exampleId);
+            } else {
+                // Other error - check status to see if locked
+                try {
+                    const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
+                    if (statusResp.ok) {
+                        const status = await statusResp.json();
+                        if (status.is_locked && !status.is_own_lock) {
+                            console.log('[Monlam Lock] Example locked by', status.locked_by, '- finding next...');
+                            await navigateToNextAvailableExample(projectId, exampleId);
+                        }
+                    }
+                } catch (e) {
+                    console.error('[Monlam Lock] Error checking lock status:', e);
+                }
             }
             
         } catch (error) {
@@ -1633,7 +1642,7 @@
     async function navigateToNextAvailableExample(projectId, currentExampleId) {
         /**
          * When current example is locked, find and navigate to next available.
-         * Uses Doccano's ?confirmed=false filter for unconfirmed examples.
+         * Locks the example before navigating to prevent race conditions.
          */
         console.log('[Monlam Lock] 🔍 Finding next available example...');
         
@@ -1645,7 +1654,7 @@
         window.monlamNavigatingToNext = true;
         
         try {
-            // Get all unconfirmed examples
+            // Get all unconfirmed examples (this will be filtered by middleware to exclude locked ones)
             const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000&confirmed=false`);
             if (!examplesResp.ok) {
                 console.error('[Monlam Lock] Failed to fetch examples');
@@ -1662,42 +1671,70 @@
                 return;
             }
             
-            // Find current example's index
+            // Find current example's index in the filtered list
             const currentIndex = examples.findIndex(e => e.id == currentExampleId);
             
             // Try to find next unlocked example (starting after current)
+            // The middleware already filtered out locked examples, so we just need to find the next one
             for (let i = 1; i <= examples.length; i++) {
-                const nextIndex = (currentIndex + i) % examples.length;
+                const nextIndex = currentIndex >= 0 ? (currentIndex + i) % examples.length : i - 1;
                 const nextExample = examples[nextIndex];
                 
-                if (nextExample.id == currentExampleId) {
-                    // Wrapped around to same example - all locked
+                if (!nextExample || nextExample.id == currentExampleId) {
+                    // Wrapped around to same example or invalid
                     continue;
                 }
                 
-                // Check if this example is unlocked
-                const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/lock-status/`);
-                if (lockResp.ok) {
-                    const lockStatus = await lockResp.json();
-                    if (!lockStatus.is_locked) {
-                        // Found an unlocked example!
-                        console.log('[Monlam Lock] ✅ Found available example:', nextExample.id, 'at index', nextIndex);
-                        
-                        // Navigate to it
-                        const path = window.location.pathname;
-                        const basePath = path.replace(/\?.*$/, '').split('?')[0];
-                        window.location.replace(`${basePath}?page=${nextIndex}`);
-                        return;
+                // Try to lock this example immediately (prevents race condition)
+                try {
+                    const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/lock/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken()
+                        }
+                    });
+                    
+                    if (lockResp.ok) {
+                        const lockData = await lockResp.json();
+                        if (lockData.success) {
+                            // Successfully locked! Now navigate to it
+                            console.log('[Monlam Lock] ✅ Locked and navigating to example:', nextExample.id);
+                            
+                            // Store the locked example
+                            window.monlamLockedExample = { projectId, exampleId: nextExample.id };
+                            
+                            // Navigate to it - use the index in the filtered list
+                            // Doccano uses 0-based page indexing, but we need to account for pagination
+                            // Calculate page number (assuming 10 examples per page, which is Doccano's default)
+                            const pageNumber = Math.floor(nextIndex / 10);
+                            
+                            const path = window.location.pathname;
+                            const basePath = path.replace(/\?.*$/, '').split('?')[0];
+                            
+                            // Navigate with page parameter and also try to set the example directly
+                            // Reload the page to ensure fresh state
+                            window.location.replace(`${basePath}?page=${pageNumber}`);
+                            return;
+                        }
+                    } else if (lockResp.status === 409) {
+                        // Already locked by someone else - try next
+                        console.log('[Monlam Lock] Example', nextExample.id, 'already locked, trying next...');
+                        continue;
                     }
+                } catch (lockError) {
+                    console.error('[Monlam Lock] Error locking example:', lockError);
+                    continue;
                 }
             }
             
-            // All examples are locked
+            // All examples are locked or couldn't lock any
             console.log('[Monlam Lock] All examples are currently locked');
             showAllLockedMessage(projectId);
             
         } catch (error) {
             console.error('[Monlam Lock] Error finding next example:', error);
+            showAllLockedMessage(projectId);
         } finally {
             window.monlamNavigatingToNext = false;
         }

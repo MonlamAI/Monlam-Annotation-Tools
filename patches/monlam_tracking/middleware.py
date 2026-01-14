@@ -1,14 +1,14 @@
 """
-Monlam Visibility Middleware - SIMPLIFIED
+Monlam Visibility Middleware
 
-Instead of complex filtering, we now:
-1. Use Doccano's native confirmed=false filter
-2. Just log requests for debugging
-3. Let the frontend handle filter defaults
+Filters examples API responses to hide locked examples from other annotators.
 """
 
 import re
 import sys
+import json
+from datetime import timedelta
+from django.utils import timezone
 
 
 def log(msg):
@@ -18,20 +18,42 @@ def log(msg):
 
 class VisibilityMiddleware:
     """
-    Simplified middleware - just logging now.
+    Middleware that filters examples API responses to hide locked examples.
     
-    Visibility is handled by:
-    1. Doccano's native ?confirmed=false filter (set via frontend)
-    2. Frontend JavaScript to default filter for annotators
+    For annotators:
+    - Hides examples locked by other users
+    - Shows examples locked by themselves
+    - Shows unlocked examples
+    
+    For privileged users (admins, managers, approvers):
+    - Shows all examples (no filtering)
     """
     
     def __init__(self, get_response):
-        log('[Monlam MW] 🚀 VisibilityMiddleware initialized (simplified)')
+        log('[Monlam MW] 🚀 VisibilityMiddleware initialized')
         self.get_response = get_response
     
     def __call__(self, request):
-        # Just pass through - no filtering
-        return self.get_response(request)
+        response = self.get_response(request)
+        
+        # Only filter examples API endpoints for authenticated users
+        if not request.user.is_authenticated:
+            return response
+        
+        # Check if this is an examples API request
+        path = request.path
+        if '/v1/projects/' in path and '/examples' in path and request.method == 'GET':
+            # Extract project_id from path
+            match = re.search(r'/v1/projects/(\d+)/', path)
+            if match:
+                project_id = int(match.group(1))
+                
+                # Skip filtering for privileged users
+                if not self._is_privileged_user(request.user, project_id):
+                    # Filter the response to hide locked examples
+                    response = self._filter_response(response, request.user, project_id)
+        
+        return response
     
     def _is_privileged_user(self, user, project_id):
         """Check if user is admin/manager/approver."""
@@ -70,8 +92,19 @@ class VisibilityMiddleware:
             if 'application/json' not in content_type:
                 return response
             
-            # Parse response
-            data = json.loads(response.content)
+            # Parse response - handle both bytes and string content
+            try:
+                if hasattr(response, 'content'):
+                    content = response.content
+                    if isinstance(content, bytes):
+                        content = content.decode('utf-8')
+                    data = json.loads(content)
+                else:
+                    # Response might not have content attribute
+                    return response
+            except (json.JSONDecodeError, AttributeError) as e:
+                log(f'[Monlam Middleware] Could not parse response: {e}')
+                return response
             
             # Get results list
             results = data.get('results', [])
@@ -81,22 +114,40 @@ class VisibilityMiddleware:
             # Get CONFIRMATION data from Doccano's ExampleState
             from examples.models import ExampleState, Example
             
-            # Get all confirmed examples in this project (for total count)
+            # Get all examples in this project
             all_project_examples = Example.objects.filter(project_id=project_id).values_list('id', flat=True)
+            all_example_ids = list(all_project_examples)
+            
+            # Get confirmed examples
             all_confirmed = set(
-                ExampleState.objects.filter(example_id__in=all_project_examples)
+                ExampleState.objects.filter(example_id__in=all_example_ids)
                 .exclude(confirmed_by=user)  # Exclude ones confirmed by current user
                 .values_list('example_id', flat=True)
             )
             my_confirmed = set(
-                ExampleState.objects.filter(example_id__in=all_project_examples, confirmed_by=user)
+                ExampleState.objects.filter(example_id__in=all_example_ids, confirmed_by=user)
                 .values_list('example_id', flat=True)
             )
             
-            # Total visible = all examples - confirmed by others - confirmed by me
-            total_visible = len(all_project_examples) - len(all_confirmed) - len(my_confirmed)
+            # Get locked examples (excluding ones locked by current user)
+            from assignment.simple_tracking import AnnotationTracking
+            locked_by_others = set()
+            all_tracking = AnnotationTracking.objects.filter(
+                project_id=project_id,
+                example_id__in=all_example_ids
+            ).select_related('locked_by')
             
-            log(f'[Monlam Middleware] Total: {len(all_project_examples)}, Confirmed by others: {len(all_confirmed)}, By me: {len(my_confirmed)}, Visible: {total_visible}')
+            for tracking in all_tracking:
+                if tracking.locked_by and tracking.locked_by != user:
+                    if tracking.locked_at:
+                        lock_expiry = tracking.locked_at + timedelta(minutes=5)
+                        if timezone.now() < lock_expiry:
+                            locked_by_others.add(tracking.example_id)
+            
+            # Total visible = all examples - confirmed by others - confirmed by me - locked by others
+            total_visible = len(all_example_ids) - len(all_confirmed) - len(my_confirmed) - len(locked_by_others)
+            
+            log(f'[Monlam Middleware] Total: {len(all_example_ids)}, Confirmed by others: {len(all_confirmed)}, By me: {len(my_confirmed)}, Locked by others: {len(locked_by_others)}, Visible: {total_visible}')
             
             # Get current page's confirmed states
             example_ids = [ex.get('id') for ex in results if ex.get('id')]
@@ -107,8 +158,7 @@ class VisibilityMiddleware:
             # Map: example_id -> confirmed_by user
             confirmed_map = {state.example_id: state.confirmed_by for state in confirmed_states}
             
-            # Also get our tracking data for locking and review status
-            from assignment.simple_tracking import AnnotationTracking
+            # Get tracking data for locking and review status (already imported above)
             tracking_qs = AnnotationTracking.objects.filter(
                 project_id=project_id,
                 example_id__in=example_ids
@@ -155,42 +205,48 @@ class VisibilityMiddleware:
         """
         Determine if an example should be visible to this user.
         
-        Uses Doccano's ExampleState (confirmation) as the source of truth.
+        Priority:
+        1. Locking check (most important - prevents conflicts)
+        2. Confirmation status
+        3. Rejection status (for re-annotation)
         """
         
-        # Check locking first (from our tracking)
+        # Check locking first (from our tracking) - 5 minute expiry to match API
         if tracking and tracking.locked_by:
             if tracking.locked_by == user:
-                log(f'[Visibility] Example {example_id}: Locked by me → SHOW')
+                # Locked by me - always show
                 return True
             else:
+                # Locked by someone else - check if expired
                 if tracking.locked_at:
-                    lock_expiry = tracking.locked_at + timedelta(minutes=30)
+                    lock_expiry = tracking.locked_at + timedelta(minutes=5)
                     if timezone.now() < lock_expiry:
-                        log(f'[Visibility] Example {example_id}: Locked by {tracking.locked_by} → HIDE')
+                        # Still locked by someone else - HIDE
+                        log(f'[Visibility] Example {example_id}: Locked by {tracking.locked_by.username} → HIDE')
                         return False
+                    else:
+                        # Lock expired, clear it
+                        log(f'[Visibility] Example {example_id}: Lock expired, clearing')
+                        tracking.locked_by = None
+                        tracking.locked_at = None
+                        tracking.save(update_fields=['locked_by', 'locked_at'])
         
         # Not confirmed = available for annotation = SHOW
         if not confirmed_by:
-            log(f'[Visibility] Example {example_id}: Not confirmed → SHOW')
             return True
         
         # Confirmed by current user = already done by me = HIDE
         if confirmed_by == user:
-            log(f'[Visibility] Example {example_id}: Confirmed by me → HIDE')
             return False
         
         # Confirmed by someone else = HIDE
         if confirmed_by != user:
-            log(f'[Visibility] Example {example_id}: Confirmed by {confirmed_by.username} → HIDE')
             return False
         
         # Check if rejected (needs re-annotation)
         if tracking and tracking.status == 'rejected' and tracking.annotated_by == user:
-            log(f'[Visibility] Example {example_id}: Rejected, needs my fix → SHOW')
             return True
         
         # Default: show
-        log(f'[Visibility] Example {example_id}: Default → SHOW')
         return True
 
