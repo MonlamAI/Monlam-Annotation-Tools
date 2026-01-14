@@ -22,7 +22,8 @@ class MonlamTrackingConfig(AppConfig):
         # Apply visibility filtering to Doccano's example viewsets
         # This filters locked examples at the queryset level (most robust)
         try:
-            from examples import views as examples_views
+            # Import from the correct module path
+            from examples.views.example import ExampleList, ExampleDetail
             
             # Try to import the patch - it should be in the backend directory
             try:
@@ -35,10 +36,6 @@ class MonlamTrackingConfig(AppConfig):
                     print('[Monlam Tracking] ⚠️ Could not find examples_views_patch - using middleware only')
                     raise
             
-            # Get the original classes
-            ExampleList = examples_views.ExampleList
-            ExampleDetail = examples_views.ExampleDetail
-            
             # Create new classes that inherit from both the mixin and the original
             # The mixin must come FIRST so its get_queryset is called
             class PatchedExampleList(ExampleVisibilityMixin, ExampleList):
@@ -49,11 +46,24 @@ class MonlamTrackingConfig(AppConfig):
                 """ExampleDetail with visibility filtering including lock filtering"""
                 pass
             
-            # Replace the original classes
-            examples_views.ExampleList = PatchedExampleList
-            examples_views.ExampleDetail = PatchedExampleDetail
+            # Replace the original classes in the module
+            import examples.views.example as example_views_module
+            example_views_module.ExampleList = PatchedExampleList
+            example_views_module.ExampleDetail = PatchedExampleDetail
+            
+            # Also update the views __init__.py if it exports these
+            try:
+                from examples import views as examples_views
+                if hasattr(examples_views, 'ExampleList'):
+                    examples_views.ExampleList = PatchedExampleList
+                if hasattr(examples_views, 'ExampleDetail'):
+                    examples_views.ExampleDetail = PatchedExampleDetail
+            except:
+                pass  # Not critical if __init__ doesn't export them
             
             print('[Monlam Tracking] ✅ Applied queryset-level filtering (with lock filtering) to example viewsets')
+            print('[Monlam Tracking] ✅ ExampleList patched successfully')
+            print('[Monlam Tracking] ✅ ExampleDetail patched successfully')
         except Exception as e:
             print(f'[Monlam Tracking] ⚠️ Could not apply queryset filtering: {e}')
             print('[Monlam Tracking] ⚠️ Falling back to middleware-only filtering')
