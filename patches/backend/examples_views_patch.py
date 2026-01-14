@@ -77,6 +77,8 @@ class ExampleVisibilityMixin:
             from datetime import timedelta
         except ImportError:
             # If tracking not available, return full queryset
+            import sys
+            print('[ExampleVisibilityMixin] ⚠️ Tracking not available, returning full queryset', file=sys.stderr, flush=True)
             return queryset
         
         # Get all tracking records for this project
@@ -172,9 +174,18 @@ class ExampleVisibilityMixin:
             print(f'[ExampleVisibilityMixin] ⚠️ WARNING: Final IDs empty but untracked exists, showing untracked only', file=sys.stderr, flush=True)
             final_ids = untracked_ids - locked_by_others
         
-        # If still empty, return empty queryset
+        # CRITICAL SAFETY: If still empty and there are examples in the project, 
+        # something is wrong with filtering - return all examples to prevent breaking the UI
+        # This should only happen if there's a bug in the filtering logic
+        if not final_ids and all_example_ids:
+            print(f'[ExampleVisibilityMixin] ⚠️ CRITICAL: No examples visible but project has {len(all_example_ids)} examples!', file=sys.stderr, flush=True)
+            print(f'[ExampleVisibilityMixin] ⚠️ Returning all examples to prevent empty page (filtering may have bug)', file=sys.stderr, flush=True)
+            # Return queryset filtered only by locked examples (safety fallback)
+            return queryset.exclude(id__in=locked_by_others)
+        
+        # If project has no examples, return empty
         if not final_ids:
-            print(f'[ExampleVisibilityMixin] ⚠️ No examples visible to user {user.username}', file=sys.stderr, flush=True)
+            print(f'[ExampleVisibilityMixin] ⚠️ No examples visible to user {user.username} (project may be empty)', file=sys.stderr, flush=True)
             return queryset.none()
         
         return queryset.filter(id__in=final_ids)
