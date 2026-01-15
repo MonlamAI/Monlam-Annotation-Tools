@@ -354,9 +354,76 @@ def api_completion_stats(request, project_id):
 def change_password(request):
     """
     Password change page for users.
-    Uses dj_rest_auth's /v1/auth/password/change/ API.
     """
     return render(request, 'monlam_ui/change_password.html')
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_change_password(request):
+    """
+    API endpoint to change user password.
+    POST /monlam/api/change-password/
+    {
+        "old_password": "current_password",
+        "new_password1": "new_password",
+        "new_password2": "new_password"
+    }
+    """
+    from django.contrib.auth import update_session_auth_hash
+    from django.http import JsonResponse
+    import json
+    
+    try:
+        data = json.loads(request.body)
+        old_password = data.get('old_password')
+        new_password1 = data.get('new_password1')
+        new_password2 = data.get('new_password2')
+        
+        if not old_password or not new_password1 or not new_password2:
+            return JsonResponse({
+                'error': 'All fields are required'
+            }, status=400)
+        
+        # Check if new passwords match
+        if new_password1 != new_password2:
+            return JsonResponse({
+                'new_password2': ['New passwords do not match']
+            }, status=400)
+        
+        # Check password length
+        if len(new_password1) < 8:
+            return JsonResponse({
+                'new_password2': ['Password must be at least 8 characters long']
+            }, status=400)
+        
+        # Verify old password
+        user = request.user
+        if not user.check_password(old_password):
+            return JsonResponse({
+                'old_password': ['Current password is incorrect']
+            }, status=400)
+        
+        # Set new password
+        user.set_password(new_password1)
+        user.save()
+        
+        # Update session to prevent logout
+        update_session_auth_hash(request, user)
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Password changed successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'error': 'Invalid JSON'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
 
 
 # ============================================

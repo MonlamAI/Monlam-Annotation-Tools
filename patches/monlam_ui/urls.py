@@ -78,5 +78,12 @@ urlpatterns = [
         views.change_password,
         name='change-password'
     ),
+    
+    # Password change API endpoint
+    path(
+        'api/change-password/',
+        views.api_change_password,
+        name='api-change-password'
+    ),
 ]
 
