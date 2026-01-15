@@ -373,26 +373,45 @@ def api_change_password(request):
     from django.contrib.auth import update_session_auth_hash
     from django.http import JsonResponse
     import json
+    import traceback
+    import sys
+    
+    # Log the request for debugging
+    print(f'[Password Change API] Request from user: {request.user.username}', file=sys.stderr, flush=True)
+    print(f'[Password Change API] Method: {request.method}', file=sys.stderr, flush=True)
+    print(f'[Password Change API] Content-Type: {request.content_type}', file=sys.stderr, flush=True)
+    print(f'[Password Change API] Is authenticated: {request.user.is_authenticated}', file=sys.stderr, flush=True)
     
     try:
-        data = json.loads(request.body)
+        # Parse JSON body
+        if request.content_type and 'application/json' in request.content_type:
+            data = json.loads(request.body)
+        else:
+            # Try to parse anyway
+            data = json.loads(request.body)
+        
         old_password = data.get('old_password')
         new_password1 = data.get('new_password1')
         new_password2 = data.get('new_password2')
         
+        print(f'[Password Change API] Fields received: old_password={bool(old_password)}, new_password1={bool(new_password1)}, new_password2={bool(new_password2)}', file=sys.stderr, flush=True)
+        
         if not old_password or not new_password1 or not new_password2:
+            print('[Password Change API] Missing required fields', file=sys.stderr, flush=True)
             return JsonResponse({
                 'error': 'All fields are required'
             }, status=400)
         
         # Check if new passwords match
         if new_password1 != new_password2:
+            print('[Password Change API] Passwords do not match', file=sys.stderr, flush=True)
             return JsonResponse({
                 'new_password2': ['New passwords do not match']
             }, status=400)
         
         # Check password length
         if len(new_password1) < 8:
+            print('[Password Change API] Password too short', file=sys.stderr, flush=True)
             return JsonResponse({
                 'new_password2': ['Password must be at least 8 characters long']
             }, status=400)
@@ -400,29 +419,36 @@ def api_change_password(request):
         # Verify old password
         user = request.user
         if not user.check_password(old_password):
+            print('[Password Change API] Old password incorrect', file=sys.stderr, flush=True)
             return JsonResponse({
                 'old_password': ['Current password is incorrect']
             }, status=400)
         
         # Set new password
+        print('[Password Change API] Setting new password...', file=sys.stderr, flush=True)
         user.set_password(new_password1)
         user.save()
         
         # Update session to prevent logout
         update_session_auth_hash(request, user)
         
+        print('[Password Change API] Password changed successfully', file=sys.stderr, flush=True)
         return JsonResponse({
             'success': True,
             'message': 'Password changed successfully'
         })
         
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f'[Password Change API] JSON decode error: {e}', file=sys.stderr, flush=True)
+        print(f'[Password Change API] Request body: {request.body}', file=sys.stderr, flush=True)
         return JsonResponse({
-            'error': 'Invalid JSON'
+            'error': 'Invalid JSON: ' + str(e)
         }, status=400)
     except Exception as e:
+        print(f'[Password Change API] Exception: {e}', file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
         return JsonResponse({
-            'error': str(e)
+            'error': 'Server error: ' + str(e)
         }, status=500)
 
 
