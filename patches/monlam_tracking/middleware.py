@@ -189,6 +189,42 @@ class VisibilityMiddleware:
                 if self._should_show_example(example_id, confirmed_by, tracking, user):
                     filtered_results.append(example)
             
+            # CRITICAL FIX: If filtering resulted in empty page but there are visible examples,
+            # fetch the first visible example to prevent blank page (prevents "undefined" example ID)
+            if not filtered_results and total_visible > 0 and is_paginated:
+                log(f'[Monlam Middleware] ⚠️ Empty page after filtering but {total_visible} visible examples exist - fetching first visible example')
+                try:
+                    # Get first visible example using the same logic as filtering
+                    from examples.models import Example
+                    visible_example_ids = set(all_example_ids) - all_confirmed - my_confirmed - locked_by_others
+                    if visible_example_ids:
+                        # Get the first visible example with all its data
+                        first_visible_id = list(visible_example_ids)[0]
+                        first_example = Example.objects.filter(id=first_visible_id).select_related('project').first()
+                        if first_example:
+                            # Use Doccano's serializer if available, otherwise basic serialization
+                            try:
+                                from examples.serializers import ExampleSerializer
+                                serializer = ExampleSerializer(first_example)
+                                example_dict = serializer.data
+                            except (ImportError, AttributeError):
+                                # Fallback: basic serialization
+                                example_dict = {
+                                    'id': first_example.id,
+                                    'text': getattr(first_example, 'text', ''),
+                                    'meta': getattr(first_example, 'meta', {}),
+                                    'annotation_approver': getattr(first_example, 'annotation_approver_id', None),
+                                    'created_at': first_example.created_at.isoformat() if hasattr(first_example, 'created_at') and first_example.created_at else None,
+                                    'updated_at': first_example.updated_at.isoformat() if hasattr(first_example, 'updated_at') and first_example.updated_at else None,
+                                }
+                            
+                            filtered_results = [example_dict]
+                            log(f'[Monlam Middleware] ✅ Returned first visible example (ID: {first_visible_id}) to prevent blank page')
+                except Exception as e:
+                    log(f'[Monlam Middleware] ⚠️ Error fetching first visible example: {e}')
+                    import traceback
+                    traceback.print_exc()
+            
             # Update response based on format
             if is_paginated:
                 # Paginated response - update results and count

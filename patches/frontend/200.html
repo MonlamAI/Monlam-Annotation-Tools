@@ -1352,6 +1352,160 @@
     
     console.log('[Monlam Inline] Features script loaded');
 })();
+
+    // ========================================
+    // DIAGNOSTIC: Blank Page Detection for Annotation Pages
+    // ========================================
+    (function() {
+        'use strict';
+        
+        // Only run on annotation pages
+        const path = window.location.pathname;
+        const isAnnotationPage = path.includes('/speech-to-text') || 
+                                path.includes('/sequence-labeling') ||
+                                path.includes('/document-classification') ||
+                                path.includes('/seq2seq');
+        
+        if (!isAnnotationPage) return;
+        
+        const projectMatch = path.match(/\/projects\/(\d+)/);
+        if (!projectMatch) return;
+        const projectId = projectMatch[1];
+        
+        // Track if page has loaded content
+        let pageHasContent = false;
+        let diagnosticInfo = {
+            url: window.location.href,
+            projectId: projectId,
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            errors: []
+        };
+        
+        // Check for content after 3 seconds
+        setTimeout(() => {
+            // Check if page has meaningful content
+            const hasVueContent = document.querySelector('[data-nuxt]') || 
+                                 document.querySelector('.v-application') ||
+                                 document.querySelector('#app');
+            const hasExampleContent = document.querySelector('audio') ||
+                                     document.querySelector('.example') ||
+                                     document.querySelector('[class*="example"]');
+            const hasLoadingIndicator = document.querySelector('.v-progress-linear') ||
+                                       document.querySelector('[class*="loading"]');
+            
+            // Check for JavaScript errors
+            const originalError = window.onerror;
+            window.onerror = function(msg, url, line, col, error) {
+                diagnosticInfo.errors.push({
+            type: 'JavaScript Error',
+            message: msg,
+            file: url,
+            line: line,
+            column: col
+        });
+                if (originalError) originalError.apply(this, arguments);
+            };
+            
+            // Check if page appears blank
+            const bodyText = document.body ? document.body.innerText.trim() : '';
+            const hasMinimalContent = bodyText.length > 100 || hasVueContent || hasExampleContent || hasLoadingIndicator;
+            
+            if (!hasMinimalContent) {
+                console.error('[Monlam Diagnostic] ⚠️ BLANK PAGE DETECTED');
+                console.error('[Monlam Diagnostic] Project ID:', projectId);
+                console.error('[Monlam Diagnostic] URL:', window.location.href);
+                console.error('[Monlam Diagnostic] User Agent:', navigator.userAgent);
+                
+                // Show helpful error message
+                const errorDiv = document.createElement('div');
+                errorDiv.id = 'monlam-blank-page-error';
+                errorDiv.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.9);
+                    color: white;
+                    z-index: 99999;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 40px;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    text-align: center;
+                `;
+                
+                errorDiv.innerHTML = `
+                    <div style="max-width: 600px;">
+                        <h1 style="color: #ff6b6b; margin-bottom: 20px; font-size: 24px;">
+                            ⚠️ Blank Page Detected
+                        </h1>
+                        <p style="margin-bottom: 30px; line-height: 1.6; font-size: 16px;">
+                            The annotation page appears to be blank. This is usually caused by browser cache issues.
+                        </p>
+                        <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: left;">
+                            <h3 style="margin-top: 0; margin-bottom: 15px;">Try these steps:</h3>
+                            <ol style="line-height: 2; padding-left: 20px;">
+                                <li><strong>Hard Refresh:</strong> Press <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">Ctrl+Shift+R</code> (Windows/Linux) or <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px;">Cmd+Shift+R</code> (Mac)</li>
+                                <li><strong>Clear Cache:</strong> Go to browser settings → Clear browsing data → Cached images and files</li>
+                                <li><strong>Disable Extensions:</strong> Try in incognito/private mode to rule out browser extensions</li>
+                                <li><strong>Check Console:</strong> Press F12 → Console tab → Look for red error messages</li>
+                            </ol>
+                        </div>
+                        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                            <button onclick="window.location.reload(true)" style="background: #1976d2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px;">
+                                🔄 Reload Page
+                            </button>
+                            <button onclick="document.getElementById('monlam-blank-page-error').remove()" style="background: #666; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px;">
+                                ✕ Dismiss
+                            </button>
+                        </div>
+                        <p style="margin-top: 30px; font-size: 12px; color: #999;">
+                            If this persists, contact support with this info:<br>
+                            Project: ${projectId} | URL: ${window.location.href}
+                        </p>
+                    </div>
+                `;
+                
+                document.body.appendChild(errorDiv);
+                
+                // Log diagnostic info
+                console.error('[Monlam Diagnostic] Full diagnostic info:', diagnosticInfo);
+                
+                // Try to fetch examples to see if API is working
+                fetch(`/v1/projects/${projectId}/examples?limit=1`)
+                    .then(res => res.json())
+                    .then(data => {
+                        console.log('[Monlam Diagnostic] API Response:', data);
+                        if (data.results && data.results.length === 0) {
+                            console.error('[Monlam Diagnostic] ⚠️ No examples available for this project');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('[Monlam Diagnostic] ❌ API Error:', err);
+                        diagnosticInfo.errors.push({
+                            type: 'API Error',
+                            message: err.message
+                        });
+                    });
+            } else {
+                console.log('[Monlam Diagnostic] ✅ Page appears to have content');
+            }
+        }, 3000);
+        
+        // Also check for console errors
+        const originalConsoleError = console.error;
+        console.error = function(...args) {
+            diagnosticInfo.errors.push({
+                type: 'Console Error',
+                message: args.join(' ')
+            });
+            originalConsoleError.apply(console, args);
+        };
+    })();
   </script>
 </body>
 
