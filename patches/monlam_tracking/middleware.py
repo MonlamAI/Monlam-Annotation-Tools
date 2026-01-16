@@ -248,7 +248,7 @@ class VisibilityMiddleware:
                     
                     # Examples with no tracking record = unannotated = show to everyone (unless locked)
                     tracked_ids = set(t.example_id for t in all_tracking)
-                    untracked_ids = all_example_ids - tracked_ids
+                    untracked_ids = set(all_example_ids) - tracked_ids
                     
                     # Final visible IDs: (explicitly shown + untracked) - explicitly hidden - locked by others
                     final_visible_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids) - visible_locked_by_others
