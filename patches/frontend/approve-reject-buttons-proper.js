@@ -269,9 +269,7 @@
     }
     
     async function handleReject(projectId, exampleId, approveBtn, rejectBtn) {
-        const notes = prompt('Please provide a reason for rejection:');
-        if (!notes) return;
-        
+        // No prompt - reject directly without asking for notes
         rejectBtn.disabled = true;
         rejectBtn.textContent = '⏳ Rejecting...';
         rejectBtn.style.opacity = '0.7';
@@ -283,7 +281,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken()
                 },
-                body: JSON.stringify({ review_notes: notes })
+                body: JSON.stringify({ review_notes: '' })
             });
             
             if (response.ok) {
@@ -298,7 +296,8 @@
                     if (nextBtn) nextBtn.click();
                 }, 1000);
             } else {
-                throw new Error('Reject failed');
+                const data = await response.json();
+                throw new Error(data.error || 'Reject failed');
             }
         } catch (error) {
             console.error('[Monlam Approve] Error:', error);

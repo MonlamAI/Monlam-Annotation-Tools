@@ -1104,11 +1104,16 @@
                     }
                 }
                 
-                // Approve handler - NO notes required
+                // Approve handler - NO notes required, NO popup
                 approveBtn.onclick = async () => {
                     const exampleId = getCurrentExampleId();
                     if (!exampleId) {
-                        alert('Cannot find example ID. Please ensure an example is loaded.');
+                        // Show subtle notification instead of alert
+                        const notification = document.createElement('div');
+                        notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #ff9800; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                        notification.textContent = 'Cannot find example ID. Please ensure an example is loaded.';
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 3000);
                         return;
                     }
                     
@@ -1129,24 +1134,44 @@
                         const data = await resp.json();
                         
                         if (resp.ok) {
-                            alert('✅ Example approved successfully!');
+                            // Show subtle notification instead of alert
+                            const notification = document.createElement('div');
+                            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #4caf50; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                            notification.textContent = '✅ Example approved successfully!';
+                            document.body.appendChild(notification);
+                            setTimeout(() => notification.remove(), 2000);
                             updateStatus();
                         } else {
-                            alert('❌ Error: ' + (data.error || 'Unknown error'));
+                            // Show error notification instead of alert
+                            const notification = document.createElement('div');
+                            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #f44336; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                            notification.textContent = '❌ ' + (data.error || 'Unknown error');
+                            document.body.appendChild(notification);
+                            setTimeout(() => notification.remove(), 4000);
                         }
                     } catch (error) {
-                        alert('❌ Network error: ' + error.message);
+                        // Show error notification instead of alert
+                        const notification = document.createElement('div');
+                        notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #f44336; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                        notification.textContent = '❌ Network error: ' + error.message;
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 4000);
                     } finally {
                         approveBtn.disabled = false;
                         approveBtn.textContent = '✓ Approve';
                     }
                 };
                 
-                // Reject handler - no prompt, direct action
+                // Reject handler - no prompt, direct action, NO popup
                 rejectBtn.onclick = async () => {
                     const exampleId = getCurrentExampleId();
                     if (!exampleId) {
-                        alert('Cannot find example ID. Please ensure an example is loaded.');
+                        // Show subtle notification instead of alert
+                        const notification = document.createElement('div');
+                        notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #ff9800; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                        notification.textContent = 'Cannot find example ID. Please ensure an example is loaded.';
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 3000);
                         return;
                     }
                     
@@ -1171,13 +1196,23 @@
                             notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #ff9800; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
                             notification.textContent = '✅ Example rejected. Annotator will see it again for revision.';
                             document.body.appendChild(notification);
-                            setTimeout(() => notification.remove(), 3000);
+                            setTimeout(() => notification.remove(), 2000);
                             updateStatus();
                         } else {
-                            alert('❌ Error: ' + (data.error || 'Unknown error'));
+                            // Show error notification instead of alert
+                            const notification = document.createElement('div');
+                            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #f44336; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                            notification.textContent = '❌ ' + (data.error || 'Unknown error');
+                            document.body.appendChild(notification);
+                            setTimeout(() => notification.remove(), 4000);
                         }
                     } catch (error) {
-                        alert('❌ Network error: ' + error.message);
+                        // Show error notification instead of alert
+                        const notification = document.createElement('div');
+                        notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #f44336; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                        notification.textContent = '❌ Network error: ' + error.message;
+                        document.body.appendChild(notification);
+                        setTimeout(() => notification.remove(), 4000);
                     } finally {
                         rejectBtn.disabled = false;
                         rejectBtn.textContent = '✗ Reject';

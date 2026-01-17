@@ -21,6 +21,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db import transaction
 from .simple_tracking import AnnotationTracking
+from .completion_tracking import ApproverCompletionStatus
+from .roles import ROLE_PROJECT_ADMIN, ROLE_ANNOTATION_APPROVER, ROLE_PROJECT_MANAGER
 
 
 def has_approve_permission(user, project_id):
@@ -52,6 +54,22 @@ def has_approve_permission(user, project_id):
     except Exception as e:
         print(f'[Monlam] Permission check error: {e}')
         return False
+
+
+def _get_user_role(user, project):
+    """Get user's role in the project."""
+    from projects.models import Member
+    try:
+        member = Member.objects.filter(user=user, project=project).select_related('role').first()
+        if member and member.role:
+            role_name = member.role.name.lower() if member.role.name else None
+            # Normalize: replace spaces with underscores for consistency
+            if role_name:
+                role_name = role_name.replace(' ', '_')
+            return role_name
+    except Exception as e:
+        print(f'[Monlam Tracking] Error getting user role: {e}')
+    return None
 
 
 class AnnotationTrackingViewSet(viewsets.ViewSet):
@@ -141,8 +159,15 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             "review_notes": "Looks good!"
         }
         
+        Rules:
+        - Annotation approvers can approve ONLY if example is submitted by annotator
+        - Project admins can ONLY approve if an annotation_approver has already approved
+        - Project managers can always approve
         Requires: project_admin, annotation_approver, or project_manager role
         """
+        from examples.models import Example
+        from projects.models import Project
+        
         # Check permission
         if not has_approve_permission(request.user, project_id):
             return Response(
@@ -151,8 +176,91 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Get project and example
+        try:
+            project = Project.objects.get(pk=project_id)
+            example = Example.objects.get(pk=pk, project=project)
+        except (Project.DoesNotExist, Example.DoesNotExist):
+            return Response(
+                {'error': 'Project or example not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get user's role
+        user_role = _get_user_role(request.user, project)
+        
+        # If role is None, deny access (shouldn't happen if has_approve_permission passed, but be safe)
+        if not user_role:
+            return Response(
+                {'error': 'Unable to determine your role. Please contact an administrator.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Project managers can always approve (no restrictions)
+        if user_role == ROLE_PROJECT_MANAGER:
+            # Skip validation, allow approval
+            pass
+        # Check if example is submitted (for annotation_approvers)
+        elif user_role == ROLE_ANNOTATION_APPROVER:
+            # Check if example has been submitted
+            is_submitted = False
+            
+            # Check AnnotationTracking status
+            tracking_check = AnnotationTracking.objects.filter(
+                project=project,
+                example=example
+            ).first()
+            
+            if tracking_check and tracking_check.status == 'submitted':
+                is_submitted = True
+            else:
+                # Also check Assignment status as fallback
+                from .models_separate import Assignment
+                assignment = Assignment.objects.filter(
+                    project=project,
+                    example=example,
+                    is_active=True
+                ).first()
+                
+                if assignment and assignment.status == 'submitted':
+                    is_submitted = True
+            
+            if not is_submitted:
+                return Response(
+                    {
+                        'error': 'Annotation approvers can only approve examples that have been submitted by annotators.',
+                        'requires_submission': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # If user is project_admin, check if annotation_approver has approved
+        elif user_role == ROLE_PROJECT_ADMIN:
+            # Get all approvals for this example
+            all_approvals = ApproverCompletionStatus.objects.filter(
+                example=example
+            ).select_related('approver')
+            
+            # Check if any annotation_approver has approved
+            annotation_approver_approved = False
+            for ap in all_approvals:
+                approver_role = _get_user_role(ap.approver, project)
+                if approver_role == ROLE_ANNOTATION_APPROVER and ap.status == 'approved':
+                    annotation_approver_approved = True
+                    break
+            
+            if not annotation_approver_approved:
+                return Response(
+                    {
+                        'error': 'Project admins can only approve examples that have been approved by an annotation approver first.',
+                        'requires_approver_approval': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
         try:
             with transaction.atomic():
+                # Update AnnotationTracking
                 tracking, created = AnnotationTracking.objects.get_or_create(
                     project_id=project_id,
                     example_id=pk,
@@ -170,6 +278,15 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     tracking.reviewed_at = timezone.now()
                     tracking.review_notes = request.data.get('review_notes', '')
                     tracking.save()
+                
+                # Also update ApproverCompletionStatus for consistency
+                from .completion_tracking import CompletionMatrixUpdater
+                CompletionMatrixUpdater.update_approver_status(
+                    example=example,
+                    approver=request.user,
+                    status_choice='approved',
+                    notes=request.data.get('review_notes', '')
+                )
                 
                 return Response({
                     'success': True,
@@ -194,8 +311,15 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             "review_notes": "Needs correction (optional)"
         }
         
+        Rules:
+        - Annotation approvers can reject ONLY if example is submitted by annotator
+        - Project admins can ONLY reject if an annotation_approver has already approved
+        - Project managers can always reject
         Requires: project_admin, annotation_approver, or project_manager role
         """
+        from examples.models import Example
+        from projects.models import Project
+        
         # Check permission
         if not has_approve_permission(request.user, project_id):
             return Response(
@@ -204,11 +328,94 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Get project and example
+        try:
+            project = Project.objects.get(pk=project_id)
+            example = Example.objects.get(pk=pk, project=project)
+        except (Project.DoesNotExist, Example.DoesNotExist):
+            return Response(
+                {'error': 'Project or example not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get user's role
+        user_role = _get_user_role(request.user, project)
+        
+        # If role is None, deny access (shouldn't happen if has_approve_permission passed, but be safe)
+        if not user_role:
+            return Response(
+                {'error': 'Unable to determine your role. Please contact an administrator.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Project managers can always reject (no restrictions)
+        if user_role == ROLE_PROJECT_MANAGER:
+            # Skip validation, allow rejection
+            pass
+        # Check if example is submitted (for annotation_approvers)
+        elif user_role == ROLE_ANNOTATION_APPROVER:
+            # Check if example has been submitted
+            is_submitted = False
+            
+            # Check AnnotationTracking status
+            tracking_check = AnnotationTracking.objects.filter(
+                project=project,
+                example=example
+            ).first()
+            
+            if tracking_check and tracking_check.status == 'submitted':
+                is_submitted = True
+            else:
+                # Also check Assignment status as fallback
+                from .models_separate import Assignment
+                assignment = Assignment.objects.filter(
+                    project=project,
+                    example=example,
+                    is_active=True
+                ).first()
+                
+                if assignment and assignment.status == 'submitted':
+                    is_submitted = True
+            
+            if not is_submitted:
+                return Response(
+                    {
+                        'error': 'Annotation approvers can only reject examples that have been submitted by annotators.',
+                        'requires_submission': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # If user is project_admin, check if annotation_approver has approved
+        elif user_role == ROLE_PROJECT_ADMIN:
+            # Get all approvals for this example
+            all_approvals = ApproverCompletionStatus.objects.filter(
+                example=example
+            ).select_related('approver')
+            
+            # Check if any annotation_approver has approved
+            annotation_approver_approved = False
+            for ap in all_approvals:
+                approver_role = _get_user_role(ap.approver, project)
+                if approver_role == ROLE_ANNOTATION_APPROVER and ap.status == 'approved':
+                    annotation_approver_approved = True
+                    break
+            
+            if not annotation_approver_approved:
+                return Response(
+                    {
+                        'error': 'Project admins can only reject examples that have been approved by an annotation approver first.',
+                        'requires_approver_approval': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
         review_notes = request.data.get('review_notes', '')
         # Notes are now optional for rejection
         
         try:
             with transaction.atomic():
+                # Update AnnotationTracking
                 tracking, created = AnnotationTracking.objects.get_or_create(
                     project_id=project_id,
                     example_id=pk,
@@ -226,6 +433,15 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     tracking.reviewed_at = timezone.now()
                     tracking.review_notes = review_notes
                     tracking.save()
+                
+                # Also update ApproverCompletionStatus for consistency
+                from .completion_tracking import CompletionMatrixUpdater
+                CompletionMatrixUpdater.update_approver_status(
+                    example=example,
+                    approver=request.user,
+                    status_choice='rejected',
+                    notes=review_notes
+                )
                 
                 return Response({
                     'success': True,
