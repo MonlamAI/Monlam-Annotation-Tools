@@ -77,6 +77,24 @@ def track_annotation_saved(sender, instance, created, **kwargs):
         elif tracking_created:
             print(f'[Monlam Signals] ✅ Created tracking for example {example.id}')
         
+        # Also create ExampleState to mark as confirmed (for tick mark in UI)
+        # This ensures the example shows as completed/confirmed in Doccano's native UI
+        if tracking.annotated_by:
+            try:
+                from examples.models import ExampleState
+                # Use example as lookup, update confirmed_by and confirmed_at
+                ExampleState.objects.update_or_create(
+                    example=example,
+                    defaults={
+                        'confirmed_by': tracking.annotated_by,
+                        'confirmed_at': tracking.annotated_at or timezone.now()
+                    }
+                )
+                print(f'[Monlam Signals] ✅ Created/Updated ExampleState for example {example.id}')
+            except Exception as e:
+                print(f'[Monlam Signals] ⚠️ Could not create ExampleState: {e}')
+                # Don't fail the whole signal if ExampleState creation fails
+        
     except Exception as e:
         print(f'[Monlam Signals] ⚠️ Tracking failed: {e}')
 

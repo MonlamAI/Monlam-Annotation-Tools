@@ -129,6 +129,26 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 if needs_save:
                     tracking.save()
                 
+                # Also create ExampleState to mark as confirmed (for tick mark in UI)
+                # This ensures the example shows as completed/confirmed in Doccano's native UI
+                if tracking.annotated_by:
+                    try:
+                        from examples.models import ExampleState
+                        from examples.models import Example
+                        example = Example.objects.get(pk=example_id)
+                        # Use example as lookup, update confirmed_by and confirmed_at
+                        ExampleState.objects.update_or_create(
+                            example=example,
+                            defaults={
+                                'confirmed_by': tracking.annotated_by,
+                                'confirmed_at': tracking.annotated_at or timezone.now()
+                            }
+                        )
+                        print(f'[Monlam Tracking] ✅ Created/Updated ExampleState for example {example_id}')
+                    except Exception as e:
+                        print(f'[Monlam Tracking] ⚠️ Could not create ExampleState: {e}')
+                        # Don't fail the whole request if ExampleState creation fails
+                
                 # Calculate time spent for new records too
                 time_spent = None
                 if tracking.started_at and tracking.annotated_at:
