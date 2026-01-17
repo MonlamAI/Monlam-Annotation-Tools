@@ -77,23 +77,53 @@ def track_annotation_saved(sender, instance, created, **kwargs):
         elif tracking_created:
             print(f'[Monlam Signals] ✅ Created tracking for example {example.id}')
         
-        # Also create ExampleState to mark as confirmed (for tick mark in UI)
-        # This ensures the example shows as completed/confirmed in Doccano's native UI
+        # CRITICAL: Also create ExampleState to mark as confirmed (same as tick mark)
+        # This ensures Enter key and tick mark both create ExampleState
+        # This is essential for completion dashboard to show correct counts
         if tracking.annotated_by:
             try:
                 from examples.models import ExampleState
+                import traceback
+                
                 # Use example as lookup, update confirmed_by and confirmed_at
-                ExampleState.objects.update_or_create(
+                # This makes Enter key equivalent to clicking tick mark
+                state, state_created = ExampleState.objects.update_or_create(
                     example=example,
                     defaults={
                         'confirmed_by': tracking.annotated_by,
                         'confirmed_at': tracking.annotated_at or timezone.now()
                     }
                 )
-                print(f'[Monlam Signals] ✅ Created/Updated ExampleState for example {example.id}')
+                
+                if state_created:
+                    print(f'[Monlam Signals] ✅ Created ExampleState for example {example.id} (Enter key pressed)')
+                else:
+                    print(f'[Monlam Signals] ✅ Updated ExampleState for example {example.id} (Enter key pressed)')
+                    
             except Exception as e:
-                print(f'[Monlam Signals] ⚠️ Could not create ExampleState: {e}')
-                # Don't fail the whole signal if ExampleState creation fails
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f'[Monlam Signals] ❌ CRITICAL: Could not create ExampleState for example {example.id}')
+                print(f'[Monlam Signals] Error: {e}')
+                print(f'[Monlam Signals] Traceback: {error_trace}')
+                # Try again with more explicit error handling
+                try:
+                    # Force create if update_or_create failed
+                    from examples.models import ExampleState
+                    ExampleState.objects.create(
+                        example=example,
+                        confirmed_by=tracking.annotated_by,
+                        confirmed_at=tracking.annotated_at or timezone.now()
+                    )
+                    print(f'[Monlam Signals] ✅ Retry successful: Created ExampleState for example {example.id}')
+                except Exception as e2:
+                    # Check if it's because ExampleState already exists (that's okay)
+                    if 'unique constraint' in str(e2).lower() or 'already exists' in str(e2).lower():
+                        print(f'[Monlam Signals] ✅ ExampleState already exists for example {example.id} (this is okay)')
+                    else:
+                        print(f'[Monlam Signals] ❌ Retry also failed: {e2}')
+                        print(f'[Monlam Signals] Traceback: {traceback.format_exc()}')
+                    # Don't fail the whole signal, but log the error prominently
         
     except Exception as e:
         print(f'[Monlam Signals] ⚠️ Tracking failed: {e}')

@@ -38,21 +38,67 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("DRY RUN MODE - No changes will be made"))
         self.stdout.write("=" * 80)
         
-        # Find all submitted tracking records
-        submitted_trackings = AnnotationTracking.objects.filter(
-            status='submitted',
+        # Find ALL tracking records with annotators (not just 'submitted' status)
+        # This includes 'pending', 'submitted', 'approved', 'rejected'
+        # We want to ensure all examples that have been annotated also have ExampleState
+        all_trackings = AnnotationTracking.objects.filter(
             annotated_by__isnull=False
         ).select_related('example', 'annotated_by')
         
-        total_count = submitted_trackings.count()
-        self.stdout.write(f"\nFound {total_count} submitted examples to check\n")
+        # Also find ExampleState records that might not have AnnotationTracking
+        # This handles cases where tick mark was clicked but no annotation was created
+        all_example_states = ExampleState.objects.filter(
+            confirmed_by__isnull=False
+        ).select_related('example', 'confirmed_by')
+        
+        total_trackings = all_trackings.count()
+        total_states = all_example_states.count()
+        
+        self.stdout.write(f"\nFound {total_trackings} AnnotationTracking records with annotators")
+        self.stdout.write(f"Found {total_states} ExampleState records")
+        
+        # Get set of example IDs that already have ExampleState
+        examples_with_state = set(
+            ExampleState.objects.filter(confirmed_by__isnull=False).values_list('example_id', flat=True)
+        )
+        
+        # Find trackings that need ExampleState created
+        trackings_needing_state = [
+            t for t in all_trackings 
+            if t.example_id not in examples_with_state
+        ]
+        
+        total_count = len(trackings_needing_state)
+        self.stdout.write(f"Found {total_count} AnnotationTracking records WITHOUT ExampleState\n")
+        
+        # Diagnostic: Show status breakdown
+        if verbose:
+            from django.db.models import Count
+            status_breakdown = AnnotationTracking.objects.filter(
+                annotated_by__isnull=False
+            ).values('status').annotate(count=Count('id')).order_by('status')
+            
+            self.stdout.write("\nStatus breakdown of AnnotationTracking records:")
+            for item in status_breakdown:
+                self.stdout.write(f"  {item['status']}: {item['count']}")
+            
+            # Show how many have ExampleState vs don't
+            tracking_with_state = AnnotationTracking.objects.filter(
+                annotated_by__isnull=False,
+                example_id__in=examples_with_state
+            ).count()
+            tracking_without_state = total_trackings - tracking_with_state
+            self.stdout.write(f"\nAnnotationTracking records:")
+            self.stdout.write(f"  With ExampleState: {tracking_with_state}")
+            self.stdout.write(f"  Without ExampleState: {tracking_without_state}")
+            self.stdout.write("")
         
         created_count = 0
         updated_count = 0
         skipped_count = 0
         error_count = 0
         
-        for tracking in submitted_trackings:
+        for tracking in trackings_needing_state:
             try:
                 example = tracking.example
                 annotated_by = tracking.annotated_by
