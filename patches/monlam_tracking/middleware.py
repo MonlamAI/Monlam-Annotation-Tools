@@ -254,43 +254,51 @@ class VisibilityMiddleware:
                     final_visible_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids) - visible_locked_by_others
                     
                     if final_visible_ids:
-                        # Get the first visible example
-                        first_visible_id = list(final_visible_ids)[0]
-                        first_example = Example.objects.filter(id=first_visible_id).select_related('project').first()
-                        if first_example:
+                        # Try each visible example until we find one that passes the visibility check
+                        found_valid_example = False
+                        for visible_id in list(final_visible_ids)[:10]:  # Try up to 10 examples to avoid performance issues
+                            example_obj = Example.objects.filter(id=visible_id).select_related('project').first()
+                            if not example_obj:
+                                continue
+                            
                             # Get tracking and confirmed data for this specific example to verify visibility
                             example_tracking_obj = AnnotationTracking.objects.filter(
                                 project_id=project_id,
-                                example_id=first_visible_id
+                                example_id=visible_id
                             ).select_related('locked_by').first()
                             
                             example_confirmed_state = ExampleState.objects.filter(
-                                example_id=first_visible_id
+                                example_id=visible_id
                             ).select_related('confirmed_by').first()
                             example_confirmed_by = example_confirmed_state.confirmed_by if example_confirmed_state else None
                             
                             # Verify it passes the visibility check before returning
-                            if self._should_show_example(first_visible_id, example_confirmed_by, example_tracking_obj, user):
+                            if self._should_show_example(visible_id, example_confirmed_by, example_tracking_obj, user):
                                 # Use Doccano's serializer if available
                                 try:
                                     from examples.serializers import ExampleSerializer
-                                    serializer = ExampleSerializer(first_example)
+                                    serializer = ExampleSerializer(example_obj)
                                     example_dict = serializer.data
                                 except (ImportError, AttributeError):
                                     # Fallback: basic serialization
                                     example_dict = {
-                                        'id': first_example.id,
-                                        'text': getattr(first_example, 'text', ''),
-                                        'meta': getattr(first_example, 'meta', {}),
-                                        'annotation_approver': getattr(first_example, 'annotation_approver_id', None),
-                                        'created_at': first_example.created_at.isoformat() if hasattr(first_example, 'created_at') and first_example.created_at else None,
-                                        'updated_at': first_example.updated_at.isoformat() if hasattr(first_example, 'updated_at') and first_example.updated_at else None,
+                                        'id': example_obj.id,
+                                        'text': getattr(example_obj, 'text', ''),
+                                        'meta': getattr(example_obj, 'meta', {}),
+                                        'annotation_approver': getattr(example_obj, 'annotation_approver_id', None),
+                                        'created_at': example_obj.created_at.isoformat() if hasattr(example_obj, 'created_at') and example_obj.created_at else None,
+                                        'updated_at': example_obj.updated_at.isoformat() if hasattr(example_obj, 'updated_at') and example_obj.updated_at else None,
                                     }
                                 
                                 filtered_results = [example_dict]
-                                log(f'[Monlam Middleware] ✅ Returned first visible example (ID: {first_visible_id}) verified by visibility check')
+                                log(f'[Monlam Middleware] ✅ Returned visible example (ID: {visible_id}) verified by visibility check')
+                                found_valid_example = True
+                                break
                             else:
-                                log(f'[Monlam Middleware] ⚠️ Example {first_visible_id} failed visibility check, skipping')
+                                log(f'[Monlam Middleware] ⚠️ Example {visible_id} failed visibility check, trying next...')
+                        
+                        if not found_valid_example:
+                            log(f'[Monlam Middleware] ⚠️ No visible examples passed visibility check after checking {min(10, len(final_visible_ids))} examples')
                     else:
                         log(f'[Monlam Middleware] ⚠️ No visible examples found using ExampleVisibilityMixin logic')
                 except Exception as e:
