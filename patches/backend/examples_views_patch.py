@@ -103,8 +103,8 @@ class ExampleVisibilityMixin:
             project_id=project_id
         ).select_related('annotated_by', 'reviewed_by', 'locked_by')
         
-        # Get all example IDs in this project (queryset is already filtered by project from super())
-        all_example_ids = set(queryset.values_list('id', flat=True))
+        # Get all example IDs in this project - EXPLICITLY filter by project_id to prevent cross-project contamination
+        all_example_ids = set(queryset.filter(project_id=project_id).values_list('id', flat=True))
         
         if not all_example_ids:
             # No examples in project, return empty
@@ -196,13 +196,14 @@ class ExampleVisibilityMixin:
         if not final_ids and all_example_ids:
             print(f'[ExampleVisibilityMixin] ⚠️ CRITICAL: No examples visible but project has {len(all_example_ids)} examples!', file=sys.stderr, flush=True)
             print(f'[ExampleVisibilityMixin] ⚠️ Returning all examples to prevent empty page (filtering may have bug)', file=sys.stderr, flush=True)
-            # Return queryset filtered only by locked examples (safety fallback)
-            return queryset.exclude(id__in=locked_by_others)
+            # Return queryset filtered by project and exclude locked examples (safety fallback)
+            return queryset.filter(project_id=project_id).exclude(id__in=locked_by_others)
         
         # If project has no examples, return empty
         if not final_ids:
             print(f'[ExampleVisibilityMixin] ⚠️ No examples visible to user {user.username} (project may be empty)', file=sys.stderr, flush=True)
             return queryset.none()
         
-        return queryset.filter(id__in=final_ids)
+        # Filter by project_id AND final_ids to ensure we only return examples from this project
+        return queryset.filter(project_id=project_id, id__in=final_ids)
 
