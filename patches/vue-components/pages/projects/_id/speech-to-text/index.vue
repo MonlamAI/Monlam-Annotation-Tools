@@ -17,7 +17,12 @@
       <v-overlay :value="isLoading">
         <v-progress-circular indeterminate size="64" />
       </v-overlay>
-      <audio-viewer :source="example.url" class="mb-5" />
+      <audio-viewer 
+        :source="example.url" 
+        :project-id="projectId"
+        :example-id="example.id"
+        class="mb-5" 
+      />
       <seq2seq-box
         :text="example.text"
         :annotations="labels"

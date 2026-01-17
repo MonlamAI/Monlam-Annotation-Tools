@@ -39,16 +39,32 @@
         />
       </v-col>
     </v-row>
-    <v-btn color="primary" class="text-capitalize" @click="play">
-      <v-icon v-if="!isPlaying" left>
-        {{ mdiPlayCircleOutline }}
-      </v-icon>
-      <v-icon v-else left>
-        {{ mdiPauseCircleOutline }}
-      </v-icon>
-      <span v-if="!isPlaying">Play</span>
-      <span v-else>Pause</span>
-    </v-btn>
+    <div class="d-flex align-center flex-wrap" style="gap: 12px;">
+      <v-btn color="primary" class="text-capitalize" @click="play">
+        <v-icon v-if="!isPlaying" left>
+          {{ mdiPlayCircleOutline }}
+        </v-icon>
+        <v-icon v-else left>
+          {{ mdiPauseCircleOutline }}
+        </v-icon>
+        <span v-if="!isPlaying">Play</span>
+        <span v-else>Pause</span>
+      </v-btn>
+      
+      <!-- Status Card -->
+      <v-chip
+        v-if="showStatusCard"
+        :color="statusCardColor"
+        text-color="white"
+        small
+        outlined
+        class="status-chip"
+        style="max-width: 300px;"
+      >
+        <v-icon left small>{{ statusIcon }}</v-icon>
+        <span class="status-text">{{ statusText }}</span>
+      </v-chip>
+    </div>
     <v-checkbox
       v-model="autoLoop"
       label="Auto Loop"
@@ -76,6 +92,14 @@ export default Vue.extend({
       type: String,
       default: '',
       required: true
+    },
+    projectId: {
+      type: [String, Number],
+      default: null
+    },
+    exampleId: {
+      type: [String, Number],
+      default: null
     }
   },
 
@@ -92,7 +116,104 @@ export default Vue.extend({
       mdiPauseCircleOutline,
       mdiVolumeHigh,
       mdiMagnifyPlusOutline,
-      mdiMagnifyMinusOutline
+      mdiMagnifyMinusOutline,
+      // Status card data
+      statusData: null,
+      userRole: null,
+      submittedBy: null,
+      approvedBy: null,
+      isLoadingStatus: false
+    }
+  },
+
+  computed: {
+    showStatusCard() {
+      // Show card if we have projectId and exampleId
+      if (!this.projectId || !this.exampleId) return false
+      
+      // For annotators: Only show if submitted
+      if (this.userRole === 'annotator' || (!this.userRole && !this.statusData)) {
+        return this.statusData && this.statusData.is_submitted
+      }
+      
+      // For approvers and admins: Always show
+      return true
+    },
+    
+    statusText() {
+      if (!this.statusData) return ''
+      
+      // For annotators: Only show "Submitted" if they've submitted
+      if (this.userRole === 'annotator' || !this.userRole) {
+        if (this.statusData.is_submitted) {
+          return 'Submitted'
+        }
+        return '' // Empty for annotators who haven't submitted
+      }
+      
+      // For annotation approvers: Show who submitted
+      if (this.userRole === 'annotation_approver') {
+        if (this.submittedBy) {
+          return `Submitted by: ${this.submittedBy}`
+        }
+        return 'Not submitted yet'
+      }
+      
+      // For project admins: Show who submitted AND who approved
+      if (this.userRole === 'project_admin') {
+        const parts = []
+        if (this.submittedBy) {
+          parts.push(`Submitted: ${this.submittedBy}`)
+        }
+        if (this.approvedBy) {
+          parts.push(`Approved: ${this.approvedBy}`)
+        }
+        if (parts.length === 0) {
+          return 'Not submitted yet'
+        }
+        return parts.join(' | ')
+      }
+      
+      // For project managers: Same as admin
+      if (this.userRole === 'project_manager') {
+        const parts = []
+        if (this.submittedBy) {
+          parts.push(`Submitted: ${this.submittedBy}`)
+        }
+        if (this.approvedBy) {
+          parts.push(`Approved: ${this.approvedBy}`)
+        }
+        if (parts.length === 0) {
+          return 'Not submitted yet'
+        }
+        return parts.join(' | ')
+      }
+      
+      return ''
+    },
+    
+    statusIcon() {
+      if (!this.statusData) return 'mdi-information-outline'
+      
+      if (this.approvedBy) {
+        return 'mdi-check-circle'
+      }
+      if (this.submittedBy) {
+        return 'mdi-clock-outline'
+      }
+      return 'mdi-information-outline'
+    },
+    
+    statusCardColor() {
+      if (!this.statusData) return 'grey'
+      
+      if (this.approvedBy) {
+        return 'success'
+      }
+      if (this.submittedBy) {
+        return 'info'
+      }
+      return 'grey'
     }
   },
 
@@ -100,6 +221,16 @@ export default Vue.extend({
     source() {
       this.load()
       this.isPlaying = false
+    },
+    exampleId() {
+      if (this.projectId && this.exampleId) {
+        this.fetchStatusData()
+      }
+    },
+    projectId() {
+      if (this.projectId && this.exampleId) {
+        this.fetchStatusData()
+      }
     }
   },
 
@@ -128,6 +259,11 @@ export default Vue.extend({
     this.wavesurfer.on('play', () => {
       this.isPlaying = true
     })
+    
+    // Fetch status data if projectId and exampleId are provided
+    if (this.projectId && this.exampleId) {
+      this.fetchStatusData()
+    }
   },
 
   methods: {
@@ -154,7 +290,81 @@ export default Vue.extend({
     },
     onChangeSpeed(value) {
       this.wavesurfer.setPlaybackRate(value)
+    },
+    
+    async fetchStatusData() {
+      if (!this.projectId || !this.exampleId) return
+      
+      this.isLoadingStatus = true
+      
+      try {
+        // Fetch approval status
+        const approvalResp = await fetch(
+          `/v1/projects/${this.projectId}/assignments/approver-completion/${this.exampleId}/`
+        )
+        
+        if (approvalResp.ok) {
+          const approvalData = await approvalResp.json()
+          this.statusData = approvalData
+          this.userRole = approvalData.user_role || null
+          
+          // Extract submitted by from tracking API
+          try {
+            const trackingResp = await fetch(
+              `/v1/projects/${this.projectId}/tracking/${this.exampleId}/status/`
+            )
+            if (trackingResp.ok) {
+              const trackingData = await trackingResp.json()
+              this.submittedBy = trackingData.annotated_by || null
+            }
+          } catch (e) {
+            console.error('[AudioViewer] Error fetching tracking status:', e)
+          }
+          
+          // Extract approved by from approval chain
+          if (approvalData.all_approvals && approvalData.all_approvals.length > 0) {
+            // Find the first annotation_approver who approved
+            const approverApproval = approvalData.all_approvals.find(
+              ap => ap.approver_role === 'annotation_approver' && ap.status === 'approved'
+            )
+            if (approverApproval) {
+              this.approvedBy = approverApproval.approver_username
+            }
+          }
+        } else if (approvalResp.status === 403 || approvalResp.status === 404) {
+          // User doesn't have permission or endpoint doesn't exist - silently fail
+          this.statusData = null
+        }
+      } catch (error) {
+        console.error('[AudioViewer] Error fetching status:', error)
+        this.statusData = null
+      } finally {
+        this.isLoadingStatus = false
+      }
     }
   }
 })
 </script>
+
+<style scoped>
+.status-chip {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status-text {
+  display: inline-block;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .status-chip {
+    max-width: 200px;
+  }
+  .status-text {
+    max-width: 150px;
+  }
+}
+</style>
