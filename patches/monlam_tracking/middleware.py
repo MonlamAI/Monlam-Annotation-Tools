@@ -58,8 +58,7 @@ class VisibilityMiddleware:
     def _is_privileged_user(self, user, project_id):
         """Check if user is admin/manager/approver."""
         try:
-            from projects.models import Project
-            from roles.models import Member
+            from projects.models import Project, Member
             
             project = Project.objects.get(pk=project_id)
             
@@ -67,21 +66,33 @@ class VisibilityMiddleware:
             if project.created_by == user:
                 return True
             
-            # Check role
+            # Check role - use same logic as ExampleVisibilityMixin
             try:
-                member = Member.objects.get(user=user, project=project)
-                role_name = member.role.name.lower() if member.role.name else ''
-                
-                # Privileged roles
-                if 'admin' in role_name or 'manager' in role_name or 'approver' in role_name:
-                    return True
+                member = Member.objects.filter(project=project, user=user).first()
+                if member and member.role:
+                    role_name = member.role.name.lower() if member.role.name else ''
                     
-            except Member.DoesNotExist:
+                    # Privileged roles (same as ExampleVisibilityMixin)
+                    # Check for: admin, manager, approver, annotation_approver
+                    is_privileged = (
+                        'admin' in role_name or 
+                        'manager' in role_name or 
+                        'approver' in role_name or
+                        role_name == 'annotation_approver'
+                    )
+                    if is_privileged:
+                        log(f'[Monlam Middleware] User {user.username} is privileged ({role_name}) - skipping filtering')
+                        return True
+                    
+            except Exception as e:
+                log(f'[Monlam Middleware] Error checking member role: {e}')
                 pass
             
             return False
             
-        except Exception:
+        except Exception as e:
+            log(f'[Monlam Middleware] Error in _is_privileged_user: {e}')
+            # On error, assume not privileged (safer - will filter)
             return False
     
     def _filter_response(self, response, user, project_id):
