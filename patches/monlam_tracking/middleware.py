@@ -48,7 +48,12 @@ class VisibilityMiddleware:
             if match:
                 project_id = int(match.group(1))
                 
-                # Skip filtering for privileged users
+                # Skip filtering for superusers (Django admins) - they see everything
+                if request.user.is_superuser:
+                    log(f'[Monlam Middleware] User {request.user.username} is superuser - skipping filtering')
+                    return response
+                
+                # Skip filtering for privileged users (project admins, managers, approvers)
                 if not self._is_privileged_user(request.user, project_id):
                     # Filter the response to hide locked examples
                     response = self._filter_response(response, request.user, project_id)

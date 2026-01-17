@@ -17,6 +17,19 @@ from django.shortcuts import redirect
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
+# Import role constants for consistency
+try:
+    from assignment.roles import (
+        ROLE_PROJECT_ADMIN,
+        ROLE_ANNOTATION_APPROVER,
+        ROLE_PROJECT_MANAGER
+    )
+except ImportError:
+    # Fallback if import fails
+    ROLE_PROJECT_ADMIN = 'project_admin'
+    ROLE_ANNOTATION_APPROVER = 'annotation_approver'
+    ROLE_PROJECT_MANAGER = 'project_manager'
+
 
 class DatasetRedirectView(View):
     """
@@ -178,10 +191,13 @@ def annotation_with_approval(request, project_id, example_id):
     - Approval status chain (Annotator → Approver → Project Manager)
     - Approve/Reject buttons for approvers and project managers
     - Audio auto-loop for STT projects
+    - Multi-level approval status (annotation_approver and project_admin)
     """
     from projects.models import Project, Member
     from examples.models import Example
     from assignment.models_separate import Assignment
+    from assignment.completion_tracking import ApproverCompletionStatus
+    import json
     
     project = get_object_or_404(Project, pk=project_id)
     example = get_object_or_404(Example, pk=example_id, project=project)
@@ -197,12 +213,107 @@ def annotation_with_approval(request, project_id, example_id):
     except Assignment.DoesNotExist:
         assignment = None
     
+    # Get all approver completions for this example (multi-level approval)
+    all_approvals = ApproverCompletionStatus.objects.filter(
+        example=example
+    ).select_related('approver').order_by('-reviewed_at')
+    
+    # Build approvals list with role information
+    approvals_list = []
+    annotation_approver_approved = False
+    project_admin_approved = False
+    
+    for ap in all_approvals:
+        # Get approver's role
+        try:
+            member = Member.objects.filter(project=project, user=ap.approver).select_related('role').first()
+            approver_role = member.role.name.lower() if member and member.role else None
+        except Exception:
+            approver_role = None
+        
+        approvals_list.append({
+            'approver_id': ap.approver.id,
+            'approver_username': ap.approver.username,
+            'approver_role': approver_role or 'unknown',
+            'status': ap.status,
+            'reviewed_at': ap.reviewed_at.isoformat() if ap.reviewed_at else None,
+            'review_notes': ap.review_notes or ''
+        })
+        
+        # Check if annotation_approver has approved
+        if approver_role == ROLE_ANNOTATION_APPROVER and ap.status == 'approved':
+            annotation_approver_approved = True
+        
+        # Check if project_admin has approved
+        if approver_role == ROLE_PROJECT_ADMIN and ap.status == 'approved':
+            project_admin_approved = True
+    
+    # Check if example is submitted
+    is_submitted = False
+    if assignment and assignment.status == 'submitted':
+        is_submitted = True
+    else:
+        # Also check AnnotationTracking status
+        from assignment.simple_tracking import AnnotationTracking
+        tracking = AnnotationTracking.objects.filter(
+            project=project,
+            example=example
+        ).first()
+        if tracking and tracking.status == 'submitted':
+            is_submitted = True
+    
+    # Check if current user can approve (is approver or admin)
+    can_approve = False
+    user_role = None
+    can_review_now = False
+    try:
+        member = Member.objects.filter(project=project, user=request.user).select_related('role').first()
+        if member and member.role:
+            user_role = member.role.name.lower()
+            can_approve = any(r in user_role for r in ['approver', 'manager', 'admin'])
+            
+            # Check if user can review now (with role-specific rules)
+            if can_approve:
+                if user_role == ROLE_PROJECT_ADMIN:
+                    # Project admin can only review if annotation_approver has approved
+                    can_review_now = annotation_approver_approved
+                elif user_role == ROLE_ANNOTATION_APPROVER:
+                    # Annotation approvers can only review if example is submitted
+                    can_review_now = is_submitted
+                elif user_role == ROLE_PROJECT_MANAGER:
+                    # Project managers can always review
+                    can_review_now = True
+                else:
+                    # Other roles (shouldn't reach here, but safe fallback)
+                    can_review_now = False
+    except Exception:
+        pass
+    
+    # Check if current user has already approved/rejected
+    current_user_approval = None
+    for ap in all_approvals:
+        if ap.approver == request.user:
+            current_user_approval = {
+                'status': ap.status,
+                'reviewed_at': ap.reviewed_at.isoformat() if ap.reviewed_at else None,
+                'review_notes': ap.review_notes
+            }
+            break
+    
     context = {
         'project': project,
         'example': example,
         'assignment': assignment,
         'project_id': project_id,
         'example_id': example_id,
+        'all_approvals': json.dumps(approvals_list),
+        'annotation_approver_approved': annotation_approver_approved,
+        'project_admin_approved': project_admin_approved,
+        'can_approve': can_approve,
+        'user_role': user_role,
+        'can_review_now': can_review_now,
+        'is_submitted': is_submitted,
+        'current_user_approval': json.dumps(current_user_approval) if current_user_approval else None,
     }
     
     return render(request, 'monlam_ui/annotation_with_approval.html', context)
@@ -481,7 +592,7 @@ def has_analytics_access(user):
         
         # Get role IDs for privileged roles
         privileged_roles = Role.objects.filter(
-            name__in=['project_admin', 'project_manager', 'annotation_approver']
+            name__in=[ROLE_PROJECT_ADMIN, ROLE_PROJECT_MANAGER, ROLE_ANNOTATION_APPROVER]
         ).values_list('id', flat=True)
         
         # Check if user is a member with any of these roles

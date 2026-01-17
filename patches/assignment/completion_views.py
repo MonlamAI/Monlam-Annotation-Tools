@@ -25,7 +25,10 @@ from .roles import (
     IsProjectManager,
     IsApproverOrHigher,
     CanViewCompletionMatrix,
-    ProjectManagerMixin
+    ProjectManagerMixin,
+    ROLE_PROJECT_ADMIN,
+    ROLE_ANNOTATION_APPROVER,
+    ROLE_PROJECT_MANAGER
 )
 
 
@@ -388,56 +391,222 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
     ViewSet for approver completion tracking.
     
     Endpoints:
-    - GET /projects/{project_id}/approver-completion/{example_id}/ - Get status
-    - POST /projects/{project_id}/approver-completion/{example_id}/approve/ - Approve
-    - POST /projects/{project_id}/approver-completion/{example_id}/reject/ - Reject
+    - GET /projects/{project_id}/approver-completion/{example_id}/ - Get status (all authenticated users)
+    - POST /projects/{project_id}/approver-completion/{example_id}/approve/ - Approve (approvers only)
+    - POST /projects/{project_id}/approver-completion/{example_id}/reject/ - Reject (approvers only)
+    
+    Multi-level approval support:
+    - Annotation approvers can approve/reject examples
+    - Project admins can approve/reject examples even if annotation_approvers have already approved
+    - Each approver maintains their own approval record
     """
     
-    permission_classes = [IsAuthenticated, IsApproverOrHigher]
+    permission_classes = [IsAuthenticated]
     
     def get_project(self, project_id):
         """Get project and check access."""
         from projects.models import Project
         return get_object_or_404(Project, pk=project_id)
     
+    def _get_user_role(self, user, project):
+        """Get user's role in the project."""
+        from projects.models import Member
+        try:
+            member = Member.objects.filter(user=user, project=project).select_related('role').first()
+            if member and member.role:
+                return member.role.name.lower() if member.role.name else None
+        except Exception:
+            pass
+        return None
+    
     def retrieve(self, request, project_id, example_id):
-        """Get approval status for an example."""
+        """
+        Get approval status for an example.
+        Accessible to all authenticated users (to view approval chain).
+        """
         from examples.models import Example
         
         project = self.get_project(project_id)
         example = get_object_or_404(Example, pk=example_id, project=project)
         
-        # Get approval status
+        # Check if user has permission to approve (for can_review flag)
+        can_review = ProjectManagerMixin.is_approver_or_higher(request.user, project)
+        
+        # Get current user's approval status
         approval = ApproverCompletionStatus.objects.filter(
             example=example,
             approver=request.user
         ).first()
         
-        if not approval:
-            return Response({
-                'example_id': example_id,
-                'status': 'pending',
-                'reviewed_at': None
+        # Get all approver completions for this example (to show multi-level approval)
+        all_approvals = ApproverCompletionStatus.objects.filter(
+            example=example
+        ).select_related('approver').order_by('-reviewed_at')
+        
+        # Build list of all approvals
+        approvals_list = []
+        for ap in all_approvals:
+            approver_role = self._get_user_role(ap.approver, project)
+            approvals_list.append({
+                'approver_id': ap.approver.id,
+                'approver_username': ap.approver.username,
+                'approver_role': approver_role,
+                'status': ap.status,
+                'reviewed_at': ap.reviewed_at,
+                'review_notes': ap.review_notes
             })
         
-        return Response({
+        # Check if any annotation_approver has approved
+        annotation_approver_approved = any(
+            ap['approver_role'] == ROLE_ANNOTATION_APPROVER and ap['status'] == 'approved'
+            for ap in approvals_list
+        )
+        
+        # Check if project_admin has approved
+        project_admin_approved = any(
+            ap['approver_role'] == ROLE_PROJECT_ADMIN and ap['status'] == 'approved'
+            for ap in approvals_list
+        )
+        
+        current_user_approval = {
             'example_id': example_id,
-            'status': approval.status,
-            'reviewed_at': approval.reviewed_at,
-            'review_notes': approval.review_notes
+            'status': approval.status if approval else 'pending',
+            'reviewed_at': approval.reviewed_at if approval else None,
+            'review_notes': approval.review_notes if approval else ''
+        }
+        
+        # Check if current user can review (with role-specific rules)
+        user_role = self._get_user_role(request.user, project)
+        can_review_now = False
+        is_submitted = False
+        
+        # Check if example is submitted
+        from .simple_tracking import AnnotationTracking
+        tracking = AnnotationTracking.objects.filter(
+            project=project,
+            example=example
+        ).first()
+        
+        if tracking and tracking.status == 'submitted':
+            is_submitted = True
+        else:
+            # Also check Assignment status as fallback
+            from .models_separate import Assignment
+            assignment = Assignment.objects.filter(
+                project=project,
+                example=example,
+                is_active=True
+            ).first()
+            
+            if assignment and assignment.status == 'submitted':
+                is_submitted = True
+        
+        if can_review:
+            if user_role == ROLE_PROJECT_ADMIN:
+                # Project admin can only review if annotation_approver has approved
+                can_review_now = annotation_approver_approved
+            elif user_role == ROLE_ANNOTATION_APPROVER:
+                # Annotation approvers can only review if example is submitted
+                can_review_now = is_submitted
+            elif user_role == ROLE_PROJECT_MANAGER:
+                # Project managers can always review
+                can_review_now = True
+            else:
+                # Other roles (shouldn't reach here, but safe fallback)
+                can_review_now = False
+        
+        return Response({
+            **current_user_approval,
+            'all_approvals': approvals_list,
+            'annotation_approver_approved': annotation_approver_approved,
+            'project_admin_approved': project_admin_approved,
+            'can_review': can_review,  # User has permission to approve/reject (general)
+            'can_review_now': can_review_now,  # User can review right now (role-specific rules)
+            'is_submitted': is_submitted,  # Whether example has been submitted
+            'user_role': user_role
         })
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsApproverOrHigher])
     def approve(self, request, project_id, example_id):
-        """Approve an example."""
+        """
+        Approve an example.
+        
+        Rules:
+        - Annotation approvers can approve ONLY if example is submitted by annotator
+        - Project admins can ONLY approve if an annotation_approver has already approved
+        - Each approver maintains their own approval record.
+        Requires approver or higher role.
+        """
         from examples.models import Example
         
         project = self.get_project(project_id)
         example = get_object_or_404(Example, pk=example_id, project=project)
         
-        notes = request.data.get('notes', '')
+        # Get user's role
+        user_role = self._get_user_role(request.user, project)
         
-        # Update approval status
+        # Check if example is submitted (for annotation_approvers)
+        if user_role == ROLE_ANNOTATION_APPROVER:
+            # Check if example has been submitted
+            is_submitted = False
+            
+            # Check AnnotationTracking status
+            from .simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                project=project,
+                example=example
+            ).first()
+            
+            if tracking and tracking.status == 'submitted':
+                is_submitted = True
+            else:
+                # Also check Assignment status as fallback
+                from .models_separate import Assignment
+                assignment = Assignment.objects.filter(
+                    project=project,
+                    example=example,
+                    is_active=True
+                ).first()
+                
+                if assignment and assignment.status == 'submitted':
+                    is_submitted = True
+            
+            if not is_submitted:
+                return Response(
+                    {
+                        'error': 'Annotation approvers can only approve examples that have been submitted by annotators.',
+                        'requires_submission': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # If user is project_admin, check if annotation_approver has approved
+        if user_role == ROLE_PROJECT_ADMIN:
+            # Get all approvals for this example
+            all_approvals = ApproverCompletionStatus.objects.filter(
+                example=example
+            ).select_related('approver')
+            
+            # Check if any annotation_approver has approved
+            annotation_approver_approved = False
+            for ap in all_approvals:
+                approver_role = self._get_user_role(ap.approver, project)
+                if approver_role == ROLE_ANNOTATION_APPROVER and ap.status == 'approved':
+                    annotation_approver_approved = True
+                    break
+            
+            if not annotation_approver_approved:
+                return Response(
+                    {
+                        'error': 'Project admins can only approve examples that have been approved by an annotation approver first.',
+                        'requires_approver_approval': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        notes = request.data.get('notes', '') or request.data.get('review_notes', '')
+        
+        # Update approval status (creates or updates this user's approval record)
         approval = CompletionMatrixUpdater.update_approver_status(
             example=example,
             approver=request.user,
@@ -448,20 +617,92 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
         return Response({
             'message': 'Example approved',
             'example_id': example_id,
-            'status': approval.status
+            'status': approval.status,
+            'approver_role': user_role,
+            'reviewed_at': approval.reviewed_at
         })
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsApproverOrHigher])
     def reject(self, request, project_id, example_id):
-        """Reject an example."""
+        """
+        Reject an example.
+        
+        Rules:
+        - Annotation approvers can reject ONLY if example is submitted by annotator
+        - Project admins can ONLY reject if an annotation_approver has already approved
+        - Each approver maintains their own approval record.
+        Requires approver or higher role.
+        """
         from examples.models import Example
         
         project = self.get_project(project_id)
         example = get_object_or_404(Example, pk=example_id, project=project)
         
-        notes = request.data.get('notes', '')
+        # Get user's role
+        user_role = self._get_user_role(request.user, project)
         
-        # Update approval status
+        # Check if example is submitted (for annotation_approvers)
+        if user_role == ROLE_ANNOTATION_APPROVER:
+            # Check if example has been submitted
+            is_submitted = False
+            
+            # Check AnnotationTracking status
+            from .simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                project=project,
+                example=example
+            ).first()
+            
+            if tracking and tracking.status == 'submitted':
+                is_submitted = True
+            else:
+                # Also check Assignment status as fallback
+                from .models_separate import Assignment
+                assignment = Assignment.objects.filter(
+                    project=project,
+                    example=example,
+                    is_active=True
+                ).first()
+                
+                if assignment and assignment.status == 'submitted':
+                    is_submitted = True
+            
+            if not is_submitted:
+                return Response(
+                    {
+                        'error': 'Annotation approvers can only reject examples that have been submitted by annotators.',
+                        'requires_submission': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # If user is project_admin, check if annotation_approver has approved
+        if user_role == ROLE_PROJECT_ADMIN:
+            # Get all approvals for this example
+            all_approvals = ApproverCompletionStatus.objects.filter(
+                example=example
+            ).select_related('approver')
+            
+            # Check if any annotation_approver has approved
+            annotation_approver_approved = False
+            for ap in all_approvals:
+                approver_role = self._get_user_role(ap.approver, project)
+                if approver_role == ROLE_ANNOTATION_APPROVER and ap.status == 'approved':
+                    annotation_approver_approved = True
+                    break
+            
+            if not annotation_approver_approved:
+                return Response(
+                    {
+                        'error': 'Project admins can only reject examples that have been approved by an annotation approver first.',
+                        'requires_approver_approval': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        notes = request.data.get('notes', '') or request.data.get('review_notes', '')
+        
+        # Update approval status (creates or updates this user's approval record)
         approval = CompletionMatrixUpdater.update_approver_status(
             example=example,
             approver=request.user,
@@ -472,6 +713,8 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
         return Response({
             'message': 'Example rejected',
             'example_id': example_id,
-            'status': approval.status
+            'status': approval.status,
+            'approver_role': user_role,
+            'reviewed_at': approval.reviewed_at
         })
 

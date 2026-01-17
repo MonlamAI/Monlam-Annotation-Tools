@@ -97,8 +97,41 @@
                     </v-col>
                 </v-row>
                 
-                <!-- Review Actions (for approvers/project managers) -->
-                <v-row v-if="canApprove && assignment && assignment.status === 'submitted'">
+                <!-- Multi-Level Approval Status -->
+                <v-row v-if="allApprovals && allApprovals.length > 0">
+                    <v-col cols="12">
+                        <v-card elevation="2" style="border-left: 4px solid #4CAF50;">
+                            <v-card-title class="green darken-2 white--text">
+                                <v-icon left dark>mdi-account-check</v-icon>
+                                Approval Status Chain
+                            </v-card-title>
+                            <v-card-text>
+                                <div v-for="(approval, index) in allApprovals" :key="index" class="mb-3">
+                                    <v-chip
+                                        :color="getApprovalStatusColor(approval.status)"
+                                        dark
+                                        class="mb-1"
+                                    >
+                                        <v-icon small left>[[ getApprovalStatusIcon(approval.status) ]]</v-icon>
+                                        [[ approval.approver_role === 'project_admin' ? '👑 Admin' : (approval.approver_role === 'annotation_approver' ? '✓ Approver' : 'Reviewer') ]] - [[ approval.status.toUpperCase() ]]
+                                    </v-chip>
+                                    <div class="text-caption">
+                                        <strong>[[ approval.approver_username ]]</strong>
+                                        <span v-if="approval.reviewed_at"> - [[ formatDate(approval.reviewed_at) ]]</span>
+                                    </div>
+                                    <div v-if="approval.review_notes" class="text-caption text--secondary mt-1">
+                                        <v-icon x-small>mdi-note-text</v-icon>
+                                        [[ approval.review_notes ]]
+                                    </div>
+                                    <v-divider v-if="index < allApprovals.length - 1" class="mt-2"></v-divider>
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+                
+                <!-- Review Actions (for approvers/project managers/admins) -->
+                <v-row v-if="canApprove && assignment">
                     <v-col cols="12">
                         <v-card elevation="2">
                             <v-card-title class="orange darken-1 white--text">
@@ -106,9 +139,26 @@
                                 Review Actions
                             </v-card-title>
                             <v-card-text>
-                                <v-alert type="info" text dense class="mb-4">
+                                <!-- Show message if annotation approver but example not submitted -->
+                                <v-alert v-if="userRole === 'annotation_approver' && assignment && assignment.status !== 'submitted'" type="info" text dense class="mb-4">
+                                    <strong>ℹ️ Waiting for Submission:</strong> This example must be submitted by an annotator before you can review it.
+                                </v-alert>
+                                
+                                <!-- Show message if project admin but approver hasn't approved yet -->
+                                <v-alert v-else-if="userRole === 'project_admin' && !annotationApproverApproved" type="info" text dense class="mb-4">
+                                    <strong>ℹ️ Waiting for Approver:</strong> This example must be approved by an annotation approver before you can review it.
+                                </v-alert>
+                                
+                                <!-- Show message if project admin can review (approver has approved) -->
+                                <v-alert v-else-if="annotationApproverApproved && userRole === 'project_admin'" type="warning" text dense class="mb-4">
+                                    <strong>⚠️ Second-Level Review:</strong> This annotation has been approved by an annotation approver. As a project admin, you can review and approve or reject it.
+                                </v-alert>
+                                
+                                <!-- Show message for approvers when submitted -->
+                                <v-alert v-else-if="assignment && assignment.status === 'submitted'" type="info" text dense class="mb-4">
                                     <strong>⚠️ Ready for Review:</strong> This annotation is waiting for your approval or rejection.
                                 </v-alert>
+                                
                                 <v-row>
                                     <v-col cols="12" sm="6">
                                         <v-btn
@@ -116,11 +166,11 @@
                                             large
                                             color="success"
                                             :loading="approving"
-                                            :disabled="approving || rejecting"
+                                            :disabled="!canReviewNow || approving || rejecting || (currentUserApproval && currentUserApproval.status === 'approved')"
                                             @click="approveExample"
                                         >
                                             <v-icon left>mdi-check-circle</v-icon>
-                                            Approve
+                                            [[ currentUserApproval && currentUserApproval.status === 'approved' ? 'Already Approved' : 'Approve' ]]
                                         </v-btn>
                                     </v-col>
                                     <v-col cols="12" sm="6">
@@ -129,11 +179,11 @@
                                             large
                                             color="error"
                                             :loading="rejecting"
-                                            :disabled="approving || rejecting"
-                                            @click="showRejectDialog"
+                                            :disabled="!canReviewNow || approving || rejecting || (currentUserApproval && currentUserApproval.status === 'rejected')"
+                                            @click="rejectExample"
                                         >
                                             <v-icon left>mdi-close-circle</v-icon>
-                                            Reject
+                                            [[ currentUserApproval && currentUserApproval.status === 'rejected' ? 'Already Rejected' : 'Reject' ]]
                                         </v-btn>
                                     </v-col>
                                 </v-row>
@@ -287,7 +337,14 @@
         data: {
             example: {{ example|safe }} || {},
             assignment: {{ assignment|safe }} || null,
-            canApprove: {% if user.is_superuser %}true{% else %}false{% endif %},
+            canApprove: {{ can_approve|yesno:"true,false" }},
+            userRole: '{{ user_role|default:"" }}',
+            allApprovals: {{ all_approvals|safe }} || [],
+            annotationApproverApproved: {{ annotation_approver_approved|yesno:"true,false" }},
+            projectAdminApproved: {{ project_admin_approved|yesno:"true,false" }},
+            currentUserApproval: {{ current_user_approval|safe }} || null,
+            canReviewNow: {{ can_review_now|yesno:"true,false" }},
+            isSubmitted: {{ is_submitted|yesno:"true,false" }},
             approving: false,
             rejecting: false,
             rejectDialog: false,
@@ -371,17 +428,23 @@
                 const date = new Date(dateString);
                 return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             },
+            getApprovalStatusColor(status) {
+                if (status === 'approved') return 'green';
+                if (status === 'rejected') return 'red';
+                return 'grey';
+            },
+            getApprovalStatusIcon(status) {
+                if (status === 'approved') return 'mdi-check-circle';
+                if (status === 'rejected') return 'mdi-close-circle';
+                return 'mdi-clock-outline';
+            },
             async approveExample() {
-                if (!confirm('Are you sure you want to approve this annotation?')) {
-                    return;
-                }
-                
                 this.approving = true;
                 
                 try {
                     const response = await axios.post(
                         `/v1/projects/{{ project_id }}/assignments/approver-completion/{{ example_id }}/approve/`,
-                        { review_notes: '' },
+                        { notes: '' },
                         { headers: { 'X-CSRFToken': this.getCsrfToken() } }
                     );
                     
@@ -389,14 +452,22 @@
                     this.snackbarColor = 'success';
                     this.snackbar = true;
                     
-                    // Reload page after 1 second
+                    // Reload page after 1.5 seconds to show the snackbar
                     setTimeout(() => {
                         window.location.reload();
-                    }, 1000);
+                    }, 1500);
                 } catch (err) {
                     console.error('Failed to approve:', err);
-                    this.snackbarText = '❌ Failed to approve: ' + (err.response?.data?.detail || err.message);
-                    this.snackbarColor = 'error';
+                    const errorData = err.response?.data || {};
+                    const errorMsg = errorData.error || errorData.detail || err.message;
+                    // Show specific message based on error type
+                    if (errorData.requires_approver_approval || errorData.requires_submission) {
+                        this.snackbarText = '⚠️ ' + errorMsg;
+                        this.snackbarColor = 'warning';
+                    } else {
+                        this.snackbarText = '❌ Failed to approve: ' + errorMsg;
+                        this.snackbarColor = 'error';
+                    }
                     this.snackbar = true;
                     this.approving = false;
                 }
@@ -406,32 +477,37 @@
                 this.rejectDialog = true;
             },
             async rejectExample() {
-                if (!this.rejectNotes) {
-                    return;
-                }
-                
+                // Remove the reject dialog requirement - just reject directly
                 this.rejecting = true;
+                this.rejectDialog = false;
                 
                 try {
                     const response = await axios.post(
                         `/v1/projects/{{ project_id }}/assignments/approver-completion/{{ example_id }}/reject/`,
-                        { review_notes: this.rejectNotes },
+                        { notes: '' },
                         { headers: { 'X-CSRFToken': this.getCsrfToken() } }
                     );
                     
-                    this.rejectDialog = false;
-                    this.snackbarText = '✗ Annotation rejected with feedback.';
+                    this.snackbarText = '✗ Annotation rejected. Annotator will see it again for revision.';
                     this.snackbarColor = 'warning';
                     this.snackbar = true;
                     
-                    // Reload page after 1 second
+                    // Reload page after 1.5 seconds to show the snackbar
                     setTimeout(() => {
                         window.location.reload();
-                    }, 1000);
+                    }, 1500);
                 } catch (err) {
                     console.error('Failed to reject:', err);
-                    this.snackbarText = '❌ Failed to reject: ' + (err.response?.data?.detail || err.message);
-                    this.snackbarColor = 'error';
+                    const errorData = err.response?.data || {};
+                    const errorMsg = errorData.error || errorData.detail || err.message;
+                    // Show specific message based on error type
+                    if (errorData.requires_approver_approval || errorData.requires_submission) {
+                        this.snackbarText = '⚠️ ' + errorMsg;
+                        this.snackbarColor = 'warning';
+                    } else {
+                        this.snackbarText = '❌ Failed to reject: ' + errorMsg;
+                        this.snackbarColor = 'error';
+                    }
                     this.snackbar = true;
                     this.rejecting = false;
                 }

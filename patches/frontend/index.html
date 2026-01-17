@@ -1142,16 +1142,13 @@
                     }
                 };
                 
-                // Reject handler
+                // Reject handler - no prompt, direct action
                 rejectBtn.onclick = async () => {
                     const exampleId = getCurrentExampleId();
                     if (!exampleId) {
                         alert('Cannot find example ID. Please ensure an example is loaded.');
                         return;
                     }
-                    
-                    const notes = prompt('Rejection reason (optional):') || '';
-                    // Notes are optional - proceed even if empty
                     
                     try {
                         rejectBtn.disabled = true;
@@ -1163,13 +1160,18 @@
                                 'Content-Type': 'application/json',
                                 'X-CSRFToken': getCsrfToken()
                             },
-                            body: JSON.stringify({ review_notes: notes })
+                            body: JSON.stringify({ review_notes: '' })
                         });
                         
                         const data = await resp.json();
                         
                         if (resp.ok) {
-                            alert('✅ Example rejected. Annotator will see it again for revision.');
+                            // Show subtle notification instead of alert
+                            const notification = document.createElement('div');
+                            notification.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #ff9800; color: white; padding: 12px 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10000;';
+                            notification.textContent = '✅ Example rejected. Annotator will see it again for revision.';
+                            document.body.appendChild(notification);
+                            setTimeout(() => notification.remove(), 3000);
                             updateStatus();
                         } else {
                             alert('❌ Error: ' + (data.error || 'Unknown error'));
