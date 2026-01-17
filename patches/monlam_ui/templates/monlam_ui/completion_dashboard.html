@@ -326,6 +326,8 @@
                     const response = await axios.get('/monlam/{{ project_id }}/api/completion-stats/');
                     this.stats = response.data;
                     console.log('✅ Loaded stats:', this.stats);
+                    console.log('📊 Approvers data:', this.stats.approvers);
+                    console.log('📊 Approvers count:', this.stats.approvers ? this.stats.approvers.length : 'undefined');
                 } catch (err) {
                     console.error('❌ Failed to load:', err);
                     this.error = 'Failed to load completion data: ' + (err.response?.data?.detail || err.message);

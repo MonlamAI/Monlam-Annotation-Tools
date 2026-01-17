@@ -524,60 +524,146 @@ def api_completion_stats(request, project_id):
         project=project
     ).select_related('approver')
     
+    # Debug: Check how many records we found
+    approver_count = approver_completions.count()
+    print(f'[Completion Stats] Found {approver_count} ApproverCompletionStatus records for project {project_id}')
+    
     # Build approver stats with role and final approval info
     approver_dict = {}
     approver_roles_cache = {}  # Cache roles per approver to avoid repeated lookups
     
+    # Process ApproverCompletionStatus records (primary source)
+    processed_count = 0
+    error_count = 0
     for ap_completion in approver_completions:
-        approver_id = ap_completion.approver.id
-        approver_username = ap_completion.approver.username
-        
-        # Get approver's role (cache it to avoid repeated lookups)
-        if approver_id not in approver_roles_cache:
-            approver_role = None
-            try:
-                approver_member = Member.objects.filter(
-                    user=ap_completion.approver,
-                    project=project
-                ).select_related('role').first()
-                if approver_member and approver_member.role:
-                    approver_role = approver_member.role.name.lower().strip()
-            except Exception as e:
-                print(f'[Completion Stats] Error getting approver role: {e}')
+        try:
+            # Skip if approver is None (shouldn't happen but be safe)
+            if not ap_completion.approver:
+                print(f'[Completion Stats] Warning: ApproverCompletionStatus {ap_completion.id} has no approver')
+                error_count += 1
+                continue
+                
+            approver_id = ap_completion.approver.id
+            approver_username = ap_completion.approver.username
+            
+            # Get approver's role (cache it to avoid repeated lookups)
+            if approver_id not in approver_roles_cache:
                 approver_role = None
-            approver_roles_cache[approver_id] = approver_role
-        else:
-            approver_role = approver_roles_cache[approver_id]
+                try:
+                    approver_member = Member.objects.filter(
+                        user=ap_completion.approver,
+                        project=project
+                    ).select_related('role').first()
+                    if approver_member and approver_member.role:
+                        approver_role = approver_member.role.name.lower().strip()
+                except Exception as e:
+                    print(f'[Completion Stats] Error getting approver role: {e}')
+                    approver_role = None
+                approver_roles_cache[approver_id] = approver_role
+            else:
+                approver_role = approver_roles_cache[approver_id]
+            
+            if approver_id not in approver_dict:
+                approver_dict[approver_id] = {
+                    'reviewed_by__id': approver_id,
+                    'reviewed_by__username': approver_username,
+                    'role': approver_role or 'unknown',
+                    'total_reviewed': 0,
+                    'approved': 0,
+                    'final_approved': 0,
+                    'rejected': 0,
+                }
+            
+            approver_dict[approver_id]['total_reviewed'] += 1
+            
+            if ap_completion.status == 'approved':
+                approver_dict[approver_id]['approved'] += 1
+                # Count as final approved if this approver is project_admin
+                # Use robust comparison: check exact match or if 'project_admin' is in role name
+                is_project_admin = (
+                    approver_role == ROLE_PROJECT_ADMIN or 
+                    (approver_role and 'project_admin' in approver_role) or
+                    approver_dict[approver_id]['role'] == ROLE_PROJECT_ADMIN or
+                    (approver_dict[approver_id]['role'] and 'project_admin' in approver_dict[approver_id]['role'])
+                )
+                if is_project_admin:
+                    approver_dict[approver_id]['final_approved'] += 1
+            elif ap_completion.status == 'rejected':
+                approver_dict[approver_id]['rejected'] += 1
+            
+            processed_count += 1
+        except Exception as e:
+            print(f'[Completion Stats] Error processing ApproverCompletionStatus {ap_completion.id}: {e}')
+            import traceback
+            traceback.print_exc()
+            error_count += 1
+            continue
+    
+    print(f'[Completion Stats] Processed {processed_count} ApproverCompletionStatus records, {error_count} errors, built {len(approver_dict)} approver entries')
+    
+    # Also include reviewers from AnnotationTracking to ensure we capture all reviewers
+    # This supplements ApproverCompletionStatus data (some reviewers might only be in AnnotationTracking)
+    # Only add if not already in approver_dict (to avoid double counting)
+    if True:  # Always check AnnotationTracking as supplement
+        # Get reviewers from AnnotationTracking
+        reviewed_tracking = tracking.filter(
+            reviewed_by__isnull=False,
+            status__in=['approved', 'rejected']
+        ).select_related('reviewed_by')
         
-        if approver_id not in approver_dict:
-            approver_dict[approver_id] = {
-                'reviewed_by__id': approver_id,
-                'reviewed_by__username': approver_username,
-                'role': approver_role or 'unknown',
-                'total_reviewed': 0,
-                'approved': 0,
-                'final_approved': 0,
-                'rejected': 0,
-            }
-        
-        approver_dict[approver_id]['total_reviewed'] += 1
-        
-        if ap_completion.status == 'approved':
-            approver_dict[approver_id]['approved'] += 1
-            # Count as final approved if this approver is project_admin
-            # Use robust comparison: check exact match or if 'project_admin' is in role name
-            is_project_admin = (
-                approver_role == ROLE_PROJECT_ADMIN or 
-                (approver_role and 'project_admin' in approver_role) or
-                approver_dict[approver_id]['role'] == ROLE_PROJECT_ADMIN or
-                (approver_dict[approver_id]['role'] and 'project_admin' in approver_dict[approver_id]['role'])
-            )
-            if is_project_admin:
-                approver_dict[approver_id]['final_approved'] += 1
-        elif ap_completion.status == 'rejected':
-            approver_dict[approver_id]['rejected'] += 1
+        for t in reviewed_tracking:
+            if t.reviewed_by:
+                approver_id = t.reviewed_by.id
+                approver_username = t.reviewed_by.username
+                
+                # Get approver's role
+                if approver_id not in approver_roles_cache:
+                    approver_role = None
+                    try:
+                        approver_member = Member.objects.filter(
+                            user=t.reviewed_by,
+                            project=project
+                        ).select_related('role').first()
+                        if approver_member and approver_member.role:
+                            approver_role = approver_member.role.name.lower().strip()
+                    except Exception as e:
+                        print(f'[Completion Stats] Error getting approver role from tracking: {e}')
+                        approver_role = None
+                    approver_roles_cache[approver_id] = approver_role
+                else:
+                    approver_role = approver_roles_cache[approver_id]
+                
+                # Only add if not already processed from ApproverCompletionStatus
+                # This prevents double counting if the same approver exists in both systems
+                if approver_id not in approver_dict:
+                    approver_dict[approver_id] = {
+                        'reviewed_by__id': approver_id,
+                        'reviewed_by__username': approver_username,
+                        'role': approver_role or 'unknown',
+                        'total_reviewed': 0,
+                        'approved': 0,
+                        'final_approved': 0,
+                        'rejected': 0,
+                    }
+                    approver_dict[approver_id]['total_reviewed'] += 1
+                # If already exists, don't double count (ApproverCompletionStatus is the source of truth)
+                
+                if t.status == 'approved':
+                    approver_dict[approver_id]['approved'] += 1
+                    # Check if project_admin for final approval count
+                    is_project_admin = (
+                        approver_role == ROLE_PROJECT_ADMIN or 
+                        (approver_role and 'project_admin' in approver_role)
+                    )
+                    if is_project_admin:
+                        approver_dict[approver_id]['final_approved'] += 1
+                elif t.status == 'rejected':
+                    approver_dict[approver_id]['rejected'] += 1
     
     approver_stats = sorted(approver_dict.values(), key=lambda x: x['reviewed_by__username'])
+    
+    # Debug: Log what we're returning
+    print(f'[Completion Stats] Found {len(approver_stats)} approvers: {[a["reviewed_by__username"] for a in approver_stats]}')
     
     return JsonResponse({
         'summary': {
@@ -1180,11 +1266,17 @@ def analytics_api(request):
     # Get reviewer stats (separate from annotators) - use ApproverCompletionStatus for accurate tracking
     reviewer_stats = {}
     approver_roles_cache = {}  # Cache roles per (username, project_id) to avoid repeated lookups
+    use_fallback = False
+    
     try:
         # Use ApproverCompletionStatus for more accurate reviewer tracking
         approver_completions = ApproverCompletionStatus.objects.filter(
             project__in=projects
         ).select_related('approver', 'example')
+        
+        # Check if we have any ApproverCompletionStatus records
+        if not approver_completions.exists():
+            use_fallback = True
         
         for ap_completion in approver_completions:
             username = ap_completion.approver.username
@@ -1242,9 +1334,16 @@ def analytics_api(request):
                     reviewer_stats[username]['total_syllables'] += syllables
             elif ap_completion.status == 'rejected':
                 reviewer_stats[username]['rejected'] += 1
+        
+        # If no ApproverCompletionStatus records found, use fallback
+        if use_fallback:
+            print("[Analytics] No ApproverCompletionStatus records found, using AnnotationTracking fallback")
     except Exception as e:
         print(f"[Analytics] Error calculating reviewer stats from ApproverCompletionStatus: {e}")
-        # Fallback to AnnotationTracking if ApproverCompletionStatus fails
+        use_fallback = True
+    
+    # Fallback to AnnotationTracking if ApproverCompletionStatus is empty or failed
+    if use_fallback or not reviewer_stats:
         if tracking_in_range:
             for t in tracking_in_range:
                 if t.reviewed_by and t.status in ['approved', 'rejected']:
