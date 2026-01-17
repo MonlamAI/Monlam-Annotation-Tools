@@ -358,6 +358,20 @@ def api_completion_stats(request, project_id):
     Uses BOTH:
     - ExampleState (Doccano's native confirmation via checkmark)
     - AnnotationTracking (our approve/reject workflow)
+    
+    Terminology:
+    - "Annotated" (total_annotated): Count of examples confirmed by annotator (ExampleState records)
+      This means the annotator clicked the checkmark to mark completion.
+    
+    - "Submitted": Count of confirmed examples that are awaiting review (not yet approved/rejected)
+      Formula: submitted = total_annotated - approved - rejected
+      This represents work that's done but not yet reviewed.
+    
+    - "Approved": Count of examples approved by reviewers (from AnnotationTracking.status='approved')
+    
+    - "Rejected": Count of examples rejected by reviewers (from AnnotationTracking.status='rejected')
+    
+    Note: ExampleState and AnnotationTracking are matched by example_id to ensure accurate counts.
     """
     from projects.models import Project, Member
     from examples.models import ExampleState
@@ -412,13 +426,21 @@ def api_completion_stats(request, project_id):
     pending_count = total_examples - confirmed_count
     
     # Per-annotator stats - combine ExampleState (confirmed) and AnnotationTracking
+    # Build a mapping of example_id -> tracking status for efficient lookup
+    tracking_by_example = {}
+    for t in tracking:
+        if t.example_id:
+            tracking_by_example[t.example_id] = t
+    
     annotator_dict = {}
     
-    # First, add all annotators from ExampleState (confirmed examples)
+    # Process ExampleState records (confirmed examples) and match with tracking
     for state in confirmed_states:
         if state.confirmed_by:
             username = state.confirmed_by.username
             user_id = state.confirmed_by.id
+            example_id = state.example_id
+            
             if username not in annotator_dict:
                 annotator_dict[username] = {
                     'annotated_by__id': user_id,
@@ -428,7 +450,25 @@ def api_completion_stats(request, project_id):
                     'approved': 0,
                     'rejected': 0,
                 }
+            
             annotator_dict[username]['total_annotated'] += 1
+            
+            # Check tracking status for this specific example
+            tracking_record = tracking_by_example.get(example_id)
+            if tracking_record:
+                # Match by example_id to get accurate status
+                if tracking_record.status == 'approved':
+                    annotator_dict[username]['approved'] += 1
+                elif tracking_record.status == 'rejected':
+                    annotator_dict[username]['rejected'] += 1
+                elif tracking_record.status == 'submitted':
+                    annotator_dict[username]['submitted'] += 1
+                # If status is 'pending', it's still submitted (confirmed but not reviewed)
+                elif tracking_record.status == 'pending':
+                    annotator_dict[username]['submitted'] += 1
+            else:
+                # No tracking record exists - confirmed but not yet reviewed = submitted
+                annotator_dict[username]['submitted'] += 1
     
     # Also add annotators from AnnotationTracking who may not have confirmed yet
     # This ensures all annotators with tracked work appear in the dashboard
@@ -436,6 +476,7 @@ def api_completion_stats(request, project_id):
         if t.annotated_by:
             username = t.annotated_by.username
             user_id = t.annotated_by.id
+            
             if username not in annotator_dict:
                 # Add annotator if they have tracking but no confirmations yet
                 annotator_dict[username] = {
@@ -446,28 +487,34 @@ def api_completion_stats(request, project_id):
                     'approved': 0,
                     'rejected': 0,
                 }
-    
-    # Now update status counts from tracking (for all annotators)
-    for t in tracking:
-        if t.annotated_by:
-            username = t.annotated_by.username
-            if username in annotator_dict:
+            
+            # Only count if this example wasn't already counted above (via ExampleState)
+            # Check if this example has an ExampleState record
+            example_has_state = any(
+                state.example_id == t.example_id 
+                for state in confirmed_states 
+                if state.confirmed_by and state.confirmed_by.username == username
+            )
+            
+            if not example_has_state:
+                # This example has tracking but no confirmation - count based on status
                 if t.status == 'approved':
                     annotator_dict[username]['approved'] += 1
                 elif t.status == 'rejected':
                     annotator_dict[username]['rejected'] += 1
-                elif t.status == 'submitted':
+                elif t.status == 'submitted' or t.status == 'pending':
                     annotator_dict[username]['submitted'] += 1
     
-    # Calculate submitted count for annotators with ExampleState confirmations
-    # For annotators without confirmations, keep the submitted count from tracking
+    # Final calculation: for annotators with confirmations, ensure submitted = total - approved - rejected
+    # This ensures consistency even if tracking records are missing
     for username, stats in annotator_dict.items():
         if stats['total_annotated'] > 0:
-            # Has confirmations: calculate submitted as (total - approved - rejected)
-            stats['submitted'] = stats['total_annotated'] - stats['approved'] - stats['rejected']
-            if stats['submitted'] < 0:
-                stats['submitted'] = 0
-        # If total_annotated is 0, keep the submitted count from tracking (already set above)
+            # Recalculate submitted to ensure: total_annotated = submitted + approved + rejected
+            calculated_submitted = stats['total_annotated'] - stats['approved'] - stats['rejected']
+            if calculated_submitted >= 0:
+                stats['submitted'] = calculated_submitted
+            # If calculated_submitted < 0, it means we have more approved/rejected than confirmed
+            # This shouldn't happen, but keep the submitted count as-is if it does
     
     annotator_stats = sorted(annotator_dict.values(), key=lambda x: x['annotated_by__username'])
     
@@ -479,21 +526,28 @@ def api_completion_stats(request, project_id):
     
     # Build approver stats with role and final approval info
     approver_dict = {}
+    approver_roles_cache = {}  # Cache roles per approver to avoid repeated lookups
+    
     for ap_completion in approver_completions:
         approver_id = ap_completion.approver.id
         approver_username = ap_completion.approver.username
         
-        # Get approver's role
-        approver_role = None
-        try:
-            approver_member = Member.objects.filter(
-                user=ap_completion.approver,
-                project=project
-            ).select_related('role').first()
-            if approver_member and approver_member.role:
-                approver_role = approver_member.role.name.lower()
-        except Exception:
-            pass
+        # Get approver's role (cache it to avoid repeated lookups)
+        if approver_id not in approver_roles_cache:
+            approver_role = None
+            try:
+                approver_member = Member.objects.filter(
+                    user=ap_completion.approver,
+                    project=project
+                ).select_related('role').first()
+                if approver_member and approver_member.role:
+                    approver_role = approver_member.role.name.lower().strip()
+            except Exception as e:
+                print(f'[Completion Stats] Error getting approver role: {e}')
+                approver_role = None
+            approver_roles_cache[approver_id] = approver_role
+        else:
+            approver_role = approver_roles_cache[approver_id]
         
         if approver_id not in approver_dict:
             approver_dict[approver_id] = {
@@ -511,7 +565,14 @@ def api_completion_stats(request, project_id):
         if ap_completion.status == 'approved':
             approver_dict[approver_id]['approved'] += 1
             # Count as final approved if this approver is project_admin
-            if approver_role == ROLE_PROJECT_ADMIN:
+            # Use robust comparison: check exact match or if 'project_admin' is in role name
+            is_project_admin = (
+                approver_role == ROLE_PROJECT_ADMIN or 
+                (approver_role and 'project_admin' in approver_role) or
+                approver_dict[approver_id]['role'] == ROLE_PROJECT_ADMIN or
+                (approver_dict[approver_id]['role'] and 'project_admin' in approver_dict[approver_id]['role'])
+            )
+            if is_project_admin:
                 approver_dict[approver_id]['final_approved'] += 1
         elif ap_completion.status == 'rejected':
             approver_dict[approver_id]['rejected'] += 1
@@ -1118,6 +1179,7 @@ def analytics_api(request):
     
     # Get reviewer stats (separate from annotators) - use ApproverCompletionStatus for accurate tracking
     reviewer_stats = {}
+    approver_roles_cache = {}  # Cache roles per (username, project_id) to avoid repeated lookups
     try:
         # Use ApproverCompletionStatus for more accurate reviewer tracking
         approver_completions = ApproverCompletionStatus.objects.filter(
@@ -1126,6 +1188,8 @@ def analytics_api(request):
         
         for ap_completion in approver_completions:
             username = ap_completion.approver.username
+            project_id = ap_completion.project.id
+            cache_key = f"{username}_{project_id}"
             
             if username not in reviewer_stats:
                 reviewer_stats[username] = {
@@ -1142,22 +1206,32 @@ def analytics_api(request):
             
             reviewer_stats[username]['total_reviewed'] += 1
             
-            # Get approver's role
-            approver_role = None
-            try:
-                approver_member = Member.objects.filter(
-                    user=ap_completion.approver,
-                    project=ap_completion.project
-                ).select_related('role').first()
-                if approver_member and approver_member.role:
-                    approver_role = approver_member.role.name.lower()
-            except Exception:
-                pass
+            # Get approver's role (cache it to avoid repeated lookups)
+            if cache_key not in approver_roles_cache:
+                approver_role = None
+                try:
+                    approver_member = Member.objects.filter(
+                        user=ap_completion.approver,
+                        project=ap_completion.project
+                    ).select_related('role').first()
+                    if approver_member and approver_member.role:
+                        approver_role = approver_member.role.name.lower().strip()
+                except Exception as e:
+                    print(f'[Analytics] Error getting approver role: {e}')
+                    approver_role = None
+                approver_roles_cache[cache_key] = approver_role
+            else:
+                approver_role = approver_roles_cache[cache_key]
             
             if ap_completion.status == 'approved':
                 reviewer_stats[username]['approved'] += 1
                 # Count as final approved if this approver is project_admin
-                if approver_role == ROLE_PROJECT_ADMIN:
+                # Use robust comparison: check exact match or if 'project_admin' is in role name
+                is_project_admin = (
+                    approver_role == ROLE_PROJECT_ADMIN or 
+                    (approver_role and 'project_admin' in approver_role)
+                )
+                if is_project_admin:
                     reviewer_stats[username]['final_approved'] += 1
                 
                 # Add payment data for reviewers (only for approved reviews)
