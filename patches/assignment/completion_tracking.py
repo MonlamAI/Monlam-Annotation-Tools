@@ -353,12 +353,13 @@ class CompletionMatrix:
         
         admin_user_ids = [m.user_id for m in admin_members]
         
-        # Count examples approved by project_admin (final approval)
+        # Count total approvals by project_admin (final approval)
+        # Each approval action by a project_admin counts as 1 Final Approved
         final_approved_examples = ApproverCompletionStatus.objects.filter(
             project=self.project,
             status='approved',
             approver_id__in=admin_user_ids
-        ).values('example').distinct().count()
+        ).count()  # Count total approvals by project_admin, not distinct examples
         
         # Also count all approvals for backward compatibility
         all_approved_examples = ApproverCompletionStatus.objects.filter(

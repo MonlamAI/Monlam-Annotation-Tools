@@ -718,6 +718,16 @@ def api_completion_stats(request, project_id):
     
     approver_stats = sorted(approver_dict.values(), key=lambda x: x['reviewed_by__username'])
     
+    # Calculate final_approved_count from approver_stats (sum of all final_approved)
+    # This ensures consistency with what's shown in the approver table
+    calculated_final_approved = sum(a['final_approved'] for a in approver_stats)
+    print(f'[Completion Stats] Final approved from approver_stats: {calculated_final_approved}, from DB query: {final_approved_count}')
+    
+    # Use the calculated value if it's different (more reliable since it matches the table)
+    if calculated_final_approved != final_approved_count:
+        print(f'[Completion Stats] Using calculated final_approved ({calculated_final_approved}) instead of DB query result ({final_approved_count})')
+        final_approved_count = calculated_final_approved
+    
     # Debug: Log what we're returning
     print(f'[Completion Stats] Found {len(approver_stats)} approvers: {[a["reviewed_by__username"] for a in approver_stats]}')
     for a in approver_stats:
@@ -730,7 +740,7 @@ def api_completion_stats(request, project_id):
             'pending': pending_count,
             'submitted': submitted_count,
             'approved': approved_count,  # All approvals
-            'final_approved': final_approved_count,  # Final approvals by project_admin
+            'final_approved': final_approved_count,  # Final approvals by project_admin (sum from approver_stats)
             'rejected': rejected_count,
         },
         'annotators': annotator_stats,
@@ -1033,11 +1043,12 @@ def analytics_api(request):
         admin_user_ids = [m.user_id for m in admin_members]
         
         # Count final approvals by project_admin
+        # Each approval action by a project_admin counts as 1 Final Approved
         final_approved_count = ApproverCompletionStatus.objects.filter(
             project__in=projects,
             status='approved',
             approver_id__in=admin_user_ids
-        ).values('example').distinct().count()
+        ).count()  # Count total approvals by project_admin, not distinct examples
     except Exception as e:
         print(f"[Analytics] Error calculating final approvals: {e}")
         final_approved_count = 0
