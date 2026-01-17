@@ -411,14 +411,17 @@ def api_completion_stats(request, project_id):
     )
     admin_user_ids = [m.user_id for m in admin_members]
     
-    # Count final approvals by project_admin (count total approvals, not distinct examples)
-    # First, get all project_admin user IDs more robustly
+    # Count final approvals by project_admin
+    # Final Approved = total number of approvals made by project_admin users
+    # Each approval action by a project_admin counts as 1 Final Approved
+    print(f'[Completion Stats] Finding project_admin users: {admin_user_ids}')
     if admin_user_ids:
         final_approved_count = ApproverCompletionStatus.objects.filter(
             project=project,
             status='approved',
             approver_id__in=admin_user_ids
-        ).count()  # Count total approvals, not distinct examples
+        ).count()  # Count total approvals by project_admin, not distinct examples
+        print(f'[Completion Stats] Final approved count (total approvals by project_admin): {final_approved_count}')
     else:
         # Fallback: check by role name directly if admin_user_ids is empty
         final_approved_count = 0
@@ -435,9 +438,10 @@ def api_completion_stats(request, project_id):
                     if approver_member and approver_member.role:
                         role_name = approver_member.role.name.lower().strip()
                         if role_name == ROLE_PROJECT_ADMIN or 'project_admin' in role_name:
-                            final_approved_count += 1
+                            final_approved_count += 1  # Count each approval
                 except Exception:
                     pass
+        print(f'[Completion Stats] Final approved count (fallback): {final_approved_count}')
     
     # Submitted = confirmed but not yet approved/rejected
     submitted_count = confirmed_count - approved_count - rejected_count
@@ -1402,6 +1406,9 @@ def analytics_api(request):
             for t in tracking_in_range:
                 if t.reviewed_by and t.status in ['approved', 'rejected']:
                     username = t.reviewed_by.username
+                    project_id = t.project.id
+                    cache_key = f"{username}_{project_id}"
+                    
                     if username not in reviewer_stats:
                         reviewer_stats[username] = {
                             'username': username,
@@ -1415,8 +1422,35 @@ def analytics_api(request):
                             'payment_breakdown': []
                         }
                     reviewer_stats[username]['total_reviewed'] += 1
+                    
                     if t.status == 'approved':
                         reviewer_stats[username]['approved'] += 1
+                        
+                        # Check if this reviewer is project_admin and count as final_approved
+                        if cache_key not in approver_roles_cache:
+                            approver_role = None
+                            try:
+                                approver_member = Member.objects.filter(
+                                    user=t.reviewed_by,
+                                    project=t.project
+                                ).select_related('role').first()
+                                if approver_member and approver_member.role:
+                                    approver_role = approver_member.role.name.lower().strip()
+                            except Exception as e:
+                                print(f'[Analytics] Error getting approver role in fallback: {e}')
+                                approver_role = None
+                            approver_roles_cache[cache_key] = approver_role
+                        else:
+                            approver_role = approver_roles_cache[cache_key]
+                        
+                        # Count as final approved if this approver is project_admin
+                        is_project_admin = (
+                            approver_role == ROLE_PROJECT_ADMIN or 
+                            (approver_role and 'project_admin' in approver_role)
+                        )
+                        if is_project_admin:
+                            reviewer_stats[username]['final_approved'] += 1
+                        
                         # Add payment data for reviewers (only for approved reviews)
                         if t.example_id in example_meta_map:
                             ex_meta = example_meta_map[t.example_id]

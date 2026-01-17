@@ -129,49 +129,24 @@ export default Vue.extend({
 
   computed: {
     showStatusCard() {
-      // Show card if we have projectId and exampleId
-      if (!this.projectId || !this.exampleId) return false
-      
-      // Superusers should always see the card (like project admins)
-      if (this.isSuperuser) {
-        return true
-      }
-      
-      // For annotators: Only show if submitted
-      if (this.userRole === 'annotator') {
-        return this.statusData && this.statusData.is_submitted
-      }
-      
-      // For approvers and admins: Always show (even if no data yet or still loading)
-      if (this.userRole === 'annotation_approver' || 
-          this.userRole === 'project_admin' || 
-          this.userRole === 'project_manager') {
-        return true
-      }
-      
-      // If we're still loading and don't know the role yet, show the card
-      // (it will update once we get the role)
-      if (this.isLoadingStatus) {
-        return true
-      }
-      
-      // For unknown roles, show if we have data or if we have submittedBy/approvedBy
-      return !!this.statusData || !!this.submittedBy || !!this.approvedBy
+      // Show card for everyone if we have projectId and exampleId
+      // Card may be empty for non-annotated examples, but it should always be visible
+      return !!(this.projectId && this.exampleId)
     },
     
     statusText() {
-      // For annotators: Only show "Submitted" if they've submitted
-      if (this.userRole === 'annotator') {
-        if (this.statusData && this.statusData.is_submitted) {
-          return 'Submitted'
-        }
-        return '' // Empty for annotators who haven't submitted
-      }
-      
       // If no data yet, show loading or default message
       if (!this.statusData) {
         if (this.isLoadingStatus) {
           return 'Loading...'
+        }
+        return 'Not annotated yet'
+      }
+      
+      // For annotators: Show "Submitted" if they've submitted, otherwise show nothing
+      if (this.userRole === 'annotator') {
+        if (this.statusData && this.statusData.is_submitted) {
+          return 'Submitted'
         }
         return 'Not submitted yet'
       }
@@ -229,7 +204,19 @@ export default Vue.extend({
         return parts.join(' | ')
       }
       
-      return ''
+      // For unknown roles or when role is not set: Show basic status
+      // Try to show submitted/approved info if available
+      const parts = []
+      if (this.submittedBy) {
+        parts.push(`Submitted: ${this.submittedBy}`)
+      }
+      if (this.approvedBy) {
+        parts.push(`Approved: ${this.approvedBy}`)
+      }
+      if (parts.length === 0) {
+        return 'Not annotated yet'
+      }
+      return parts.join(' | ')
     },
     
     statusIcon() {
@@ -341,12 +328,14 @@ export default Vue.extend({
       console.log('[AudioViewer] Fetching status data for:', { projectId: this.projectId, exampleId: this.exampleId })
       this.isLoadingStatus = true
       
+      let userData = null
+      
       try {
-        // First, check if user is superuser
+        // First, check if user is superuser and get user info
         try {
           const userResp = await fetch('/v1/me')
           if (userResp.ok) {
-            const userData = await userResp.json()
+            userData = await userResp.json()
             this.isSuperuser = userData.is_superuser || false
             console.log('[AudioViewer] Is superuser:', this.isSuperuser)
           }
@@ -366,11 +355,38 @@ export default Vue.extend({
           console.log('[AudioViewer] Approval data:', approvalData)
           this.statusData = approvalData
           this.userRole = approvalData.user_role || null
+          
           // If superuser and no role, treat as project_admin
           if (this.isSuperuser && !this.userRole) {
             this.userRole = 'project_admin'
+            console.log('[AudioViewer] Set role to project_admin for superuser (from approval API)')
           }
-          console.log('[AudioViewer] User role:', this.userRole)
+          
+          // If still no role, try to get from members API as fallback
+          if (!this.userRole && userData) {
+            try {
+              const membersResp = await fetch(`/v1/projects/${this.projectId}/members/`)
+              if (membersResp.ok) {
+                const membersData = await membersResp.json()
+                const currentUserMember = membersData.results?.find(m => m.username === userData.username)
+                if (currentUserMember && currentUserMember.role) {
+                  const roleName = currentUserMember.role.name?.toLowerCase() || ''
+                  if (roleName.includes('admin') || roleName === 'project_admin') {
+                    this.userRole = 'project_admin'
+                  } else if (roleName.includes('approver') || roleName === 'annotation_approver') {
+                    this.userRole = 'annotation_approver'
+                  } else if (roleName.includes('manager') || roleName === 'project_manager') {
+                    this.userRole = 'project_manager'
+                  }
+                  console.log('[AudioViewer] User role from members API (fallback):', this.userRole)
+                }
+              }
+            } catch (e) {
+              console.error('[AudioViewer] Error fetching members in approval success path:', e)
+            }
+          }
+          
+          console.log('[AudioViewer] Final user role:', this.userRole)
           
           // Extract submitted by from tracking API
           try {
@@ -399,6 +415,39 @@ export default Vue.extend({
           // User doesn't have permission or endpoint doesn't exist
           // Still set statusData to empty object so card can show "Not submitted yet"
           this.statusData = { is_submitted: false }
+          
+          // Try to determine user role from project members API
+          try {
+            const membersResp = await fetch(`/v1/projects/${this.projectId}/members/`)
+            if (membersResp.ok) {
+              const membersData = await membersResp.json()
+              // Find current user in members list
+              const currentUserMember = membersData.results?.find(m => m.username === userData?.username)
+              if (currentUserMember && currentUserMember.role) {
+                const roleName = currentUserMember.role.name?.toLowerCase() || ''
+                // Map role names to our role constants
+                if (roleName.includes('admin') || roleName === 'project_admin') {
+                  this.userRole = 'project_admin'
+                } else if (roleName.includes('approver') || roleName === 'annotation_approver') {
+                  this.userRole = 'annotation_approver'
+                } else if (roleName.includes('manager') || roleName === 'project_manager') {
+                  this.userRole = 'project_manager'
+                } else if (roleName.includes('annotator')) {
+                  this.userRole = 'annotator'
+                }
+                console.log('[AudioViewer] User role from members API:', this.userRole)
+              }
+            }
+          } catch (e) {
+            console.error('[AudioViewer] Error fetching members:', e)
+          }
+          
+          // If still no role and user is superuser, set as project_admin
+          if (!this.userRole && this.isSuperuser) {
+            this.userRole = 'project_admin'
+            console.log('[AudioViewer] Set role to project_admin for superuser')
+          }
+          
           // Try to get user role from tracking API
           try {
             const trackingResp = await fetch(
