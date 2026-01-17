@@ -411,12 +411,33 @@ def api_completion_stats(request, project_id):
     )
     admin_user_ids = [m.user_id for m in admin_members]
     
-    # Count final approvals by project_admin
-    final_approved_count = ApproverCompletionStatus.objects.filter(
-        project=project,
-        status='approved',
-        approver_id__in=admin_user_ids
-    ).values('example').distinct().count()
+    # Count final approvals by project_admin (count total approvals, not distinct examples)
+    # First, get all project_admin user IDs more robustly
+    if admin_user_ids:
+        final_approved_count = ApproverCompletionStatus.objects.filter(
+            project=project,
+            status='approved',
+            approver_id__in=admin_user_ids
+        ).count()  # Count total approvals, not distinct examples
+    else:
+        # Fallback: check by role name directly if admin_user_ids is empty
+        final_approved_count = 0
+        for ap_completion in ApproverCompletionStatus.objects.filter(
+            project=project,
+            status='approved'
+        ).select_related('approver'):
+            if ap_completion.approver:
+                try:
+                    approver_member = Member.objects.filter(
+                        user=ap_completion.approver,
+                        project=project
+                    ).select_related('role').first()
+                    if approver_member and approver_member.role:
+                        role_name = approver_member.role.name.lower().strip()
+                        if role_name == ROLE_PROJECT_ADMIN or 'project_admin' in role_name:
+                            final_approved_count += 1
+                except Exception:
+                    pass
     
     # Submitted = confirmed but not yet approved/rejected
     submitted_count = confirmed_count - approved_count - rejected_count
@@ -454,17 +475,24 @@ def api_completion_stats(request, project_id):
             annotator_dict[username]['total_annotated'] += 1
             
             # Check tracking status for this specific example
+            # IMPORTANT: Only count if this example was annotated by this user
             tracking_record = tracking_by_example.get(example_id)
             if tracking_record:
-                # Match by example_id to get accurate status
-                if tracking_record.status == 'approved':
-                    annotator_dict[username]['approved'] += 1
-                elif tracking_record.status == 'rejected':
-                    annotator_dict[username]['rejected'] += 1
-                elif tracking_record.status == 'submitted':
-                    annotator_dict[username]['submitted'] += 1
-                # If status is 'pending', it's still submitted (confirmed but not reviewed)
-                elif tracking_record.status == 'pending':
+                # Only count if the tracking record's annotated_by matches this user
+                # This ensures we only count approvals/rejections for examples this annotator actually worked on
+                if tracking_record.annotated_by and tracking_record.annotated_by.id == user_id:
+                    # Match by example_id to get accurate status
+                    if tracking_record.status == 'approved':
+                        annotator_dict[username]['approved'] += 1
+                    elif tracking_record.status == 'rejected':
+                        annotator_dict[username]['rejected'] += 1
+                    elif tracking_record.status == 'submitted':
+                        annotator_dict[username]['submitted'] += 1
+                    # If status is 'pending', it's still submitted (confirmed but not reviewed)
+                    elif tracking_record.status == 'pending':
+                        annotator_dict[username]['submitted'] += 1
+                else:
+                    # Tracking exists but for different annotator - this confirmed example is submitted
                     annotator_dict[username]['submitted'] += 1
             else:
                 # No tracking record exists - confirmed but not yet reviewed = submitted
@@ -505,16 +533,30 @@ def api_completion_stats(request, project_id):
                 elif t.status == 'submitted' or t.status == 'pending':
                     annotator_dict[username]['submitted'] += 1
     
-    # Final calculation: for annotators with confirmations, ensure submitted = total - approved - rejected
-    # This ensures consistency even if tracking records are missing
+    # Final calculation: ensure total_annotated = submitted + approved + rejected for all annotators
+    # This ensures consistency even if tracking records are missing or mismatched
     for username, stats in annotator_dict.items():
         if stats['total_annotated'] > 0:
             # Recalculate submitted to ensure: total_annotated = submitted + approved + rejected
             calculated_submitted = stats['total_annotated'] - stats['approved'] - stats['rejected']
             if calculated_submitted >= 0:
                 stats['submitted'] = calculated_submitted
-            # If calculated_submitted < 0, it means we have more approved/rejected than confirmed
-            # This shouldn't happen, but keep the submitted count as-is if it does
+            else:
+                # If calculated_submitted < 0, it means we have more approved/rejected than confirmed
+                # This can happen if approvals/rejections exist for examples not confirmed by this annotator
+                # Reset to 0 and adjust approved/rejected to match total_annotated
+                stats['submitted'] = 0
+                # Cap approved + rejected at total_annotated
+                total_status = stats['approved'] + stats['rejected']
+                if total_status > stats['total_annotated']:
+                    # Proportionally adjust if needed (though this shouldn't happen with proper matching)
+                    ratio = stats['total_annotated'] / total_status if total_status > 0 else 1
+                    stats['approved'] = int(stats['approved'] * ratio)
+                    stats['rejected'] = int(stats['rejected'] * ratio)
+        else:
+            # No confirmations: ensure submitted + approved + rejected makes sense
+            # For annotators without confirmations, keep counts as-is from tracking
+            pass
     
     annotator_stats = sorted(annotator_dict.values(), key=lambda x: x['annotated_by__username'])
     
@@ -575,6 +617,7 @@ def api_completion_stats(request, project_id):
                 }
             
             approver_dict[approver_id]['total_reviewed'] += 1
+            print(f'[Completion Stats] Processing approver {approver_username}: example {ap_completion.example_id}, status {ap_completion.status}, total_reviewed now {approver_dict[approver_id]["total_reviewed"]}')
             
             if ap_completion.status == 'approved':
                 approver_dict[approver_id]['approved'] += 1
@@ -660,10 +703,21 @@ def api_completion_stats(request, project_id):
                 elif t.status == 'rejected':
                     approver_dict[approver_id]['rejected'] += 1
     
+    # Ensure total_reviewed = approved + rejected + pending for each approver
+    # This ensures consistency
+    for approver_id, approver_data in approver_dict.items():
+        calculated_total = approver_data['approved'] + approver_data['rejected']
+        # If total_reviewed doesn't match, update it
+        if approver_data['total_reviewed'] != calculated_total:
+            print(f'[Completion Stats] Fixing total_reviewed for {approver_data["reviewed_by__username"]}: was {approver_data["total_reviewed"]}, should be {calculated_total}')
+            approver_data['total_reviewed'] = calculated_total
+    
     approver_stats = sorted(approver_dict.values(), key=lambda x: x['reviewed_by__username'])
     
     # Debug: Log what we're returning
     print(f'[Completion Stats] Found {len(approver_stats)} approvers: {[a["reviewed_by__username"] for a in approver_stats]}')
+    for a in approver_stats:
+        print(f'  - {a["reviewed_by__username"]}: total_reviewed={a["total_reviewed"]}, approved={a["approved"]}, final_approved={a["final_approved"]}, rejected={a["rejected"]}')
     
     return JsonResponse({
         'summary': {
