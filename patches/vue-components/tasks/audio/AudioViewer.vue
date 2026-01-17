@@ -120,6 +120,7 @@ export default Vue.extend({
       // Status card data
       statusData: null,
       userRole: null,
+      isSuperuser: false,
       submittedBy: null,
       approvedBy: null,
       isLoadingStatus: false
@@ -130,6 +131,11 @@ export default Vue.extend({
     showStatusCard() {
       // Show card if we have projectId and exampleId
       if (!this.projectId || !this.exampleId) return false
+      
+      // Superusers should always see the card (like project admins)
+      if (this.isSuperuser) {
+        return true
+      }
       
       // For annotators: Only show if submitted
       if (this.userRole === 'annotator') {
@@ -168,6 +174,21 @@ export default Vue.extend({
           return 'Loading...'
         }
         return 'Not submitted yet'
+      }
+      
+      // For superusers: Show who submitted AND who approved (like project admin)
+      if (this.isSuperuser) {
+        const parts = []
+        if (this.submittedBy) {
+          parts.push(`Submitted: ${this.submittedBy}`)
+        }
+        if (this.approvedBy) {
+          parts.push(`Approved: ${this.approvedBy}`)
+        }
+        if (parts.length === 0) {
+          return 'Not submitted yet'
+        }
+        return parts.join(' | ')
       }
       
       // For annotation approvers: Show who submitted
@@ -321,6 +342,18 @@ export default Vue.extend({
       this.isLoadingStatus = true
       
       try {
+        // First, check if user is superuser
+        try {
+          const userResp = await fetch('/v1/me')
+          if (userResp.ok) {
+            const userData = await userResp.json()
+            this.isSuperuser = userData.is_superuser || false
+            console.log('[AudioViewer] Is superuser:', this.isSuperuser)
+          }
+        } catch (e) {
+          console.error('[AudioViewer] Error fetching user info:', e)
+        }
+        
         // Fetch approval status
         const approvalResp = await fetch(
           `/v1/projects/${this.projectId}/assignments/approver-completion/${this.exampleId}/`
@@ -333,6 +366,10 @@ export default Vue.extend({
           console.log('[AudioViewer] Approval data:', approvalData)
           this.statusData = approvalData
           this.userRole = approvalData.user_role || null
+          // If superuser and no role, treat as project_admin
+          if (this.isSuperuser && !this.userRole) {
+            this.userRole = 'project_admin'
+          }
           console.log('[AudioViewer] User role:', this.userRole)
           
           // Extract submitted by from tracking API
