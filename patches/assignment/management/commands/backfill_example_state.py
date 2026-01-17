@@ -155,23 +155,90 @@ class Command(BaseCommand):
                     self.style.ERROR(f"  ✗ Error processing example {tracking.example_id}: {e}")
                 )
         
+        # PHASE 2: Create AnnotationTracking for ExampleState records that don't have it
+        self.stdout.write("\n" + "=" * 80)
+        self.stdout.write("Phase 2: Creating AnnotationTracking for ExampleState records")
+        self.stdout.write("=" * 80)
+        
+        # Get set of example IDs that already have AnnotationTracking
+        examples_with_tracking = set(
+            AnnotationTracking.objects.filter(annotated_by__isnull=False).values_list('example_id', flat=True)
+        )
+        
+        # Find ExampleState records that need AnnotationTracking
+        states_needing_tracking = [
+            state for state in all_example_states
+            if state.example_id not in examples_with_tracking
+        ]
+        
+        tracking_created_count = 0
+        tracking_error_count = 0
+        
+        self.stdout.write(f"\nFound {len(states_needing_tracking)} ExampleState records WITHOUT AnnotationTracking\n")
+        
+        for state in states_needing_tracking:
+            try:
+                example = state.example
+                confirmed_by = state.confirmed_by
+                confirmed_at = state.confirmed_at or timezone.now()
+                
+                if verbose:
+                    self.stdout.write(
+                        f"  ✓ Would create AnnotationTracking for example {example.id} "
+                        f"(confirmed by {confirmed_by.username})"
+                    )
+                
+                if not dry_run:
+                    # Create AnnotationTracking with status based on whether it's been reviewed
+                    # If confirmed_at is recent and no review, it's likely 'submitted'
+                    # Otherwise check if there's any approval/rejection info
+                    status = 'submitted'  # Default to submitted
+                    
+                    AnnotationTracking.objects.create(
+                        project=example.project,
+                        example=example,
+                        annotated_by=confirmed_by,
+                        annotated_at=confirmed_at,
+                        status=status
+                    )
+                    tracking_created_count += 1
+                    if verbose:
+                        self.stdout.write(self.style.SUCCESS(f"    ✓ Created"))
+                else:
+                    tracking_created_count += 1
+                    
+            except Exception as e:
+                tracking_error_count += 1
+                self.stdout.write(
+                    self.style.ERROR(f"  ✗ Error creating AnnotationTracking for example {state.example_id}: {e}")
+                )
+        
         # Summary
         self.stdout.write("\n" + "=" * 80)
         self.stdout.write("Summary:")
         self.stdout.write("=" * 80)
-        self.stdout.write(f"Total submitted examples checked: {total_count}")
+        self.stdout.write(f"Phase 1 - AnnotationTracking → ExampleState:")
+        self.stdout.write(f"  Total checked: {total_count}")
         self.stdout.write(f"  ✓ Would create: {created_count}" if dry_run else f"  ✓ Created: {created_count}")
         self.stdout.write(f"  ↻ Would update: {updated_count}" if dry_run else f"  ↻ Updated: {updated_count}")
         self.stdout.write(f"  - Skipped (already exists): {skipped_count}")
         self.stdout.write(f"  ✗ Errors: {error_count}")
+        self.stdout.write("")
+        self.stdout.write(f"Phase 2 - ExampleState → AnnotationTracking:")
+        self.stdout.write(f"  Total checked: {len(states_needing_tracking)}")
+        self.stdout.write(f"  ✓ Would create: {tracking_created_count}" if dry_run else f"  ✓ Created: {tracking_created_count}")
+        self.stdout.write(f"  ✗ Errors: {tracking_error_count}")
         self.stdout.write("=" * 80)
         
         if dry_run:
             self.stdout.write(self.style.WARNING("\n⚠️  DRY RUN - No changes were made"))
             self.stdout.write("   Run without --dry-run to apply changes")
-        elif created_count > 0 or updated_count > 0:
+        elif created_count > 0 or updated_count > 0 or tracking_created_count > 0:
+            total_fixed = created_count + updated_count + tracking_created_count
             self.stdout.write(self.style.SUCCESS("\n✅ Backfill completed successfully!"))
-            self.stdout.write(f"   {created_count + updated_count} examples now have ExampleState records")
+            self.stdout.write(f"   {created_count + updated_count} ExampleState records created/updated")
+            self.stdout.write(f"   {tracking_created_count} AnnotationTracking records created")
+            self.stdout.write(f"   Total: {total_fixed} records synchronized")
         else:
-            self.stdout.write(self.style.SUCCESS("\n✅ All examples already have ExampleState records - no changes needed"))
+            self.stdout.write(self.style.SUCCESS("\n✅ All examples already have matching ExampleState and AnnotationTracking records - no changes needed"))
 
