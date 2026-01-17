@@ -459,11 +459,15 @@ def api_completion_stats(request, project_id):
                 elif t.status == 'submitted':
                     annotator_dict[username]['submitted'] += 1
     
-    # Calculate submitted (total - approved - rejected) for each annotator
+    # Calculate submitted count for annotators with ExampleState confirmations
+    # For annotators without confirmations, keep the submitted count from tracking
     for username, stats in annotator_dict.items():
-        stats['submitted'] = stats['total_annotated'] - stats['approved'] - stats['rejected']
-        if stats['submitted'] < 0:
-            stats['submitted'] = 0
+        if stats['total_annotated'] > 0:
+            # Has confirmations: calculate submitted as (total - approved - rejected)
+            stats['submitted'] = stats['total_annotated'] - stats['approved'] - stats['rejected']
+            if stats['submitted'] < 0:
+                stats['submitted'] = 0
+        # If total_annotated is 0, keep the submitted count from tracking (already set above)
     
     annotator_stats = sorted(annotator_dict.values(), key=lambda x: x['annotated_by__username'])
     
