@@ -42,16 +42,14 @@ class DatasetRedirectView(View):
     def get(self, request, project_id):
         # Check if user is a Project Admin for this project
         try:
-            from projects.models import Project
-            from roles.models import RoleMember
+            from projects.models import Project, Member
             
-            PROJECT_ADMIN_ROLE = 3  # Doccano's Project Admin role ID
-            
-            # Check if user is project admin
-            is_admin = RoleMember.objects.filter(
+            # Check if user is project admin by role name
+            is_admin = Member.objects.filter(
                 project_id=project_id,
-                member_id=request.user.id,
-                role_id=PROJECT_ADMIN_ROLE
+                user=request.user
+            ).select_related('role').filter(
+                role__name__iexact=ROLE_PROJECT_ADMIN
             ).exists()
             
             if is_admin:
@@ -587,18 +585,13 @@ def has_analytics_access(user):
     
     # Check if user has manager/admin/approver role in any project
     try:
-        from roles.models import Role
         from projects.models import Member
         
-        # Get role IDs for privileged roles
-        privileged_roles = Role.objects.filter(
-            name__in=[ROLE_PROJECT_ADMIN, ROLE_PROJECT_MANAGER, ROLE_ANNOTATION_APPROVER]
-        ).values_list('id', flat=True)
-        
-        # Check if user is a member with any of these roles
+        # Check if user is a member with any of these privileged roles (by role name)
         return Member.objects.filter(
-            user=user,
-            role_id__in=privileged_roles
+            user=user
+        ).select_related('role').filter(
+            role__name__in=[ROLE_PROJECT_ADMIN, ROLE_PROJECT_MANAGER, ROLE_ANNOTATION_APPROVER]
         ).exists()
     except Exception as e:
         # If role checking fails, deny access (fail secure)
