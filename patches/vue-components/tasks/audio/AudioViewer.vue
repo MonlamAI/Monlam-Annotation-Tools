@@ -51,18 +51,30 @@
         <span v-else>Pause</span>
       </v-btn>
       
-      <!-- Status Card -->
+      <!-- Status Card - Always show when projectId and exampleId are available -->
       <v-chip
-        v-if="projectId && exampleId && showStatusCard"
+        v-if="projectId && exampleId"
         :color="statusCardColor || 'grey'"
         text-color="white"
         small
         outlined
         class="status-chip"
-        style="max-width: 300px;"
+        style="max-width: 300px; min-width: 150px;"
       >
         <v-icon left small>{{ statusIcon || 'mdi-information-outline' }}</v-icon>
         <span class="status-text">{{ statusText || (isLoadingStatus ? 'Loading...' : 'Not submitted yet') }}</span>
+      </v-chip>
+      <!-- Debug: Show if props are missing -->
+      <v-chip
+        v-else
+        color="red"
+        text-color="white"
+        small
+        outlined
+        class="status-chip"
+      >
+        <v-icon left small>mdi-alert</v-icon>
+        <span>Missing projectId or exampleId</span>
       </v-chip>
     </div>
     <v-checkbox
@@ -289,7 +301,10 @@ export default Vue.extend({
     
     // Fetch status data if projectId and exampleId are provided
     if (this.projectId && this.exampleId) {
+      console.log('[AudioViewer] Mounted with props:', { projectId: this.projectId, exampleId: this.exampleId })
       this.fetchStatusData()
+    } else {
+      console.warn('[AudioViewer] Missing props on mount:', { projectId: this.projectId, exampleId: this.exampleId })
     }
   },
 

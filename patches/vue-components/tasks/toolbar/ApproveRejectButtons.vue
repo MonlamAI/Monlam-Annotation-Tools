@@ -1,5 +1,64 @@
 <template>
   <div>
+    <!-- Status Summary Card - Always visible -->
+    <v-card class="mb-4" elevation="2">
+      <v-card-title class="text-subtitle-2 font-weight-bold pa-2" style="background-color: #1976d2; color: white;">
+        <v-icon left small dark>mdi-information</v-icon>
+        Status Summary
+      </v-card-title>
+      <v-card-text class="pa-3">
+        <div v-if="isLoadingStatus" class="text-center">
+          <v-progress-circular indeterminate size="20" class="mr-2"></v-progress-circular>
+          <span class="text-caption">Loading status...</span>
+        </div>
+        <div v-else>
+          <!-- Submitted Status -->
+          <div v-if="submittedBy" class="mb-2">
+            <v-chip color="info" text-color="white" small class="mr-2">
+              <v-icon small left>mdi-clock-outline</v-icon>
+              Submitted
+            </v-chip>
+            <span class="text-caption">by <strong>{{ submittedBy }}</strong></span>
+          </div>
+          <div v-else-if="isSubmitted" class="mb-2">
+            <v-chip color="info" text-color="white" small>
+              <v-icon small left>mdi-clock-outline</v-icon>
+              Submitted
+            </v-chip>
+          </div>
+          
+          <!-- Approved Status -->
+          <div v-if="approvedBy" class="mb-2">
+            <v-chip color="success" text-color="white" small class="mr-2">
+              <v-icon small left>mdi-check-circle</v-icon>
+              Approved
+            </v-chip>
+            <span class="text-caption">by <strong>{{ approvedBy }}</strong></span>
+          </div>
+          <div v-else-if="projectAdminApproved" class="mb-2">
+            <v-chip color="success" text-color="white" small>
+              <v-icon small left>mdi-check-circle</v-icon>
+              Final Approved
+            </v-chip>
+          </div>
+          <div v-else-if="annotationApproverApproved" class="mb-2">
+            <v-chip color="success" text-color="white" small>
+              <v-icon small left>mdi-check-circle</v-icon>
+              Approved by Approver
+            </v-chip>
+          </div>
+          
+          <!-- No Status -->
+          <div v-if="!submittedBy && !approvedBy && !isSubmitted && !annotationApproverApproved && !projectAdminApproved">
+            <v-chip color="grey" text-color="white" small>
+              <v-icon small left>mdi-information-outline</v-icon>
+              Not submitted yet
+            </v-chip>
+          </div>
+        </div>
+      </v-card-text>
+    </v-card>
+
     <!-- Approval Chain Display -->
     <v-card v-if="allApprovals && allApprovals.length > 0" class="mt-4">
       <v-card-title class="text-subtitle-1 font-weight-bold pa-3" style="background-color: #4CAF50; color: white;">
@@ -158,6 +217,9 @@ export default Vue.extend({
       userRole: null,
       canReviewNow: false,
       isSubmitted: false,
+      submittedBy: null,
+      approvedBy: null,
+      isLoadingStatus: false,
       snackbar: false,
       snackbarText: '',
       snackbarColor: 'success',
@@ -193,20 +255,26 @@ export default Vue.extend({
   },
 
   async mounted() {
-    // Always fetch approval chain (visible to all users)
+    // Always fetch approval chain and status (visible to all users)
+    this.isLoadingStatus = true
     await this.fetchApprovalChain()
+    await this.fetchStatusSummary()
     await this.checkRole()
     if (this.canApprove) {
       await this.fetchStatus()
     }
+    this.isLoadingStatus = false
   },
 
   watch: {
     exampleId() {
+      this.isLoadingStatus = true
       this.fetchApprovalChain()
+      this.fetchStatusSummary()
       if (this.canApprove) {
         this.fetchStatus()
       }
+      this.isLoadingStatus = false
     }
   },
 
@@ -248,6 +316,26 @@ export default Vue.extend({
           this.isSubmitted = data.is_submitted || false
           this.userRole = data.user_role || null
           
+          // Extract approved by from approval chain
+          this.approvedBy = null // Reset first
+          if (this.allApprovals && this.allApprovals.length > 0) {
+            // Find the first annotation_approver who approved
+            const approverApproval = this.allApprovals.find(
+              ap => ap.approver_role === 'annotation_approver' && ap.status === 'approved'
+            )
+            if (approverApproval) {
+              this.approvedBy = approverApproval.approver_username
+            } else {
+              // If no annotation approver, check for project admin approval
+              const adminApproval = this.allApprovals.find(
+                ap => ap.approver_role === 'project_admin' && ap.status === 'approved'
+              )
+              if (adminApproval) {
+                this.approvedBy = adminApproval.approver_username
+              }
+            }
+          }
+          
           // Find current user's approval
           try {
             const currentUserResp = await fetch('/v1/me')
@@ -269,6 +357,22 @@ export default Vue.extend({
         console.error('[Monlam Approve] Error fetching approval chain:', error)
         // Don't show error to user, just don't display approval chain
         this.allApprovals = []
+      }
+    },
+
+    async fetchStatusSummary() {
+      // Fetch submitted by from tracking API
+      try {
+        const trackingResp = await fetch(
+          `/v1/projects/${this.projectId}/tracking/${this.exampleId}/status/`
+        )
+        if (trackingResp.ok) {
+          const trackingData = await trackingResp.json()
+          this.submittedBy = trackingData.annotated_by || null
+        }
+      } catch (e) {
+        console.error('[Monlam Approve] Error fetching tracking status:', e)
+        // Don't show error, just leave submittedBy as null
       }
     },
 
@@ -302,6 +406,7 @@ export default Vue.extend({
         if (resp.ok) {
           this.$emit('approved')
           await this.fetchApprovalChain()
+          await this.fetchStatusSummary()
           await this.fetchStatus()
           this.showSnackbar('✅ Example approved successfully!', 'success')
         } else {
@@ -341,6 +446,7 @@ export default Vue.extend({
         if (resp.ok) {
           this.$emit('rejected')
           await this.fetchApprovalChain()
+          await this.fetchStatusSummary()
           await this.fetchStatus()
           this.showSnackbar('✅ Example rejected. Annotator will see it again for revision.', 'warning')
         } else {
