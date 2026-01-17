@@ -254,23 +254,30 @@ class VisibilityMiddleware:
                     final_visible_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids) - visible_locked_by_others
                     
                     if final_visible_ids:
+                        # Fetch all tracking and confirmed data in bulk for efficiency
+                        bulk_tracking = AnnotationTracking.objects.filter(
+                            project_id=project_id,
+                            example_id__in=final_visible_ids
+                        ).select_related('locked_by')
+                        bulk_tracking_map = {t.example_id: t for t in bulk_tracking}
+                        
+                        bulk_confirmed = ExampleState.objects.filter(
+                            example_id__in=final_visible_ids
+                        ).select_related('confirmed_by')
+                        bulk_confirmed_map = {s.example_id: s.confirmed_by for s in bulk_confirmed}
+                        
                         # Try each visible example until we find one that passes the visibility check
                         found_valid_example = False
-                        for visible_id in list(final_visible_ids)[:10]:  # Try up to 10 examples to avoid performance issues
+                        checked_count = 0
+                        for visible_id in list(final_visible_ids):
+                            checked_count += 1
                             example_obj = Example.objects.filter(id=visible_id).select_related('project').first()
                             if not example_obj:
                                 continue
                             
-                            # Get tracking and confirmed data for this specific example to verify visibility
-                            example_tracking_obj = AnnotationTracking.objects.filter(
-                                project_id=project_id,
-                                example_id=visible_id
-                            ).select_related('locked_by').first()
-                            
-                            example_confirmed_state = ExampleState.objects.filter(
-                                example_id=visible_id
-                            ).select_related('confirmed_by').first()
-                            example_confirmed_by = example_confirmed_state.confirmed_by if example_confirmed_state else None
+                            # Get tracking and confirmed data from bulk maps
+                            example_tracking_obj = bulk_tracking_map.get(visible_id)
+                            example_confirmed_by = bulk_confirmed_map.get(visible_id)
                             
                             # Verify it passes the visibility check before returning
                             if self._should_show_example(visible_id, example_confirmed_by, example_tracking_obj, user):
@@ -291,14 +298,15 @@ class VisibilityMiddleware:
                                     }
                                 
                                 filtered_results = [example_dict]
-                                log(f'[Monlam Middleware] ✅ Returned visible example (ID: {visible_id}) verified by visibility check')
+                                log(f'[Monlam Middleware] ✅ Returned visible example (ID: {visible_id}) verified by visibility check (checked {checked_count}/{len(final_visible_ids)} examples)')
                                 found_valid_example = True
                                 break
                             else:
-                                log(f'[Monlam Middleware] ⚠️ Example {visible_id} failed visibility check, trying next...')
+                                if checked_count <= 5:  # Only log first 5 failures to avoid spam
+                                    log(f'[Monlam Middleware] ⚠️ Example {visible_id} failed visibility check, trying next...')
                         
                         if not found_valid_example:
-                            log(f'[Monlam Middleware] ⚠️ No visible examples passed visibility check after checking {min(10, len(final_visible_ids))} examples')
+                            log(f'[Monlam Middleware] ⚠️ No visible examples passed visibility check after checking all {len(final_visible_ids)} examples')
                     else:
                         log(f'[Monlam Middleware] ⚠️ No visible examples found using ExampleVisibilityMixin logic')
                 except Exception as e:
