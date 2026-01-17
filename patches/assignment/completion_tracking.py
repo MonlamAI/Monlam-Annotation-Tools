@@ -340,7 +340,28 @@ class CompletionMatrix:
             is_completed=True
         ).values('example').distinct().count()
         
-        approved_examples = ApproverCompletionStatus.objects.filter(
+        # Count final approvals (project_admin approvals only)
+        from projects.models import Member
+        from .roles import ROLE_PROJECT_ADMIN
+        
+        # Get all project_admin members
+        admin_members = Member.objects.filter(
+            project=self.project
+        ).select_related('role').filter(
+            role__name__iexact=ROLE_PROJECT_ADMIN
+        )
+        
+        admin_user_ids = [m.user_id for m in admin_members]
+        
+        # Count examples approved by project_admin (final approval)
+        final_approved_examples = ApproverCompletionStatus.objects.filter(
+            project=self.project,
+            status='approved',
+            approver_id__in=admin_user_ids
+        ).values('example').distinct().count()
+        
+        # Also count all approvals for backward compatibility
+        all_approved_examples = ApproverCompletionStatus.objects.filter(
             project=self.project,
             status='approved'
         ).values('example').distinct().count()
@@ -350,9 +371,11 @@ class CompletionMatrix:
             'assigned_examples': assigned_examples,
             'unassigned_examples': total_examples - assigned_examples,
             'completed_examples': completed_examples,
-            'approved_examples': approved_examples,
+            'approved_examples': all_approved_examples,  # All approvals (for backward compat)
+            'final_approved_examples': final_approved_examples,  # Final approvals by project_admin
             'completion_rate': round((completed_examples / total_examples * 100), 1) if total_examples > 0 else 0,
-            'approval_rate': round((approved_examples / total_examples * 100), 1) if total_examples > 0 else 0
+            'approval_rate': round((all_approved_examples / total_examples * 100), 1) if total_examples > 0 else 0,
+            'final_approval_rate': round((final_approved_examples / total_examples * 100), 1) if total_examples > 0 else 0
         }
     
     def _get_annotator_role(self):

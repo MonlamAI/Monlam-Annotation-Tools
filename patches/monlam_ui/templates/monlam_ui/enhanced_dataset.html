@@ -178,6 +178,20 @@
                                     <v-chip v-else small>Pending</v-chip>
                                 </template>
                                 
+                                <!-- Final Approval By Column -->
+                                <template v-slot:item.final_approval_by="{ item }">
+                                    <div v-if="item.assignment && item.assignment.has_final_approval && item.assignment.final_approval_by_username">
+                                        <v-chip small color="green darken-1" dark>
+                                            <v-icon small left>mdi-crown</v-icon>
+                                            [[ item.assignment.final_approval_by_username ]]
+                                        </v-chip>
+                                        <div v-if="item.assignment.final_approval_at" class="text-caption text--secondary mt-1">
+                                            [[ formatDate(item.assignment.final_approval_at) ]]
+                                        </div>
+                                    </div>
+                                    <v-chip v-else small color="grey lighten-3">Not Approved</v-chip>
+                                </template>
+                                
                                 <!-- Actions Column -->
                                 <template v-slot:item.actions="{ item }">
                                     <v-btn 
@@ -226,6 +240,7 @@
                 { text: 'Assigned To', value: 'assigned_to', sortable: true },
                 { text: 'Status', value: 'status', sortable: true },
                 { text: 'Reviewed By', value: 'reviewed_by', sortable: true },
+                { text: 'Final Approval By', value: 'final_approval_by', sortable: true },
                 { text: 'Actions', value: 'actions', sortable: false },
             ],
         },
@@ -252,10 +267,13 @@
                         const status = ex.assignment.status;
                         if (status === 'approved') {
                             counts.approved++;
-                            if (ex.assignment.reviewed_by_role === 'approver') {
-                                counts.approved_by_approver++;
-                            } else if (ex.assignment.reviewed_by_role === 'project_manager') {
+                            // Check if it has final approval from project_admin
+                            if (ex.assignment.has_final_approval) {
                                 counts.approved_by_pm++;
+                            } else if (ex.assignment.reviewed_by_role === 'annotation_approver' || 
+                                      ex.assignment.reviewed_by_role === 'approver') {
+                                // Approved by annotation approver but not yet by project admin
+                                counts.approved_by_approver++;
                             }
                         } else if (counts.hasOwnProperty(status)) {
                             counts[status]++;
@@ -347,28 +365,39 @@
                 return icons[status] || 'mdi-help-circle';
             },
             getReviewerColor(assignment) {
-                if (assignment.reviewed_by_role === 'project_manager') {
+                // Show green for final approval (project_admin)
+                if (assignment.has_final_approval) {
                     return 'green darken-1';
-                } else if (assignment.reviewed_by_role === 'approver') {
+                } else if (assignment.reviewed_by_role === 'annotation_approver' || 
+                          assignment.reviewed_by_role === 'approver') {
                     return 'blue darken-1';
                 }
                 return 'secondary';
             },
             getRoleBadgeColor(assignment) {
-                if (assignment.reviewed_by_role === 'project_manager') {
+                // Show purple for final approval (project_admin)
+                if (assignment.has_final_approval) {
                     return 'purple';
-                } else if (assignment.reviewed_by_role === 'approver') {
+                } else if (assignment.reviewed_by_role === 'annotation_approver' || 
+                          assignment.reviewed_by_role === 'approver') {
                     return 'orange darken-2';
                 }
                 return 'grey';
             },
             getRoleLabel(assignment) {
-                if (assignment.reviewed_by_role === 'project_manager') {
-                    return '👑 PM FINAL';
-                } else if (assignment.reviewed_by_role === 'approver') {
+                // Show final approval label if project_admin approved
+                if (assignment.has_final_approval && assignment.final_approval_by_username) {
+                    return '👑 Final: ' + assignment.final_approval_by_username;
+                } else if (assignment.reviewed_by_role === 'annotation_approver' || 
+                          assignment.reviewed_by_role === 'approver') {
                     return '✓ Approver';
                 }
                 return 'Reviewer';
+            },
+            formatDate(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             },
         }
     });

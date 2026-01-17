@@ -91,6 +91,18 @@
                     </v-col>
                     
                     <v-col cols="12" sm="6" md="2">
+                        <v-card color="purple lighten-5" elevation="2">
+                            <v-card-text>
+                                <div class="text-h4 text-center">[[ stats.summary.final_approved || 0 ]]</div>
+                                <div class="text-center text--secondary">👑 Final Approved</div>
+                                <div class="text-center text-caption">
+                                    [[ calculatePercentage(stats.summary.final_approved, stats.summary.total_examples) ]]%
+                                </div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    
+                    <v-col cols="12" sm="6" md="2">
                         <v-card color="red lighten-5" elevation="2">
                             <v-card-text>
                                 <div class="text-h4 text-center">[[ stats.summary.rejected || 0 ]]</div>
@@ -192,9 +204,31 @@
                                     </v-chip>
                                 </template>
                                 
+                                <template v-slot:item.role="{ item }">
+                                    <v-chip 
+                                        small 
+                                        :color="item.role === 'project_admin' ? 'purple' : 'orange'" 
+                                        dark
+                                    >
+                                        <v-icon small left>[[ item.role === 'project_admin' ? 'mdi-crown' : 'mdi-check-circle' ]]</v-icon>
+                                        [[ item.role === 'project_admin' ? '👑 Final Approver' : '✓ Approver' ]]
+                                    </v-chip>
+                                </template>
+                                
                                 <template v-slot:item.approved="{ item }">
                                     <v-chip small color="green" dark>
                                         ✓ [[ item.approved ]]
+                                    </v-chip>
+                                </template>
+                                
+                                <template v-slot:item.final_approved="{ item }">
+                                    <v-chip 
+                                        small 
+                                        :color="item.final_approved > 0 ? 'purple' : 'grey'" 
+                                        dark
+                                    >
+                                        <v-icon small left>mdi-crown</v-icon>
+                                        [[ item.final_approved || 0 ]]
                                     </v-chip>
                                 </template>
                                 
@@ -271,8 +305,10 @@
             ],
             approverHeaders: [
                 { text: 'Approver', value: 'reviewed_by__username', sortable: true },
+                { text: 'Role', value: 'role', sortable: true },
                 { text: 'Total Reviewed', value: 'total_reviewed', sortable: true },
                 { text: 'Approved', value: 'approved', sortable: true },
+                { text: 'Final Approved', value: 'final_approved', sortable: true },
                 { text: 'Rejected', value: 'rejected', sortable: true },
             ],
         },

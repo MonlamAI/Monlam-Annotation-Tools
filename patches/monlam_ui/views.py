@@ -385,6 +385,25 @@ def api_completion_stats(request, project_id):
     approved_count = tracking.filter(status='approved').count()
     rejected_count = tracking.filter(status='rejected').count()
     
+    # Get final approvals (project_admin approvals only)
+    from assignment.completion_tracking import ApproverCompletionStatus
+    from assignment.roles import ROLE_PROJECT_ADMIN
+    
+    # Get all project_admin members
+    admin_members = Member.objects.filter(
+        project=project
+    ).select_related('role').filter(
+        role__name__iexact=ROLE_PROJECT_ADMIN
+    )
+    admin_user_ids = [m.user_id for m in admin_members]
+    
+    # Count final approvals by project_admin
+    final_approved_count = ApproverCompletionStatus.objects.filter(
+        project=project,
+        status='approved',
+        approver_id__in=admin_user_ids
+    ).values('example').distinct().count()
+    
     # Submitted = confirmed but not yet approved/rejected
     submitted_count = confirmed_count - approved_count - rejected_count
     if submitted_count < 0:
@@ -430,16 +449,51 @@ def api_completion_stats(request, project_id):
     annotator_stats = sorted(annotator_dict.values(), key=lambda x: x['annotated_by__username'])
     
     # Per-approver stats (who approved/rejected)
-    approver_stats = tracking.filter(
-        reviewed_by__isnull=False
-    ).values(
-        'reviewed_by__id',
-        'reviewed_by__username'
-    ).annotate(
-        total_reviewed=Count('id'),
-        approved=Count('id', filter=Q(status='approved')),
-        rejected=Count('id', filter=Q(status='rejected')),
-    ).order_by('reviewed_by__username')
+    # Get all approver completions for this project
+    approver_completions = ApproverCompletionStatus.objects.filter(
+        project=project
+    ).select_related('approver')
+    
+    # Build approver stats with role and final approval info
+    approver_dict = {}
+    for ap_completion in approver_completions:
+        approver_id = ap_completion.approver.id
+        approver_username = ap_completion.approver.username
+        
+        # Get approver's role
+        approver_role = None
+        try:
+            approver_member = Member.objects.filter(
+                user=ap_completion.approver,
+                project=project
+            ).select_related('role').first()
+            if approver_member and approver_member.role:
+                approver_role = approver_member.role.name.lower()
+        except Exception:
+            pass
+        
+        if approver_id not in approver_dict:
+            approver_dict[approver_id] = {
+                'reviewed_by__id': approver_id,
+                'reviewed_by__username': approver_username,
+                'role': approver_role or 'unknown',
+                'total_reviewed': 0,
+                'approved': 0,
+                'final_approved': 0,
+                'rejected': 0,
+            }
+        
+        approver_dict[approver_id]['total_reviewed'] += 1
+        
+        if ap_completion.status == 'approved':
+            approver_dict[approver_id]['approved'] += 1
+            # Count as final approved if this approver is project_admin
+            if approver_role == ROLE_PROJECT_ADMIN:
+                approver_dict[approver_id]['final_approved'] += 1
+        elif ap_completion.status == 'rejected':
+            approver_dict[approver_id]['rejected'] += 1
+    
+    approver_stats = sorted(approver_dict.values(), key=lambda x: x['reviewed_by__username'])
     
     return JsonResponse({
         'summary': {
@@ -447,11 +501,12 @@ def api_completion_stats(request, project_id):
             'confirmed': confirmed_count,  # New: from ExampleState
             'pending': pending_count,
             'submitted': submitted_count,
-            'approved': approved_count,
+            'approved': approved_count,  # All approvals
+            'final_approved': final_approved_count,  # Final approvals by project_admin
             'rejected': rejected_count,
         },
         'annotators': annotator_stats,
-        'approvers': list(approver_stats),
+        'approvers': approver_stats,
     })
 
 
@@ -731,9 +786,33 @@ def analytics_api(request):
     
     approved_count = 0
     rejected_count = 0
+    final_approved_count = 0
     if tracking_all:
         approved_count = tracking_all.filter(status='approved').count()
         rejected_count = tracking_all.filter(status='rejected').count()
+    
+    # Get final approvals (project_admin approvals only)
+    try:
+        from assignment.completion_tracking import ApproverCompletionStatus
+        from assignment.roles import ROLE_PROJECT_ADMIN
+        
+        # Get all project_admin members across all projects
+        admin_members = Member.objects.filter(
+            project__in=projects
+        ).select_related('role').filter(
+            role__name__iexact=ROLE_PROJECT_ADMIN
+        )
+        admin_user_ids = [m.user_id for m in admin_members]
+        
+        # Count final approvals by project_admin
+        final_approved_count = ApproverCompletionStatus.objects.filter(
+            project__in=projects,
+            status='approved',
+            approver_id__in=admin_user_ids
+        ).values('example').distinct().count()
+    except Exception as e:
+        print(f"[Analytics] Error calculating final approvals: {e}")
+        final_approved_count = 0
     
     # Get unique annotators in this period (from both states and tracking)
     annotator_usernames_from_states = set(states.values_list('confirmed_by__username', flat=True).distinct())
@@ -1007,34 +1086,88 @@ def analytics_api(request):
             'active_users': len(day['users'])
         })
     
-    # Get reviewer stats (separate from annotators) - use tracking_in_range for activity
+    # Get reviewer stats (separate from annotators) - use ApproverCompletionStatus for accurate tracking
     reviewer_stats = {}
-    if tracking_in_range:
-        for t in tracking_in_range:
-            if t.reviewed_by and t.status in ['approved', 'rejected']:
-                username = t.reviewed_by.username
-                if username not in reviewer_stats:
-                    reviewer_stats[username] = {
-                        'username': username,
-                        'total_reviewed': 0,
-                        'approved': 0,
-                        'rejected': 0,
-                        'total_audio_minutes': 0.0,
-                        'total_syllables': 0,
-                        'total_rupees': 0.0,
-                        'payment_breakdown': []
-                    }
-                reviewer_stats[username]['total_reviewed'] += 1
-                if t.status == 'approved':
-                    reviewer_stats[username]['approved'] += 1
-                    # Add payment data for reviewers (only for approved reviews)
-                    if t.example_id in example_meta_map:
-                        ex_meta = example_meta_map[t.example_id]
-                        reviewer_stats[username]['total_audio_minutes'] += ex_meta['duration_minutes']
-                        syllables = count_tibetan_syllables(ex_meta['text'])
-                        reviewer_stats[username]['total_syllables'] += syllables
-                elif t.status == 'rejected':
-                    reviewer_stats[username]['rejected'] += 1
+    try:
+        # Use ApproverCompletionStatus for more accurate reviewer tracking
+        approver_completions = ApproverCompletionStatus.objects.filter(
+            project__in=projects
+        ).select_related('approver', 'example')
+        
+        for ap_completion in approver_completions:
+            username = ap_completion.approver.username
+            
+            if username not in reviewer_stats:
+                reviewer_stats[username] = {
+                    'username': username,
+                    'total_reviewed': 0,
+                    'approved': 0,
+                    'final_approved': 0,
+                    'rejected': 0,
+                    'total_audio_minutes': 0.0,
+                    'total_syllables': 0,
+                    'total_rupees': 0.0,
+                    'payment_breakdown': []
+                }
+            
+            reviewer_stats[username]['total_reviewed'] += 1
+            
+            # Get approver's role
+            approver_role = None
+            try:
+                approver_member = Member.objects.filter(
+                    user=ap_completion.approver,
+                    project=ap_completion.project
+                ).select_related('role').first()
+                if approver_member and approver_member.role:
+                    approver_role = approver_member.role.name.lower()
+            except Exception:
+                pass
+            
+            if ap_completion.status == 'approved':
+                reviewer_stats[username]['approved'] += 1
+                # Count as final approved if this approver is project_admin
+                if approver_role == ROLE_PROJECT_ADMIN:
+                    reviewer_stats[username]['final_approved'] += 1
+                
+                # Add payment data for reviewers (only for approved reviews)
+                if ap_completion.example_id in example_meta_map:
+                    ex_meta = example_meta_map[ap_completion.example_id]
+                    reviewer_stats[username]['total_audio_minutes'] += ex_meta['duration_minutes']
+                    syllables = count_tibetan_syllables(ex_meta['text'])
+                    reviewer_stats[username]['total_syllables'] += syllables
+            elif ap_completion.status == 'rejected':
+                reviewer_stats[username]['rejected'] += 1
+    except Exception as e:
+        print(f"[Analytics] Error calculating reviewer stats from ApproverCompletionStatus: {e}")
+        # Fallback to AnnotationTracking if ApproverCompletionStatus fails
+        if tracking_in_range:
+            for t in tracking_in_range:
+                if t.reviewed_by and t.status in ['approved', 'rejected']:
+                    username = t.reviewed_by.username
+                    if username not in reviewer_stats:
+                        reviewer_stats[username] = {
+                            'username': username,
+                            'total_reviewed': 0,
+                            'approved': 0,
+                            'final_approved': 0,
+                            'rejected': 0,
+                            'total_audio_minutes': 0.0,
+                            'total_syllables': 0,
+                            'total_rupees': 0.0,
+                            'payment_breakdown': []
+                        }
+                    reviewer_stats[username]['total_reviewed'] += 1
+                    if t.status == 'approved':
+                        reviewer_stats[username]['approved'] += 1
+                        # Add payment data for reviewers (only for approved reviews)
+                        if t.example_id in example_meta_map:
+                            ex_meta = example_meta_map[t.example_id]
+                            reviewer_stats[username]['total_audio_minutes'] += ex_meta['duration_minutes']
+                            syllables = count_tibetan_syllables(ex_meta['text'])
+                            reviewer_stats[username]['total_syllables'] += syllables
+                    elif t.status == 'rejected':
+                        reviewer_stats[username]['rejected'] += 1
     
     # Calculate reviewer payments (use tracking_all for payment calculation)
     for username, stats in reviewer_stats.items():
@@ -1079,7 +1212,8 @@ def analytics_api(request):
             'total_examples': total_examples,
             'confirmed': confirmed_count,
             'pending': pending_count,
-            'approved': approved_count,
+            'approved': approved_count,  # All approvals
+            'final_approved': final_approved_count,  # Final approvals by project_admin
             'rejected': rejected_count,
             'active_annotators': active_annotators,
             'total_time_seconds': total_time_all,

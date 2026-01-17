@@ -228,6 +228,48 @@
                     </v-col>
                 </v-row>
                 
+                <!-- Approval Status Row -->
+                <v-row v-if="data && !loading" class="mt-2">
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="blue lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="blue">mdi-check-circle</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.approved || 0 ]]</div>
+                                <div class="text--secondary">Approved</div>
+                                <div class="text-caption">All Approvals</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="green lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="green">mdi-crown</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.final_approved || 0 ]]</div>
+                                <div class="text--secondary">👑 Final Approved</div>
+                                <div class="text-caption">[[ percentage(data.summary.final_approved, data.summary.total_examples) ]]%</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="red lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="red">mdi-close-circle</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.rejected || 0 ]]</div>
+                                <div class="text--secondary">Rejected</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                        <v-card class="stat-card" color="orange lighten-5" elevation="2">
+                            <v-card-text class="text-center">
+                                <v-icon size="40" color="orange">mdi-clock-outline</v-icon>
+                                <div class="text-h4 mt-2">[[ data.summary.pending || 0 ]]</div>
+                                <div class="text--secondary">Pending Review</div>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+                
                 <!-- Time Tracking Row -->
                 <v-row class="mt-2" v-if="data.summary.total_time_seconds > 0">
                     <v-col cols="12" sm="6" md="4">
@@ -408,6 +450,12 @@
                                         [[ item.approved ]]
                                     </v-chip>
                                 </template>
+                                <template v-slot:item.final_approved="{ item }">
+                                    <v-chip small :color="(item.final_approved || 0) > 0 ? 'purple' : 'grey'" dark>
+                                        <v-icon small left>mdi-crown</v-icon>
+                                        [[ item.final_approved || 0 ]]
+                                    </v-chip>
+                                </template>
                                 <template v-slot:item.rejected="{ item }">
                                     <v-chip small :color="item.rejected > 0 ? 'error' : 'grey'" dark>
                                         [[ item.rejected ]]
@@ -551,6 +599,7 @@
                     { text: 'Reviewer', value: 'username' },
                     { text: 'Total Reviewed', value: 'total_reviewed' },
                     { text: 'Approved', value: 'approved' },
+                    { text: '👑 Final Approved', value: 'final_approved' },
                     { text: 'Rejected', value: 'rejected' },
                     { text: 'Audio Minutes', value: 'total_audio_minutes', width: 120 },
                     { text: 'Syllables Reviewed', value: 'total_syllables', width: 140 },

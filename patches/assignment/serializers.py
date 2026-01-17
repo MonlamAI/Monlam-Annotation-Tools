@@ -39,36 +39,201 @@ class AssignmentSerializer(serializers.Serializer):
     ])
     started_at = serializers.DateTimeField(read_only=True, allow_null=True)
     submitted_at = serializers.DateTimeField(read_only=True, allow_null=True)
-    reviewed_by_id = serializers.IntegerField(read_only=True, allow_null=True)
-    reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True)
+    reviewed_by_id = serializers.SerializerMethodField()
+    reviewed_by_username = serializers.SerializerMethodField()
     reviewed_by_role = serializers.SerializerMethodField()
     reviewed_at = serializers.DateTimeField(read_only=True, allow_null=True)
     review_notes = serializers.CharField(allow_blank=True, default='')
     is_active = serializers.BooleanField(default=True)
     
+    # Final approval fields (project_admin approval)
+    final_approval_by_id = serializers.SerializerMethodField()
+    final_approval_by_username = serializers.SerializerMethodField()
+    final_approval_at = serializers.SerializerMethodField()
+    has_final_approval = serializers.SerializerMethodField()
+    
+    def get_reviewed_by_id(self, obj):
+        """Get annotation_approver who reviewed (not project_admin)."""
+        try:
+            from assignment.completion_tracking import ApproverCompletionStatus
+            from projects.models import Member
+            from assignment.roles import ROLE_ANNOTATION_APPROVER
+            
+            # Find annotation_approver approval for this example
+            approvals = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).select_related('approver')
+            
+            for approval in approvals:
+                member = Member.objects.filter(
+                    user=approval.approver,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role and member.role.name.lower() == ROLE_ANNOTATION_APPROVER:
+                    return approval.approver.id
+        except Exception:
+            pass
+        # Fallback to Assignment.reviewed_by if no annotation_approver found
+        return obj.reviewed_by.id if obj.reviewed_by else None
+    
+    def get_reviewed_by_username(self, obj):
+        """Get annotation_approver username who reviewed (not project_admin)."""
+        try:
+            from assignment.completion_tracking import ApproverCompletionStatus
+            from projects.models import Member
+            from assignment.roles import ROLE_ANNOTATION_APPROVER
+            
+            # Find annotation_approver approval for this example
+            approvals = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).select_related('approver')
+            
+            for approval in approvals:
+                member = Member.objects.filter(
+                    user=approval.approver,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role and member.role.name.lower() == ROLE_ANNOTATION_APPROVER:
+                    return approval.approver.username
+        except Exception:
+            pass
+        # Fallback to Assignment.reviewed_by if no annotation_approver found
+        return obj.reviewed_by.username if obj.reviewed_by else None
+    
     def get_reviewed_by_role(self, obj):
         """
-        Get the role of the reviewer (approver or project_manager).
-        This helps distinguish between approver approval and PM final approval.
+        Get the role of the reviewer (annotation_approver, not project_admin).
+        This shows who did the initial review.
         """
-        if not obj.reviewed_by:
-            return None
-        
         try:
-            from projects.models import RoleMapping
+            from assignment.completion_tracking import ApproverCompletionStatus
+            from projects.models import Member
+            from assignment.roles import ROLE_ANNOTATION_APPROVER
             
-            # Get reviewer's role in this project
-            role_mapping = RoleMapping.objects.filter(
-                user=obj.reviewed_by,
-                project=obj.project
-            ).first()
+            # Find annotation_approver approval for this example
+            approvals = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).select_related('approver')
             
-            if role_mapping:
-                return role_mapping.role.name  # Returns 'project_manager', 'approver', etc.
+            for approval in approvals:
+                member = Member.objects.filter(
+                    user=approval.approver,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role and member.role.name.lower() == ROLE_ANNOTATION_APPROVER:
+                    return ROLE_ANNOTATION_APPROVER
         except Exception:
             pass
         
-        return 'reviewer'  # Default fallback
+        # Fallback: check Assignment.reviewed_by if no annotation_approver found
+        if obj.reviewed_by:
+            try:
+                from projects.models import Member
+                member = Member.objects.filter(
+                    user=obj.reviewed_by,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role:
+                    role_name = member.role.name.lower()
+                    # Only return if it's NOT project_admin (project_admin goes in final approval)
+                    if role_name != 'project_admin':
+                        return role_name
+            except Exception:
+                pass
+        
+        return None
+    
+    def get_final_approval_by_id(self, obj):
+        """Get project_admin who gave final approval."""
+        try:
+            from assignment.completion_tracking import ApproverCompletionStatus
+            from projects.models import Member
+            from assignment.roles import ROLE_PROJECT_ADMIN
+            
+            # Find project_admin approval for this example
+            approvals = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).select_related('approver')
+            
+            for approval in approvals:
+                member = Member.objects.filter(
+                    user=approval.approver,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role and member.role.name.lower() == ROLE_PROJECT_ADMIN:
+                    return approval.approver.id
+        except Exception:
+            pass
+        return None
+    
+    def get_final_approval_by_username(self, obj):
+        """Get project_admin username who gave final approval."""
+        try:
+            from assignment.completion_tracking import ApproverCompletionStatus
+            from projects.models import Member
+            from assignment.roles import ROLE_PROJECT_ADMIN
+            
+            # Find project_admin approval for this example
+            approvals = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).select_related('approver')
+            
+            for approval in approvals:
+                member = Member.objects.filter(
+                    user=approval.approver,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role and member.role.name.lower() == ROLE_PROJECT_ADMIN:
+                    return approval.approver.username
+        except Exception:
+            pass
+        return None
+    
+    def get_final_approval_at(self, obj):
+        """Get when project_admin gave final approval."""
+        try:
+            from assignment.completion_tracking import ApproverCompletionStatus
+            from projects.models import Member
+            from assignment.roles import ROLE_PROJECT_ADMIN
+            
+            # Find project_admin approval for this example
+            approvals = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).select_related('approver').order_by('-reviewed_at')
+            
+            for approval in approvals:
+                member = Member.objects.filter(
+                    user=approval.approver,
+                    project=obj.project
+                ).select_related('role').first()
+                
+                if member and member.role and member.role.name.lower() == ROLE_PROJECT_ADMIN:
+                    return approval.reviewed_at
+        except Exception:
+            pass
+        return None
+    
+    def get_has_final_approval(self, obj):
+        """Check if example has final approval from project_admin."""
+        return self.get_final_approval_by_id(obj) is not None
 
 
 class BulkAssignmentSerializer(serializers.Serializer):
