@@ -931,7 +931,8 @@ def analytics_api(request):
         }
     
     # Calculate payment per annotator (grouped by project)
-    annotator_payment_data = {}  # username -> {project_name -> {audio_minutes, approved_segments}}
+    # Payment is based on SUBMITTED examples (not approved)
+    annotator_payment_data = {}  # username -> {project_name -> {audio_minutes, submitted_segments, submitted_syllables}}
     reviewer_payment_data = {}   # username -> {project_name -> {reviewed_syllables}}
     
     # Process tracking data for payment calculation (use tracking_all for payment, not filtered by date)
@@ -945,18 +946,22 @@ def analytics_api(request):
             duration = ex_meta['duration_minutes']
             text = ex_meta['text']
             
-            # Annotator payment (for approved examples)
-            if t.annotated_by and t.status == 'approved':
+            # Annotator payment (for SUBMITTED examples - not approved)
+            if t.annotated_by and t.status == 'submitted':
                 username = t.annotated_by.username
                 if username not in annotator_payment_data:
                     annotator_payment_data[username] = {}
                 if project_name not in annotator_payment_data[username]:
                     annotator_payment_data[username][project_name] = {
                         'audio_minutes': 0.0,
-                        'approved_segments': 0
+                        'submitted_segments': 0,
+                        'submitted_syllables': 0
                     }
                 annotator_payment_data[username][project_name]['audio_minutes'] += duration
-                annotator_payment_data[username][project_name]['approved_segments'] += 1
+                annotator_payment_data[username][project_name]['submitted_segments'] += 1
+                # Count syllables for submitted examples
+                syllables = count_tibetan_syllables(text)
+                annotator_payment_data[username][project_name]['submitted_syllables'] += syllables
             
             # Reviewer payment (for approved examples - same structure as annotators)
             # Reviewers get the same payment as annotators: audio + segments/syllables
@@ -983,16 +988,18 @@ def analytics_api(request):
         stats['total_rupees'] = 0.0
         stats['payment_breakdown'] = []
         
-        # Annotator payment
+        # Annotator payment (based on submitted examples)
         if username in annotator_payment_data:
             for project_name, data in annotator_payment_data[username].items():
                 payment = calculate_payment(
                     project_name=project_name,
                     total_audio_minutes=data['audio_minutes'],
-                    approved_segments=data['approved_segments'],
+                    approved_segments=data['submitted_segments'],  # Use submitted_segments for payment
+                    reviewed_syllables=data.get('submitted_syllables', 0),  # Use submitted_syllables for payment
                     is_reviewer=False
                 )
                 stats['total_audio_minutes'] += data['audio_minutes']
+                stats['total_syllables'] += data.get('submitted_syllables', 0)
                 stats['total_rupees'] += payment['total_rupees']
                 if payment['configured']:
                     stats['payment_breakdown'].append(f"{project_name}: {payment['breakdown']}")

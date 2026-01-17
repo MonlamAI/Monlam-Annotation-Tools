@@ -133,8 +133,8 @@ def calculate_payment(
     Args:
         project_name: Name of the project
         total_audio_minutes: Total audio duration in minutes
-        approved_segments: Number of approved audio segments (for annotators)
-        reviewed_syllables: Number of reviewed syllables (for reviewers)
+        approved_segments: Number of submitted/approved audio segments (for annotators - based on submitted status)
+        reviewed_syllables: Number of submitted/reviewed syllables (for annotators/reviewers - based on submitted status)
         is_reviewer: Whether this is a reviewer (affects which rates apply)
     
     Returns:
