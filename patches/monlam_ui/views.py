@@ -411,8 +411,10 @@ def api_completion_stats(request, project_id):
     
     pending_count = total_examples - confirmed_count
     
-    # Per-annotator stats from ExampleState (who confirmed each example)
+    # Per-annotator stats - combine ExampleState (confirmed) and AnnotationTracking
     annotator_dict = {}
+    
+    # First, add all annotators from ExampleState (confirmed examples)
     for state in confirmed_states:
         if state.confirmed_by:
             username = state.confirmed_by.username
@@ -421,14 +423,31 @@ def api_completion_stats(request, project_id):
                 annotator_dict[username] = {
                     'annotated_by__id': user_id,
                     'annotated_by__username': username,
-                    'total_annotated': 0,
+                    'total_annotated': 0,  # Count of confirmed examples
                     'submitted': 0,
                     'approved': 0,
                     'rejected': 0,
                 }
             annotator_dict[username]['total_annotated'] += 1
     
-    # Add tracking status to annotator stats
+    # Also add annotators from AnnotationTracking who may not have confirmed yet
+    # This ensures all annotators with tracked work appear in the dashboard
+    for t in tracking:
+        if t.annotated_by:
+            username = t.annotated_by.username
+            user_id = t.annotated_by.id
+            if username not in annotator_dict:
+                # Add annotator if they have tracking but no confirmations yet
+                annotator_dict[username] = {
+                    'annotated_by__id': user_id,
+                    'annotated_by__username': username,
+                    'total_annotated': 0,  # Will remain 0 if no confirmations
+                    'submitted': 0,
+                    'approved': 0,
+                    'rejected': 0,
+                }
+    
+    # Now update status counts from tracking (for all annotators)
     for t in tracking:
         if t.annotated_by:
             username = t.annotated_by.username
