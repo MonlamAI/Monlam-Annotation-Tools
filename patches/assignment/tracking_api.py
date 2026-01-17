@@ -642,8 +642,13 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         
         POST /v1/projects/{project_id}/tracking/{example_id}/unlock/
         
-        Only the user who locked it (or an admin) can unlock.
+        Rules:
+        - The user who locked it can always unlock
+        - If lock has expired (>5 minutes), anyone can unlock
+        - If locked by someone else and not expired, only privileged users (Approvers, Project Managers, Admins) can unlock
         """
+        from datetime import timedelta
+        
         try:
             tracking = AnnotationTracking.objects.filter(
                 project_id=project_id,
@@ -656,8 +661,24 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     'message': 'No tracking record exists'
                 })
             
-            # Check if user can unlock
+            # Check if locked by someone else
             if tracking.locked_by and tracking.locked_by != request.user:
+                # Check if lock is expired (5 minute expiry)
+                if tracking.locked_at:
+                    lock_expiry = tracking.locked_at + timedelta(minutes=5)
+                    if timezone.now() >= lock_expiry:
+                        # Lock expired - clear it and allow unlock
+                        print(f'[Monlam Lock] Example {pk} lock expired, clearing by {request.user.username}')
+                        tracking.locked_by = None
+                        tracking.locked_at = None
+                        tracking.save(update_fields=['locked_by', 'locked_at'])
+                        
+                        return Response({
+                            'success': True,
+                            'message': 'Lock expired and cleared'
+                        })
+                
+                # Lock is still valid and locked by someone else
                 # Only privileged users can unlock others' locks
                 if not has_approve_permission(request.user, project_id):
                     return Response({
@@ -666,7 +687,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                         'message': 'Only the lock owner, Approvers, Project Managers, or Admins can unlock'
                     }, status=status.HTTP_403_FORBIDDEN)
             
-            # Unlock
+            # Unlock (either by owner, expired, or privileged user)
             tracking.locked_by = None
             tracking.locked_at = None
             tracking.save(update_fields=['locked_by', 'locked_at'])
