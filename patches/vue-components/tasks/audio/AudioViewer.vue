@@ -53,16 +53,16 @@
       
       <!-- Status Card -->
       <v-chip
-        v-if="showStatusCard"
-        :color="statusCardColor"
+        v-if="projectId && exampleId && showStatusCard"
+        :color="statusCardColor || 'grey'"
         text-color="white"
         small
         outlined
         class="status-chip"
         style="max-width: 300px;"
       >
-        <v-icon left small>{{ statusIcon }}</v-icon>
-        <span class="status-text">{{ statusText }}</span>
+        <v-icon left small>{{ statusIcon || 'mdi-information-outline' }}</v-icon>
+        <span class="status-text">{{ statusText || (isLoadingStatus ? 'Loading...' : 'Not submitted yet') }}</span>
       </v-chip>
     </div>
     <v-checkbox
@@ -132,23 +132,42 @@ export default Vue.extend({
       if (!this.projectId || !this.exampleId) return false
       
       // For annotators: Only show if submitted
-      if (this.userRole === 'annotator' || (!this.userRole && !this.statusData)) {
+      if (this.userRole === 'annotator') {
         return this.statusData && this.statusData.is_submitted
       }
       
-      // For approvers and admins: Always show
-      return true
+      // For approvers and admins: Always show (even if no data yet or still loading)
+      if (this.userRole === 'annotation_approver' || 
+          this.userRole === 'project_admin' || 
+          this.userRole === 'project_manager') {
+        return true
+      }
+      
+      // If we're still loading and don't know the role yet, show the card
+      // (it will update once we get the role)
+      if (this.isLoadingStatus) {
+        return true
+      }
+      
+      // For unknown roles, show if we have data or if we have submittedBy/approvedBy
+      return !!this.statusData || !!this.submittedBy || !!this.approvedBy
     },
     
     statusText() {
-      if (!this.statusData) return ''
-      
       // For annotators: Only show "Submitted" if they've submitted
-      if (this.userRole === 'annotator' || !this.userRole) {
-        if (this.statusData.is_submitted) {
+      if (this.userRole === 'annotator') {
+        if (this.statusData && this.statusData.is_submitted) {
           return 'Submitted'
         }
         return '' // Empty for annotators who haven't submitted
+      }
+      
+      // If no data yet, show loading or default message
+      if (!this.statusData) {
+        if (this.isLoadingStatus) {
+          return 'Loading...'
+        }
+        return 'Not submitted yet'
       }
       
       // For annotation approvers: Show who submitted
@@ -293,8 +312,12 @@ export default Vue.extend({
     },
     
     async fetchStatusData() {
-      if (!this.projectId || !this.exampleId) return
+      if (!this.projectId || !this.exampleId) {
+        console.log('[AudioViewer] Missing projectId or exampleId:', { projectId: this.projectId, exampleId: this.exampleId })
+        return
+      }
       
+      console.log('[AudioViewer] Fetching status data for:', { projectId: this.projectId, exampleId: this.exampleId })
       this.isLoadingStatus = true
       
       try {
@@ -303,10 +326,14 @@ export default Vue.extend({
           `/v1/projects/${this.projectId}/assignments/approver-completion/${this.exampleId}/`
         )
         
+        console.log('[AudioViewer] Approval API response:', approvalResp.status, approvalResp.ok)
+        
         if (approvalResp.ok) {
           const approvalData = await approvalResp.json()
+          console.log('[AudioViewer] Approval data:', approvalData)
           this.statusData = approvalData
           this.userRole = approvalData.user_role || null
+          console.log('[AudioViewer] User role:', this.userRole)
           
           // Extract submitted by from tracking API
           try {
@@ -332,14 +359,37 @@ export default Vue.extend({
             }
           }
         } else if (approvalResp.status === 403 || approvalResp.status === 404) {
-          // User doesn't have permission or endpoint doesn't exist - silently fail
-          this.statusData = null
+          // User doesn't have permission or endpoint doesn't exist
+          // Still set statusData to empty object so card can show "Not submitted yet"
+          this.statusData = { is_submitted: false }
+          // Try to get user role from tracking API
+          try {
+            const trackingResp = await fetch(
+              `/v1/projects/${this.projectId}/tracking/${this.exampleId}/status/`
+            )
+            if (trackingResp.ok) {
+              const trackingData = await trackingResp.json()
+              this.submittedBy = trackingData.annotated_by || null
+              if (this.submittedBy) {
+                this.statusData.is_submitted = true
+              }
+            }
+          } catch (e) {
+            console.error('[AudioViewer] Error fetching tracking status:', e)
+          }
         }
       } catch (error) {
         console.error('[AudioViewer] Error fetching status:', error)
-        this.statusData = null
+        // Set empty status data so card can still show "Not submitted yet"
+        this.statusData = { is_submitted: false }
       } finally {
         this.isLoadingStatus = false
+        console.log('[AudioViewer] Final state:', {
+          showStatusCard: this.showStatusCard,
+          statusText: this.statusText,
+          userRole: this.userRole,
+          statusData: this.statusData
+        })
       }
     }
   }
