@@ -67,11 +67,25 @@ def track_annotation_saved(sender, instance, created, **kwargs):
             }
         )
         
+        # Update tracking if needed
+        needs_save = False
+        
         # If tracking exists but no annotator yet, update it
         if not tracking_created and not tracking.annotated_by:
             tracking.annotated_by = user
             tracking.annotated_at = timezone.now()
             tracking.status = 'submitted'
+            needs_save = True
+        
+        # CRITICAL: If example was rejected and same annotator is resubmitting, update status to submitted
+        # This handles the rejected → submitted transition when annotator fixes and resubmits
+        if not tracking_created and tracking.status == 'rejected' and tracking.annotated_by == user:
+            tracking.status = 'submitted'
+            tracking.annotated_at = timezone.now()  # Update timestamp to reflect resubmission
+            needs_save = True
+            print(f'[Monlam Signals] ✅ Resubmission: Updated rejected example {example.id} to submitted')
+        
+        if needs_save:
             tracking.save()
             print(f'[Monlam Signals] ✅ Updated tracking for example {example.id}')
         elif tracking_created:

@@ -740,7 +740,7 @@ def api_completion_stats(request, project_id):
             'pending': pending_count,
             'submitted': submitted_count,
             'approved': approved_count,  # All approvals
-            'final_approved': final_approved_count,  # Final approvals by project_admin (sum from approver_stats)
+            'final_approved': final_approved_count,  # Final approvals by project_admin ONLY (always project_admin role) (sum from approver_stats)
             'rejected': rejected_count,
         },
         'annotators': annotator_stats,
@@ -933,7 +933,7 @@ def analytics_api(request):
     
     from datetime import datetime, timedelta
     from django.utils import timezone
-    from projects.models import Project
+    from projects.models import Project, Member
     from examples.models import Example, ExampleState
     from django.contrib.auth import get_user_model
     
@@ -944,6 +944,8 @@ def analytics_api(request):
     project_id = request.GET.get('project_id', '')
     start_date_str = request.GET.get('start_date', '')
     end_date_str = request.GET.get('end_date', '')
+    start_time_str = request.GET.get('start_time', '')  # Format: HH:MM (24-hour)
+    end_time_str = request.GET.get('end_time', '')  # Format: HH:MM (24-hour)
     
     # Calculate date range
     today = timezone.now().date()
@@ -977,9 +979,27 @@ def analytics_api(request):
         start_date = today - timedelta(days=30)
         end_date = today
     
+    # Parse time range (if provided)
+    start_time_obj = None
+    end_time_obj = None
+    if start_time_str:
+        try:
+            start_time_obj = datetime.strptime(start_time_str, '%H:%M').time()
+        except ValueError:
+            pass  # Invalid time format, ignore
+    if end_time_str:
+        try:
+            end_time_obj = datetime.strptime(end_time_str, '%H:%M').time()
+        except ValueError:
+            pass  # Invalid time format, ignore
+    
     # Convert to datetime with timezone
-    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
-    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+    # Use provided time or default to start/end of day
+    start_time = start_time_obj if start_time_obj else datetime.min.time()
+    end_time = end_time_obj if end_time_obj else datetime.max.time()
+    
+    start_datetime = timezone.make_aware(datetime.combine(start_date, start_time))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, end_time))
     
     # Get projects
     if project_id:
@@ -1009,32 +1029,62 @@ def analytics_api(request):
             Q(reviewed_at__isnull=False, reviewed_at__gte=start_datetime, reviewed_at__lte=end_datetime)
         ).select_related('annotated_by', 'reviewed_by')
         
-        # Also get all tracking for payment calculation (not filtered by date)
+        # Get tracking for payment calculation - FILTERED BY DATE RANGE (same as activity tracking)
+        # For annotators: filter by annotated_at (when they submitted)
+        # For reviewers: filter by reviewed_at (when they reviewed)
+        tracking_for_payment = AnnotationTracking.objects.filter(
+            project__in=projects
+        ).filter(
+            Q(annotated_at__isnull=False, annotated_at__gte=start_datetime, annotated_at__lte=end_datetime) |
+            Q(reviewed_at__isnull=False, reviewed_at__gte=start_datetime, reviewed_at__lte=end_datetime)
+        ).select_related('annotated_by', 'reviewed_by')
+        
+        # Also get all tracking (unfiltered) for summary stats that need all-time data
         tracking_all = AnnotationTracking.objects.filter(
             project__in=projects
         ).select_related('annotated_by', 'reviewed_by')
-    except:
-        tracking_in_range = []
-        tracking_all = []
+    except Exception as e:
+        print(f"[Analytics] Error loading tracking data: {e}")
+        tracking_in_range = AnnotationTracking.objects.none()
+        tracking_for_payment = AnnotationTracking.objects.none()
+        tracking_all = AnnotationTracking.objects.none()
     
-    # Summary stats
+    # Summary stats - ALL USE DATE-FILTERED DATA for consistency
     total_examples = len(example_ids)
-    confirmed_count = states.count()
-    pending_count = total_examples - ExampleState.objects.filter(example_id__in=example_ids).count()
+    confirmed_count = states.count()  # Date-filtered confirmations
     
+    # Pending count: Total examples minus date-filtered confirmed count
+    # This shows how many examples are still pending confirmation within the date range
+    pending_count = total_examples - confirmed_count
+    
+    # Approved/rejected counts - USE DATE-FILTERED tracking_in_range
     approved_count = 0
     rejected_count = 0
-    final_approved_count = 0
-    if tracking_all:
-        approved_count = tracking_all.filter(status='approved').count()
-        rejected_count = tracking_all.filter(status='rejected').count()
+    if tracking_in_range:
+        # Count approvals/rejections that happened within date range
+        approved_count = tracking_in_range.filter(
+            status='approved',
+            reviewed_at__isnull=False,
+            reviewed_at__gte=start_datetime,
+            reviewed_at__lte=end_datetime
+        ).count()
+        rejected_count = tracking_in_range.filter(
+            status='rejected',
+            reviewed_at__isnull=False,
+            reviewed_at__gte=start_datetime,
+            reviewed_at__lte=end_datetime
+        ).count()
     
-    # Get final approvals (project_admin approvals only)
+    # Get final approvals - ALWAYS project_admin approvals only - DATE-FILTERED
+    # Final approved = approvals made by users with project_admin role
+    # This is the final approval step in the workflow (after annotation_approver approval)
+    final_approved_count = 0
     try:
         from assignment.completion_tracking import ApproverCompletionStatus
         from assignment.roles import ROLE_PROJECT_ADMIN
         
         # Get all project_admin members across all projects
+        # Only users with project_admin role can give final approval
         admin_members = Member.objects.filter(
             project__in=projects
         ).select_related('role').filter(
@@ -1042,13 +1092,16 @@ def analytics_api(request):
         )
         admin_user_ids = [m.user_id for m in admin_members]
         
-        # Count final approvals by project_admin
-        # Each approval action by a project_admin counts as 1 Final Approved
+        # Count final approvals by project_admin WITHIN DATE RANGE
+        # Filter by reviewed_at to match the date range
+        # IMPORTANT: Only counts approvals where approver_id is in admin_user_ids (project_admin role)
         final_approved_count = ApproverCompletionStatus.objects.filter(
             project__in=projects,
             status='approved',
-            approver_id__in=admin_user_ids
-        ).count()  # Count total approvals by project_admin, not distinct examples
+            approver_id__in=admin_user_ids,  # CRITICAL: Only project_admin approvals
+            reviewed_at__gte=start_datetime,
+            reviewed_at__lte=end_datetime
+        ).count()
     except Exception as e:
         print(f"[Analytics] Error calculating final approvals: {e}")
         final_approved_count = 0
@@ -1059,12 +1112,39 @@ def analytics_api(request):
     all_annotator_usernames = annotator_usernames_from_states | annotator_usernames_from_tracking
     active_annotators = len(all_annotator_usernames)
     
-    # Per-annotator stats - build from states (confirmations in date range)
+    # Per-annotator stats - build from tracking_in_range for consistency
+    # Use AnnotationTracking as source of truth since it has both annotation and approval/rejection status
     annotator_stats = {}
+    
+    # First, build stats from tracking_in_range (annotations within date range)
+    for t in tracking_in_range:
+        if t.annotated_by and t.annotated_at and start_datetime <= t.annotated_at <= end_datetime:
+            username = t.annotated_by.username
+            if username not in annotator_stats:
+                annotator_stats[username] = {
+                    'username': username,
+                    'total': 0,  # Will count from ExampleState for consistency
+                    'approved': 0,
+                    'rejected': 0,
+                    'pending': 0,
+                    'total_time_seconds': 0,
+                    'first_date': t.annotated_at.date(),
+                    'last_date': t.annotated_at.date()
+                }
+            # Update dates
+            track_date = t.annotated_at.date()
+            if track_date < annotator_stats[username]['first_date']:
+                annotator_stats[username]['first_date'] = track_date
+            if track_date > annotator_stats[username]['last_date']:
+                annotator_stats[username]['last_date'] = track_date
+    
+    # Now count total from ExampleState (confirmations in date range) for each annotator
+    # This ensures total matches the confirmed_count logic
     for state in states:
         if state.confirmed_by:
             username = state.confirmed_by.username
             if username not in annotator_stats:
+                # Initialize if not already in stats
                 annotator_stats[username] = {
                     'username': username,
                     'total': 0,
@@ -1076,50 +1156,34 @@ def analytics_api(request):
                     'last_date': state.confirmed_at.date()
                 }
             annotator_stats[username]['total'] += 1
-            if state.confirmed_at.date() < annotator_stats[username]['first_date']:
-                annotator_stats[username]['first_date'] = state.confirmed_at.date()
-            if state.confirmed_at.date() > annotator_stats[username]['last_date']:
-                annotator_stats[username]['last_date'] = state.confirmed_at.date()
+            # Update dates
+            state_date = state.confirmed_at.date()
+            if state_date < annotator_stats[username]['first_date']:
+                annotator_stats[username]['first_date'] = state_date
+            if state_date > annotator_stats[username]['last_date']:
+                annotator_stats[username]['last_date'] = state_date
     
-    # Add annotators from tracking who aren't in states (they annotated/reviewed in date range but confirmation was outside)
-    for t in tracking_in_range:
-        if t.annotated_by:
-            username = t.annotated_by.username
-            if username not in annotator_stats:
-                # Initialize with date from tracking
-                date_to_use = t.annotated_at.date() if t.annotated_at else today
-                annotator_stats[username] = {
-                    'username': username,
-                    'total': 0,
-                    'approved': 0,
-                    'rejected': 0,
-                    'pending': 0,
-                    'total_time_seconds': 0,
-                    'first_date': date_to_use,
-                    'last_date': date_to_use
-                }
-            # Update dates if needed
-            if t.annotated_at:
-                track_date = t.annotated_at.date()
-                if track_date < annotator_stats[username]['first_date']:
-                    annotator_stats[username]['first_date'] = track_date
-                if track_date > annotator_stats[username]['last_date']:
-                    annotator_stats[username]['last_date'] = track_date
-    
-    # Add tracking status and time spent (from tracking_in_range for activity, tracking_all for payment)
+    # Add tracking status and time spent (from tracking_in_range - DATE-FILTERED)
+    # For annotator stats: count approved/rejected examples that were annotated by this user
+    # AND approved/rejected within the date range
     total_time_all = 0
     if tracking_in_range:
         for t in tracking_in_range:
             if t.annotated_by and t.annotated_by.username in annotator_stats:
-                if t.status == 'approved':
-                    annotator_stats[t.annotated_by.username]['approved'] += 1
-                elif t.status == 'rejected':
-                    annotator_stats[t.annotated_by.username]['rejected'] += 1
+                # Only count if the approval/rejection happened within date range
+                # AND the example was annotated by this user
+                if t.status == 'approved' and t.reviewed_at:
+                    if start_datetime <= t.reviewed_at <= end_datetime:
+                        annotator_stats[t.annotated_by.username]['approved'] += 1
+                elif t.status == 'rejected' and t.reviewed_at:
+                    if start_datetime <= t.reviewed_at <= end_datetime:
+                        annotator_stats[t.annotated_by.username]['rejected'] += 1
                 
-                # Add time spent
-                if hasattr(t, 'time_spent_seconds') and t.time_spent_seconds:
-                    annotator_stats[t.annotated_by.username]['total_time_seconds'] += t.time_spent_seconds
-                    total_time_all += t.time_spent_seconds
+                # Add time spent (only for annotations within date range)
+                if t.annotated_at and start_datetime <= t.annotated_at <= end_datetime:
+                    if hasattr(t, 'time_spent_seconds') and t.time_spent_seconds:
+                        annotator_stats[t.annotated_by.username]['total_time_seconds'] += t.time_spent_seconds
+                        total_time_all += t.time_spent_seconds
     
     # ============================================
     # PAYMENT CALCULATION
@@ -1151,9 +1215,9 @@ def analytics_api(request):
     annotator_payment_data = {}  # username -> {project_name -> {audio_minutes, submitted_segments, submitted_syllables}}
     reviewer_payment_data = {}   # username -> {project_name -> {reviewed_syllables}}
     
-    # Process tracking data for payment calculation (use tracking_all for payment, not filtered by date)
-    if tracking_all:
-        for t in tracking_all:
+    # Process tracking data for payment calculation (use tracking_for_payment - FILTERED BY DATE RANGE)
+    if tracking_for_payment:
+        for t in tracking_for_payment:
             if t.example_id not in example_meta_map:
                 continue
             
@@ -1162,40 +1226,44 @@ def analytics_api(request):
             duration = ex_meta['duration_minutes']
             text = ex_meta['text']
             
-            # Annotator payment (for SUBMITTED examples - not approved)
-            if t.annotated_by and t.status == 'submitted':
-                username = t.annotated_by.username
-                if username not in annotator_payment_data:
-                    annotator_payment_data[username] = {}
-                if project_name not in annotator_payment_data[username]:
-                    annotator_payment_data[username][project_name] = {
-                        'audio_minutes': 0.0,
-                        'submitted_segments': 0,
-                        'submitted_syllables': 0
-                    }
-                annotator_payment_data[username][project_name]['audio_minutes'] += duration
-                annotator_payment_data[username][project_name]['submitted_segments'] += 1
-                # Count syllables for submitted examples
-                syllables = count_tibetan_syllables(text)
-                annotator_payment_data[username][project_name]['submitted_syllables'] += syllables
+            # Annotator payment (for SUBMITTED examples - filter by annotated_at within date range)
+            if t.annotated_by and t.status == 'submitted' and t.annotated_at:
+                # Only count if annotated_at is within the date+time range
+                if start_datetime <= t.annotated_at <= end_datetime:
+                    username = t.annotated_by.username
+                    if username not in annotator_payment_data:
+                        annotator_payment_data[username] = {}
+                    if project_name not in annotator_payment_data[username]:
+                        annotator_payment_data[username][project_name] = {
+                            'audio_minutes': 0.0,
+                            'submitted_segments': 0,
+                            'submitted_syllables': 0
+                        }
+                    annotator_payment_data[username][project_name]['audio_minutes'] += duration
+                    annotator_payment_data[username][project_name]['submitted_segments'] += 1
+                    # Count syllables for submitted examples
+                    syllables = count_tibetan_syllables(text)
+                    annotator_payment_data[username][project_name]['submitted_syllables'] += syllables
             
-            # Reviewer payment (for approved examples - same structure as annotators)
+            # Reviewer payment (for approved examples - filter by reviewed_at within date range)
             # Reviewers get the same payment as annotators: audio + segments/syllables
-            if t.reviewed_by and t.status == 'approved' and t.reviewed_by != t.annotated_by:
-                username = t.reviewed_by.username
-                if username not in reviewer_payment_data:
-                    reviewer_payment_data[username] = {}
-                if project_name not in reviewer_payment_data[username]:
-                    reviewer_payment_data[username][project_name] = {
-                        'audio_minutes': 0.0,
-                        'reviewed_segments': 0,  # Each reviewed example counts as a segment
-                        'reviewed_syllables': 0
-                    }
-                reviewer_payment_data[username][project_name]['audio_minutes'] += duration
-                reviewer_payment_data[username][project_name]['reviewed_segments'] += 1
-                # Count syllables from the annotation text
-                syllables = count_tibetan_syllables(text)
-                reviewer_payment_data[username][project_name]['reviewed_syllables'] += syllables
+            if t.reviewed_by and t.status == 'approved' and t.reviewed_by != t.annotated_by and t.reviewed_at:
+                # Only count if reviewed_at is within the date+time range
+                if start_datetime <= t.reviewed_at <= end_datetime:
+                    username = t.reviewed_by.username
+                    if username not in reviewer_payment_data:
+                        reviewer_payment_data[username] = {}
+                    if project_name not in reviewer_payment_data[username]:
+                        reviewer_payment_data[username][project_name] = {
+                            'audio_minutes': 0.0,
+                            'reviewed_segments': 0,  # Each reviewed example counts as a segment
+                            'reviewed_syllables': 0
+                        }
+                    reviewer_payment_data[username][project_name]['audio_minutes'] += duration
+                    reviewer_payment_data[username][project_name]['reviewed_segments'] += 1
+                    # Count syllables from the annotation text
+                    syllables = count_tibetan_syllables(text)
+                    reviewer_payment_data[username][project_name]['reviewed_syllables'] += syllables
     
     # Calculate payments for annotators
     for username, stats in annotator_stats.items():
@@ -1241,10 +1309,14 @@ def analytics_api(request):
         stats['total_audio_minutes'] = round(stats['total_audio_minutes'], 2)
         stats['total_rupees'] = round(stats['total_rupees'], 2)
     
-    # Calculate derived stats
+    # Calculate derived stats - ensure consistency
+    # Pending = total confirmed - approved - rejected
+    # All counts are now from the same date range for consistency
     for username, stats in annotator_stats.items():
         stats['pending'] = stats['total'] - stats['approved'] - stats['rejected']
         if stats['pending'] < 0:
+            # This shouldn't happen if logic is correct, but set to 0 as safety
+            print(f"[Analytics] Warning: Negative pending for {username}: total={stats['total']}, approved={stats['approved']}, rejected={stats['rejected']}")
             stats['pending'] = 0
         
         reviewed = stats['approved'] + stats['rejected']
@@ -1386,14 +1458,15 @@ def analytics_api(request):
             
             if ap_completion.status == 'approved':
                 reviewer_stats[username]['approved'] += 1
-                # Count as final approved if this approver is project_admin
+                # Count as final approved ONLY if this approver is project_admin
+                # Final approved = ALWAYS project_admin approvals only
                 # Use robust comparison: check exact match or if 'project_admin' is in role name
                 is_project_admin = (
                     approver_role == ROLE_PROJECT_ADMIN or 
                     (approver_role and 'project_admin' in approver_role)
                 )
                 if is_project_admin:
-                    reviewer_stats[username]['final_approved'] += 1
+                    reviewer_stats[username]['final_approved'] += 1  # Only project_admin approvals count as final
                 
                 # Add payment data for reviewers (only for approved reviews)
                 if ap_completion.example_id in example_meta_map:
@@ -1454,13 +1527,14 @@ def analytics_api(request):
                         else:
                             approver_role = approver_roles_cache[cache_key]
                         
-                        # Count as final approved if this approver is project_admin
+                        # Count as final approved ONLY if this approver is project_admin
+                        # Final approved = ALWAYS project_admin approvals only
                         is_project_admin = (
                             approver_role == ROLE_PROJECT_ADMIN or 
                             (approver_role and 'project_admin' in approver_role)
                         )
                         if is_project_admin:
-                            reviewer_stats[username]['final_approved'] += 1
+                            reviewer_stats[username]['final_approved'] += 1  # Only project_admin approvals count as final
                         
                         # Add payment data for reviewers (only for approved reviews)
                         if t.example_id in example_meta_map:
@@ -1471,25 +1545,27 @@ def analytics_api(request):
                     elif t.status == 'rejected':
                         reviewer_stats[username]['rejected'] += 1
     
-    # Calculate reviewer payments (use tracking_all for payment calculation)
+    # Calculate reviewer payments (use tracking_for_payment - FILTERED BY DATE RANGE)
     for username, stats in reviewer_stats.items():
         # Group by project for payment calculation
         reviewer_projects = {}
-        if tracking_all:
-            for t in tracking_all:
-                if t.reviewed_by and t.reviewed_by.username == username and t.status == 'approved':
-                    if t.example_id in example_meta_map:
-                        ex_meta = example_meta_map[t.example_id]
-                        project_name = ex_meta['project_name']
-                        if project_name not in reviewer_projects:
-                            reviewer_projects[project_name] = {
-                                'audio_minutes': 0.0,
-                                'reviewed_segments': 0,
-                                'reviewed_syllables': 0
-                            }
-                        reviewer_projects[project_name]['audio_minutes'] += ex_meta['duration_minutes']
-                        reviewer_projects[project_name]['reviewed_segments'] += 1
-                        reviewer_projects[project_name]['reviewed_syllables'] += count_tibetan_syllables(ex_meta['text'])
+        if tracking_for_payment:
+            for t in tracking_for_payment:
+                if t.reviewed_by and t.reviewed_by.username == username and t.status == 'approved' and t.reviewed_at:
+                    # Only count if reviewed_at is within the date+time range
+                    if start_datetime <= t.reviewed_at <= end_datetime:
+                        if t.example_id in example_meta_map:
+                            ex_meta = example_meta_map[t.example_id]
+                            project_name = ex_meta['project_name']
+                            if project_name not in reviewer_projects:
+                                reviewer_projects[project_name] = {
+                                    'audio_minutes': 0.0,
+                                    'reviewed_segments': 0,
+                                    'reviewed_syllables': 0
+                                }
+                            reviewer_projects[project_name]['audio_minutes'] += ex_meta['duration_minutes']
+                            reviewer_projects[project_name]['reviewed_segments'] += 1
+                            reviewer_projects[project_name]['reviewed_syllables'] += count_tibetan_syllables(ex_meta['text'])
         
         # Calculate payment for each project
         for project_name, data in reviewer_projects.items():
@@ -1515,7 +1591,7 @@ def analytics_api(request):
             'confirmed': confirmed_count,
             'pending': pending_count,
             'approved': approved_count,  # All approvals
-            'final_approved': final_approved_count,  # Final approvals by project_admin
+            'final_approved': final_approved_count,  # Final approvals by project_admin ONLY (always project_admin role)
             'rejected': rejected_count,
             'active_annotators': active_annotators,
             'total_time_seconds': total_time_all,
@@ -1530,7 +1606,11 @@ def analytics_api(request):
         'daily_activity': daily_list if daily_list else [],
         'date_range': {
             'start': start_date.isoformat(),
-            'end': end_date.isoformat()
+            'end': end_date.isoformat(),
+            'start_time': start_time_str if start_time_str else None,
+            'end_time': end_time_str if end_time_str else None,
+            'start_datetime': start_datetime.isoformat() if start_datetime else None,
+            'end_datetime': end_datetime.isoformat() if end_datetime else None
         }
     })
 

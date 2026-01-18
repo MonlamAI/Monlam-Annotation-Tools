@@ -160,6 +160,44 @@
                                 </v-menu>
                             </v-col>
                         </v-row>
+                        <v-row v-if="dateRange === 'custom'">
+                            <v-col cols="12" sm="6" md="3">
+                                <v-text-field
+                                    v-model="startTime"
+                                    label="Start Time (HH:MM)"
+                                    prepend-icon="mdi-clock-time-four-outline"
+                                    placeholder="09:00"
+                                    hint="24-hour format (e.g., 09:00 for 9 AM)"
+                                    persistent-hint
+                                    outlined
+                                    dense
+                                    type="time"
+                                ></v-text-field>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                                <v-text-field
+                                    v-model="endTime"
+                                    label="End Time (HH:MM)"
+                                    prepend-icon="mdi-clock-time-four-outline"
+                                    placeholder="17:00"
+                                    hint="24-hour format (e.g., 17:00 for 5 PM)"
+                                    persistent-hint
+                                    outlined
+                                    dense
+                                    type="time"
+                                ></v-text-field>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="6">
+                                <v-alert
+                                    type="info"
+                                    dense
+                                    outlined
+                                    class="mt-2"
+                                >
+                                    <small>Time filter applies to all days in the selected date range. For example, selecting 09:00-17:00 for a month will show only work done between 9 AM and 5 PM each day.</small>
+                                </v-alert>
+                            </v-col>
+                        </v-row>
                         <v-row>
                             <v-col cols="12" class="text-right">
                                 <v-btn color="primary" @click="loadData" :loading="loading" class="mr-2">
@@ -577,6 +615,8 @@
                 ],
                 startDate: null,
                 endDate: null,
+                startTime: null,
+                endTime: null,
                 startDateMenu: false,
                 endDateMenu: false,
                 dailyChart: null,
@@ -709,7 +749,9 @@
                             date_range: this.dateRange,
                             project_id: this.selectedProject || '',
                             start_date: this.startDate || '',
-                            end_date: this.endDate || ''
+                            end_date: this.endDate || '',
+                            start_time: this.startTime || '',
+                            end_time: this.endTime || ''
                         });
                         
                         const resp = await fetch(`/monlam/analytics/api/?${params}`);
