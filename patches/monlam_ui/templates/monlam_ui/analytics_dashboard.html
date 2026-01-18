@@ -619,6 +619,20 @@
                 endTime: null,
                 startDateMenu: false,
                 endDateMenu: false,
+                roleFilter: null,
+                statusFilter: null,
+                minPayment: null,
+                roleFilterOptions: [
+                    { text: 'All Roles', value: null },
+                    { text: 'Annotator', value: 'annotator' },
+                    { text: 'Reviewer', value: 'reviewer' }
+                ],
+                statusFilterOptions: [
+                    { text: 'All Statuses', value: null },
+                    { text: 'Approved', value: 'approved' },
+                    { text: 'Rejected', value: 'rejected' },
+                    { text: 'Pending', value: 'pending' }
+                ],
                 dailyChart: null,
                 statusChart: null,
                 annotatorHeaders: [

@@ -1092,18 +1092,39 @@ def analytics_api(request):
         )
         admin_user_ids = [m.user_id for m in admin_members]
         
-        # Count final approvals by project_admin WITHIN DATE RANGE
-        # Filter by reviewed_at to match the date range
-        # IMPORTANT: Only counts approvals where approver_id is in admin_user_ids (project_admin role)
-        final_approved_count = ApproverCompletionStatus.objects.filter(
-            project__in=projects,
-            status='approved',
-            approver_id__in=admin_user_ids,  # CRITICAL: Only project_admin approvals
-            reviewed_at__gte=start_datetime,
-            reviewed_at__lte=end_datetime
-        ).count()
+        print(f"[Analytics] Found {len(admin_user_ids)} project_admin users: {admin_user_ids}")
+        
+        if admin_user_ids:
+            # Count final approvals by project_admin WITHIN DATE RANGE
+            # Filter by reviewed_at to match the date range
+            # IMPORTANT: Only counts approvals where approver_id is in admin_user_ids (project_admin role)
+            # Also handle cases where reviewed_at might be None (shouldn't happen for approved, but be safe)
+            final_approved_count = ApproverCompletionStatus.objects.filter(
+                project__in=projects,
+                status='approved',
+                approver_id__in=admin_user_ids,  # CRITICAL: Only project_admin approvals
+                reviewed_at__isnull=False,  # Must have a review timestamp
+                reviewed_at__gte=start_datetime,
+                reviewed_at__lte=end_datetime
+            ).count()
+            
+            print(f"[Analytics] Final approved count (date-filtered): {final_approved_count}")
+            print(f"[Analytics] Date range: {start_datetime} to {end_datetime}")
+            
+            # Debug: Check total project_admin approvals (without date filter) for comparison
+            total_admin_approvals = ApproverCompletionStatus.objects.filter(
+                project__in=projects,
+                status='approved',
+                approver_id__in=admin_user_ids,
+                reviewed_at__isnull=False
+            ).count()
+            print(f"[Analytics] Total project_admin approvals (all time): {total_admin_approvals}")
+        else:
+            print(f"[Analytics] No project_admin users found in selected projects")
     except Exception as e:
+        import traceback
         print(f"[Analytics] Error calculating final approvals: {e}")
+        print(f"[Analytics] Traceback: {traceback.format_exc()}")
         final_approved_count = 0
     
     # Get unique annotators in this period (from both states and tracking)
