@@ -72,8 +72,9 @@ class MonlamTrackingConfig(AppConfig):
         
         # Set up auto-tracking signals
         try:
-            from .signals import setup_annotation_signals
+            from .signals import setup_annotation_signals, setup_example_state_signals
             setup_annotation_signals()
+            setup_example_state_signals()  # Also track ExampleState (tick mark)
             print('[Monlam Tracking] ✅ Auto-tracking signals connected')
         except Exception as e:
             print(f'[Monlam Tracking] ⚠️ Auto-tracking not set up: {e}')

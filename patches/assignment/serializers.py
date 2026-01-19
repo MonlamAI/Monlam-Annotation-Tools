@@ -28,6 +28,8 @@ class AssignmentSerializer(serializers.Serializer):
     project_id = serializers.IntegerField()
     assigned_to_id = serializers.IntegerField(allow_null=True)
     assigned_to_username = serializers.CharField(source='assigned_to.username', read_only=True)
+    annotated_by_id = serializers.SerializerMethodField()
+    annotated_by_username = serializers.SerializerMethodField()
     assigned_by_id = serializers.IntegerField(allow_null=True, read_only=True)
     assigned_at = serializers.DateTimeField(read_only=True)
     status = serializers.ChoiceField(choices=[
@@ -51,6 +53,58 @@ class AssignmentSerializer(serializers.Serializer):
     final_approval_by_username = serializers.SerializerMethodField()
     final_approval_at = serializers.SerializerMethodField()
     has_final_approval = serializers.SerializerMethodField()
+    
+    def get_annotated_by_id(self, obj):
+        """Get who actually annotated this example (from AnnotationTracking)."""
+        try:
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                project=obj.project,
+                example=obj.example
+            ).select_related('annotated_by').first()
+            
+            if tracking and tracking.annotated_by:
+                return tracking.annotated_by.id
+            
+            # Fallback: check ExampleState if no tracking
+            from examples.models import ExampleState
+            state = ExampleState.objects.filter(
+                example=obj.example
+            ).select_related('confirmed_by').first()
+            
+            if state and state.confirmed_by:
+                return state.confirmed_by.id
+        except Exception:
+            pass
+        
+        # Final fallback: use assigned_to
+        return obj.assigned_to.id if obj.assigned_to else None
+    
+    def get_annotated_by_username(self, obj):
+        """Get username of who actually annotated this example (from AnnotationTracking)."""
+        try:
+            from assignment.simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                project=obj.project,
+                example=obj.example
+            ).select_related('annotated_by').first()
+            
+            if tracking and tracking.annotated_by:
+                return tracking.annotated_by.username
+            
+            # Fallback: check ExampleState if no tracking
+            from examples.models import ExampleState
+            state = ExampleState.objects.filter(
+                example=obj.example
+            ).select_related('confirmed_by').first()
+            
+            if state and state.confirmed_by:
+                return state.confirmed_by.username
+        except Exception:
+            pass
+        
+        # Final fallback: use assigned_to
+        return obj.assigned_to.username if obj.assigned_to else None
     
     def get_reviewed_by_id(self, obj):
         """Get annotation_approver who reviewed (not project_admin)."""

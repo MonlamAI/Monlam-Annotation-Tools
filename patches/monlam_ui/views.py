@@ -323,10 +323,18 @@ def api_dataset_assignments(request, project_id):
     """
     API endpoint to get all assignments for dataset view
     Returns assignment data for each example in the project
+    
+    CRITICAL: Syncs data from ExampleState and AnnotationTracking to ensure consistency:
+    - If ExampleState exists (confirmed/finished), ensure AnnotationTracking exists
+    - If AnnotationTracking exists, ensure Assignment status reflects it
+    - If ExampleState exists but no Assignment, create one
     """
     from projects.models import Project, Member
     from assignment.models_separate import Assignment
     from assignment.serializers import AssignmentSerializer
+    from examples.models import Example, ExampleState
+    from assignment.simple_tracking import AnnotationTracking
+    from django.utils import timezone
     
     project = get_object_or_404(Project, pk=project_id)
     
@@ -335,6 +343,160 @@ def api_dataset_assignments(request, project_id):
         if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return JsonResponse({'error': 'Permission denied'}, status=403)
     
+    # Get all examples in the project
+    all_examples = Example.objects.filter(project=project)
+    
+    # Get all ExampleState records (confirmed/finished examples) - including those with null confirmed_by
+    all_states = ExampleState.objects.filter(
+        example__project=project
+    ).select_related('confirmed_by', 'example')
+    
+    # Get all ExampleState records with confirmed_by set
+    confirmed_states = [s for s in all_states if s.confirmed_by]
+    
+    # Get all AnnotationTracking records
+    tracking_records = AnnotationTracking.objects.filter(
+        project=project
+    ).select_related('annotated_by', 'reviewed_by')
+    
+    # Create maps for quick lookup
+    confirmed_map = {state.example_id: state for state in confirmed_states}
+    all_states_map = {state.example_id: state for state in all_states}
+    tracking_map = {tracking.example_id: tracking for tracking in tracking_records}
+    
+    # Get existing assignments
+    assignments = Assignment.objects.filter(
+        project=project,
+        is_active=True
+    ).select_related('assigned_to', 'reviewed_by')
+    
+    assignment_map = {a.example_id: a for a in assignments}
+    
+    # SYNC DIRECTION 1: ExampleState → AnnotationTracking → Assignment
+    # For each confirmed example, ensure AnnotationTracking and Assignment are in sync
+    for example_id, state in confirmed_map.items():
+        example = state.example
+        confirmed_by = state.confirmed_by
+        
+        # Get or create AnnotationTracking
+        tracking = tracking_map.get(example_id)
+        if not tracking:
+            # Create AnnotationTracking if ExampleState exists but tracking doesn't
+            tracking, created = AnnotationTracking.objects.get_or_create(
+                project=project,
+                example=example,
+                defaults={
+                    'annotated_by': confirmed_by,
+                    'annotated_at': state.confirmed_at or timezone.now(),
+                    'status': 'submitted'  # Confirmed = submitted for review
+                }
+            )
+            if created:
+                print(f'[Dataset API] ✅ Created AnnotationTracking for example {example_id} (from ExampleState)')
+            tracking_map[example_id] = tracking
+        elif not tracking.annotated_by:
+            # Update tracking if annotated_by is missing
+            tracking.annotated_by = confirmed_by
+            tracking.annotated_at = state.confirmed_at or tracking.annotated_at or timezone.now()
+            if tracking.status == 'pending':
+                tracking.status = 'submitted'
+            tracking.save()
+            print(f'[Dataset API] ✅ Updated AnnotationTracking for example {example_id} (added annotated_by)')
+        
+        # Get or update Assignment
+        assignment = assignment_map.get(example_id)
+        if assignment:
+            # Update Assignment status if it's still pending but example is confirmed
+            if assignment.status in ['assigned', 'in_progress', 'pending'] and tracking.status == 'submitted':
+                assignment.status = 'submitted'
+                assignment.submitted_at = tracking.annotated_at or timezone.now()
+                if not assignment.assigned_to:
+                    assignment.assigned_to = confirmed_by
+                assignment.save()
+                print(f'[Dataset API] ✅ Updated Assignment status to submitted for example {example_id}')
+        else:
+            # Create Assignment if it doesn't exist but example is confirmed
+            # Only create if we have tracking with annotated_by
+            if tracking and tracking.annotated_by:
+                assignment = Assignment.objects.create(
+                    project=project,
+                    example=example,
+                    assigned_to=tracking.annotated_by,
+                    status='submitted',
+                    submitted_at=tracking.annotated_at or timezone.now(),
+                    is_active=True
+                )
+                assignment_map[example_id] = assignment
+                print(f'[Dataset API] ✅ Created Assignment for example {example_id} (from ExampleState)')
+    
+    # SYNC DIRECTION 2: AnnotationTracking → ExampleState → Assignment
+    # For examples with AnnotationTracking but missing ExampleState or missing confirmed_by
+    for example_id, tracking in tracking_map.items():
+        if tracking.annotated_by:
+            # Check if ExampleState exists
+            state = all_states_map.get(example_id)
+            
+            if not state:
+                # Create ExampleState if AnnotationTracking exists but ExampleState doesn't
+                try:
+                    example = Example.objects.get(id=example_id, project=project)
+                    state = ExampleState.objects.create(
+                        example=example,
+                        confirmed_by=tracking.annotated_by,
+                        confirmed_at=tracking.annotated_at or timezone.now()
+                    )
+                    all_states_map[example_id] = state
+                    print(f'[Dataset API] ✅ Created ExampleState for example {example_id} (from AnnotationTracking)')
+                except Exception as e:
+                    print(f'[Dataset API] ⚠️ Could not create ExampleState for example {example_id}: {e}')
+            elif not state.confirmed_by:
+                # Update ExampleState if confirmed_by is missing
+                state.confirmed_by = tracking.annotated_by
+                state.confirmed_at = tracking.annotated_at or state.confirmed_at or timezone.now()
+                state.save()
+                print(f'[Dataset API] ✅ Updated ExampleState for example {example_id} (added confirmed_by from AnnotationTracking)')
+            
+            # Ensure Assignment is synced
+            assignment = assignment_map.get(example_id)
+            if assignment:
+                # Update Assignment status if it's still pending/in_progress but tracking shows submitted
+                if assignment.status in ['assigned', 'in_progress', 'pending'] and tracking.status == 'submitted':
+                    assignment.status = 'submitted'
+                    assignment.submitted_at = tracking.annotated_at or timezone.now()
+                    if not assignment.assigned_to:
+                        assignment.assigned_to = tracking.annotated_by
+                    assignment.save()
+                    print(f'[Dataset API] ✅ Updated Assignment status to submitted for example {example_id} (from AnnotationTracking)')
+            else:
+                # Create Assignment if it doesn't exist but tracking does
+                try:
+                    example = Example.objects.get(id=example_id, project=project)
+                    assignment = Assignment.objects.create(
+                        project=project,
+                        example=example,
+                        assigned_to=tracking.annotated_by,
+                        status='submitted' if tracking.status == 'submitted' else 'in_progress',
+                        submitted_at=tracking.annotated_at if tracking.status == 'submitted' else None,
+                        is_active=True
+                    )
+                    assignment_map[example_id] = assignment
+                    print(f'[Dataset API] ✅ Created Assignment for example {example_id} (from AnnotationTracking)')
+                except Exception as e:
+                    print(f'[Dataset API] ⚠️ Could not create Assignment for example {example_id}: {e}')
+    
+    # SYNC DIRECTION 3: Handle ExampleState with null confirmed_by
+    # If ExampleState exists but confirmed_by is null, try to get it from AnnotationTracking
+    for example_id, state in all_states_map.items():
+        if not state.confirmed_by:
+            tracking = tracking_map.get(example_id)
+            if tracking and tracking.annotated_by:
+                # Update ExampleState with confirmed_by from AnnotationTracking
+                state.confirmed_by = tracking.annotated_by
+                state.confirmed_at = tracking.annotated_at or state.confirmed_at or timezone.now()
+                state.save()
+                print(f'[Dataset API] ✅ Fixed ExampleState for example {example_id} (added confirmed_by from AnnotationTracking)')
+    
+    # Refresh assignments after syncing
     assignments = Assignment.objects.filter(
         project=project,
         is_active=True

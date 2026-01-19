@@ -146,28 +146,31 @@ class ExampleVisibilityMixin:
             if example_id not in all_example_ids or example_id in locked_by_others:
                 continue
             
-            # Show if pending (unannotated)
-            if tracking.status == 'pending':
-                show_example_ids.append(example_id)
-            
-            # Show if rejected and annotated by this user (needs fixing)
-            elif tracking.status == 'rejected' and tracking.annotated_by == user:
-                show_example_ids.append(example_id)
-            
-            # Show if in_progress by this user
-            elif tracking.status == 'in_progress' and tracking.annotated_by == user:
-                show_example_ids.append(example_id)
-            
-            # Hide if submitted by this user (already done, awaiting review)
-            elif tracking.status == 'submitted' and tracking.annotated_by == user:
+            # CRITICAL: If annotated_by is set and it's NOT the current user, HIDE it
+            # This ensures examples annotated by other annotators are never visible
+            if tracking.annotated_by and tracking.annotated_by != user:
                 hide_example_ids.append(example_id)
+                continue  # Skip other checks - already hidden
             
-            # Hide if approved (completely done)
+            # If annotated_by is set and it IS the current user, check status
+            if tracking.annotated_by == user:
+                # Show if rejected (needs fixing by original annotator)
+                if tracking.status == 'rejected':
+                    show_example_ids.append(example_id)
+                # Hide if submitted or approved (already done, no longer editable)
+                elif tracking.status in ['submitted', 'approved']:
+                    hide_example_ids.append(example_id)
+                # If status is 'pending' but annotated_by is set, it means user started working on it
+                # Show it so they can continue (but it's already hidden from others above)
+                elif tracking.status == 'pending':
+                    show_example_ids.append(example_id)
+            
+            # If no annotated_by set and status is pending, show to everyone (unannotated)
+            elif not tracking.annotated_by and tracking.status == 'pending':
+                show_example_ids.append(example_id)
+            
+            # Hide if approved (completely done, regardless of who did it)
             elif tracking.status == 'approved':
-                hide_example_ids.append(example_id)
-            
-            # Hide if annotated by someone else
-            elif tracking.annotated_by and tracking.annotated_by != user:
                 hide_example_ids.append(example_id)
         
         # Examples with no tracking record = unannotated = show to everyone (unless locked)

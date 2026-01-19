@@ -142,3 +142,103 @@ def track_annotation_saved(sender, instance, created, **kwargs):
     except Exception as e:
         print(f'[Monlam Signals] ⚠️ Tracking failed: {e}')
 
+
+def setup_example_state_signals():
+    """
+    Connect signal handlers for ExampleState model.
+    This ensures that when tick mark is clicked (ExampleState created),
+    it also creates/updates AnnotationTracking and Assignment.
+    """
+    try:
+        from examples.models import ExampleState
+        
+        post_save.connect(
+            track_example_state_saved,
+            sender=ExampleState,
+            dispatch_uid='monlam_track_example_state'
+        )
+        print('[Monlam Signals] ✅ Connected tracking for ExampleState (tick mark)')
+        
+        return True
+        
+    except Exception as e:
+        print(f'[Monlam Signals] ⚠️ ExampleState signal setup failed: {e}')
+        return False
+
+
+def track_example_state_saved(sender, instance, created, **kwargs):
+    """
+    Signal handler that tracks when ExampleState is created/updated (tick mark clicked).
+    
+    CRITICAL: This ensures that tick mark and Enter key have the same effect:
+    - Creates/updates AnnotationTracking with status='submitted'
+    - Updates Assignment status to 'submitted' if exists
+    """
+    if not instance.confirmed_by:
+        return  # Only process if confirmed_by is set
+    
+    try:
+        from assignment.simple_tracking import AnnotationTracking
+        from assignment.models_separate import Assignment
+        
+        example = instance.example
+        confirmed_by = instance.confirmed_by
+        confirmed_at = instance.confirmed_at or timezone.now()
+        
+        # Create or update AnnotationTracking
+        tracking, tracking_created = AnnotationTracking.objects.get_or_create(
+            project=example.project,
+            example=example,
+            defaults={
+                'annotated_by': confirmed_by,
+                'annotated_at': confirmed_at,
+                'status': 'submitted'  # Confirmed = submitted for review
+            }
+        )
+        
+        needs_tracking_save = False
+        
+        # Update tracking if it already existed but was missing data
+        if not tracking_created:
+            if not tracking.annotated_by:
+                tracking.annotated_by = confirmed_by
+                tracking.annotated_at = confirmed_at
+                needs_tracking_save = True
+            
+            # If status is pending, update to submitted (confirmed = submitted)
+            if tracking.status == 'pending':
+                tracking.status = 'submitted'
+                needs_tracking_save = True
+        
+        if needs_tracking_save:
+            tracking.save()
+            print(f'[Monlam Signals] ✅ Updated AnnotationTracking for example {example.id} (from ExampleState)')
+        elif tracking_created:
+            print(f'[Monlam Signals] ✅ Created AnnotationTracking for example {example.id} (from ExampleState/tick mark)')
+        
+        # Update Assignment status if it exists
+        try:
+            assignment = Assignment.objects.filter(
+                project=example.project,
+                example=example,
+                is_active=True
+            ).first()
+            
+            if assignment:
+                # Update status to submitted if it's still pending/in_progress
+                if assignment.status in ['assigned', 'in_progress', 'pending']:
+                    assignment.status = 'submitted'
+                    assignment.submitted_at = confirmed_at
+                    if not assignment.assigned_to:
+                        assignment.assigned_to = confirmed_by
+                    assignment.save()
+                    print(f'[Monlam Signals] ✅ Updated Assignment status to submitted for example {example.id}')
+        except Exception as e:
+            print(f'[Monlam Signals] ⚠️ Could not update Assignment: {e}')
+            # Don't fail if Assignment doesn't exist
+        
+    except Exception as e:
+        import traceback
+        print(f'[Monlam Signals] ⚠️ ExampleState tracking failed: {e}')
+        print(f'[Monlam Signals] Traceback: {traceback.format_exc()}')
+

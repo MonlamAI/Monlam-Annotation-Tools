@@ -85,27 +85,112 @@ class CanAccessExample(permissions.BasePermission):
         if not is_annotator:
             return False
         
-        # Annotator rules - check assignment
+        # Annotator rules - check AnnotationTracking first (primary source of truth)
         try:
-            assignment = Assignment.objects.get(
+            from .simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
                 project=project,
-                example=obj,
-                is_active=True
-            )
-        except Assignment.DoesNotExist:
-            # No assignment - annotators cannot see unassigned examples
+                example=obj
+            ).first()
+            
+            if tracking:
+                # CRITICAL: If annotated_by is set and it's NOT the current user, DENY access
+                if tracking.annotated_by and tracking.annotated_by != user:
+                    return False
+                
+                # If annotated_by IS the current user, check status
+                if tracking.annotated_by == user:
+                    # Can access if rejected (needs fixing)
+                    if tracking.status == 'rejected':
+                        return True
+                    # Cannot access if submitted or approved (already done)
+                    if tracking.status in ['submitted', 'approved']:
+                        return False
+                    # Can access if pending (still working on it)
+                    if tracking.status == 'pending':
+                        return True
+            
+            # No tracking record = unannotated = can access
+            # Also check assignment as fallback
+            try:
+                assignment = Assignment.objects.get(
+                    project=project,
+                    example=obj,
+                    is_active=True
+                )
+                # Must be assigned to this user
+                if assignment.assigned_to != user:
+                    return False
+                # Cannot see submitted or approved examples
+                if assignment.status in ['submitted', 'approved']:
+                    return False
+                # Can see assigned, in_progress, rejected
+                return assignment.status in ['assigned', 'in_progress', 'rejected']
+            except Assignment.DoesNotExist:
+                # No assignment and no tracking = unannotated = can access
+                return True
+                
+        except Exception as e:
+            print(f'[Monlam Permissions] Error checking access permission: {e}')
+            # On error, be safe and deny
             return False
+
+
+class CanEditExample(permissions.BasePermission):
+    """
+    Permission to edit/annotate examples.
+    
+    Rules:
+    1. Privileged users (admins, managers, approvers) can always edit
+    2. Annotators can ONLY edit examples they annotated themselves
+    3. Annotators CANNOT edit examples annotated/submitted by other annotators
+    4. Annotators CAN edit their own rejected examples (to fix them)
+    """
+    
+    def has_object_permission(self, request, view, obj):
+        """Check if user can edit this example."""
+        user = request.user
+        project = obj.project
         
-        # Must be assigned to this user
-        if assignment.assigned_to != user:
+        # Get user's role
+        role_name, is_privileged = get_user_role(user, project.id)
+        
+        # Privileged users can always edit (they're reviewing/approving)
+        if is_privileged:
+            return True
+        
+        # Check AnnotationTracking to see who annotated this example
+        try:
+            from .simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
+                project=project,
+                example=obj
+            ).first()
+            
+            if tracking:
+                # If annotated_by is set and it's NOT the current user, deny edit
+                if tracking.annotated_by and tracking.annotated_by != user:
+                    return False
+                
+                # If annotated_by IS the current user, check status
+                if tracking.annotated_by == user:
+                    # Can edit if rejected (needs fixing)
+                    if tracking.status == 'rejected':
+                        return True
+                    # Cannot edit if submitted or approved (already done)
+                    if tracking.status in ['submitted', 'approved']:
+                        return False
+                    # Can edit if pending (still working on it)
+                    if tracking.status == 'pending':
+                        return True
+            
+            # No tracking record = unannotated = can edit
+            return True
+            
+        except Exception as e:
+            print(f'[Monlam Permissions] Error checking edit permission: {e}')
+            # On error, be safe and deny
             return False
-        
-        # Cannot see submitted or approved examples (unless rejected)
-        if assignment.status in ['submitted', 'approved']:
-            return False
-        
-        # Can see assigned, in_progress, rejected
-        return assignment.status in ['assigned', 'in_progress', 'rejected']
 
 
 class CanLockExample(permissions.BasePermission):
@@ -129,30 +214,39 @@ class CanLockExample(permissions.BasePermission):
         if is_privileged:
             return True
         
-        # Check assignment
+        # Check AnnotationTracking for locking
         try:
-            assignment = Assignment.objects.get(
+            from .simple_tracking import AnnotationTracking
+            tracking = AnnotationTracking.objects.filter(
                 project=project,
-                example=obj,
-                is_active=True
-            )
-        except Assignment.DoesNotExist:
-            return False
-        
-        # Check if locked by someone else
-        if assignment.locked_by and assignment.locked_by != user:
-            # Check if lock is expired (5 minutes default)
-            from django.utils import timezone
-            from datetime import timedelta
+                example=obj
+            ).first()
             
-            if assignment.locked_at:
-                lock_duration = timezone.now() - assignment.locked_at
-                if lock_duration < timedelta(minutes=5):
-                    # Still locked by someone else
-                    return False
-        
-        # Either not locked, locked by this user, or lock expired
-        return True
+            if tracking:
+                # Check if locked by someone else
+                if tracking.locked_by and tracking.locked_by != user:
+                    # Check if lock is expired (5 minutes default)
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    
+                    if tracking.locked_at:
+                        lock_expiry = tracking.locked_at + timedelta(minutes=5)
+                        if timezone.now() < lock_expiry:
+                            # Still locked by someone else
+                            return False
+                        else:
+                            # Lock expired, clear it
+                            tracking.locked_by = None
+                            tracking.locked_at = None
+                            tracking.save(update_fields=['locked_by', 'locked_at'])
+            
+            # Either not locked, locked by this user, or lock expired
+            return True
+            
+        except Exception as e:
+            print(f'[Monlam Permissions] Error checking lock permission: {e}')
+            # On error, be safe and deny
+            return False
 
 
 
