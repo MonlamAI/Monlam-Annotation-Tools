@@ -19,37 +19,70 @@
               Submitted
             </v-chip>
             <span class="text-caption">by <strong>{{ submittedBy }}</strong></span>
+            <span v-if="annotatedAt" class="text-caption ml-2 text--secondary">
+              at {{ formatDate(annotatedAt) }}
+            </span>
           </div>
           <div v-else-if="isSubmitted" class="mb-2">
-            <v-chip color="info" text-color="white" small>
+            <v-chip color="info" text-color="white" small class="mr-2">
               <v-icon small left>mdi-clock-outline</v-icon>
               Submitted
             </v-chip>
+            <span v-if="annotatedAt" class="text-caption ml-2 text--secondary">
+              at {{ formatDate(annotatedAt) }}
+            </span>
           </div>
           
-          <!-- Approved Status -->
-          <div v-if="approvedBy" class="mb-2">
-            <v-chip color="success" text-color="white" small class="mr-2">
-              <v-icon small left>mdi-check-circle</v-icon>
-              Approved
-            </v-chip>
-            <span class="text-caption">by <strong>{{ approvedBy }}</strong></span>
+          <!-- Approved Status - Only show if status is actually approved/reviewed -->
+          <div v-if="status === 'reviewed' || status === 'approved'">
+            <div v-if="reviewedBy" class="mb-2">
+              <v-chip color="success" text-color="white" small class="mr-2">
+                <v-icon small left>mdi-check-circle</v-icon>
+                {{ status === 'reviewed' ? 'Reviewed' : 'Approved' }}
+              </v-chip>
+              <span class="text-caption">by <strong>{{ reviewedBy }}</strong></span>
+              <span v-if="reviewedAt" class="text-caption ml-2 text--secondary">
+                at {{ formatDate(reviewedAt) }}
+              </span>
+            </div>
+            <div v-else-if="approvedBy" class="mb-2">
+              <v-chip color="success" text-color="white" small class="mr-2">
+                <v-icon small left>mdi-check-circle</v-icon>
+                Approved
+              </v-chip>
+              <span class="text-caption">by <strong>{{ approvedBy }}</strong></span>
+              <span v-if="reviewedAt" class="text-caption ml-2 text--secondary">
+                at {{ formatDate(reviewedAt) }}
+              </span>
+            </div>
+            <div v-else-if="projectAdminApproved" class="mb-2">
+              <v-chip color="success" text-color="white" small>
+                <v-icon small left>mdi-check-circle</v-icon>
+                Final Approved
+              </v-chip>
+            </div>
+            <div v-else-if="annotationApproverApproved" class="mb-2">
+              <v-chip color="success" text-color="white" small>
+                <v-icon small left>mdi-check-circle</v-icon>
+                Approved by Approver
+              </v-chip>
+            </div>
           </div>
-          <div v-else-if="projectAdminApproved" class="mb-2">
-            <v-chip color="success" text-color="white" small>
-              <v-icon small left>mdi-check-circle</v-icon>
-              Final Approved
+          
+          <!-- Rejected Status -->
+          <div v-if="status === 'rejected' && reviewedBy" class="mb-2">
+            <v-chip color="error" text-color="white" small class="mr-2">
+              <v-icon small left>mdi-close-circle</v-icon>
+              Rejected
             </v-chip>
-          </div>
-          <div v-else-if="annotationApproverApproved" class="mb-2">
-            <v-chip color="success" text-color="white" small>
-              <v-icon small left>mdi-check-circle</v-icon>
-              Approved by Approver
-            </v-chip>
+            <span class="text-caption">by <strong>{{ reviewedBy }}</strong></span>
+            <span v-if="reviewedAt" class="text-caption ml-2 text--secondary">
+              at {{ formatDate(reviewedAt) }}
+            </span>
           </div>
           
           <!-- No Status -->
-          <div v-if="!submittedBy && !approvedBy && !isSubmitted && !annotationApproverApproved && !projectAdminApproved">
+          <div v-if="!submittedBy && !approvedBy && !isSubmitted && !annotationApproverApproved && !projectAdminApproved && status !== 'reviewed' && status !== 'approved' && status !== 'rejected'">
             <v-chip color="grey" text-color="white" small>
               <v-icon small left>mdi-information-outline</v-icon>
               Not submitted yet
@@ -128,10 +161,31 @@
           <strong>⚠️ Second-Level Review:</strong> This annotation has been approved by an annotation approver. As a project admin, you can review and approve or reject it.
         </v-alert>
         
-        <v-chip :color="statusColor" small class="mb-3">
-          <v-icon small left>{{ statusIcon }}</v-icon>
-          {{ status.toUpperCase() }}
-        </v-chip>
+        <div class="mb-3">
+          <v-chip :color="statusColor" small class="mr-2">
+            <v-icon small left>{{ statusIcon }}</v-icon>
+            {{ status.toUpperCase() }}
+          </v-chip>
+          <!-- Show who did what and timestamps -->
+          <div v-if="submittedBy || reviewedBy || annotatedAt || reviewedAt" class="mt-2">
+            <div v-if="submittedBy && annotatedAt" class="text-caption text--secondary">
+              <v-icon x-small>mdi-pencil</v-icon>
+              Submitted by <strong>{{ submittedBy }}</strong> at {{ formatDate(annotatedAt) }}
+            </div>
+            <div v-else-if="annotatedAt" class="text-caption text--secondary">
+              <v-icon x-small>mdi-pencil</v-icon>
+              Submitted at {{ formatDate(annotatedAt) }}
+            </div>
+            <div v-if="reviewedBy && reviewedAt" class="text-caption text--secondary">
+              <v-icon x-small>{{ status === 'rejected' ? 'mdi-close-circle' : 'mdi-check-circle' }}</v-icon>
+              {{ status === 'rejected' ? 'Rejected' : 'Reviewed' }} by <strong>{{ reviewedBy }}</strong> at {{ formatDate(reviewedAt) }}
+            </div>
+            <div v-else-if="reviewedAt" class="text-caption text--secondary">
+              <v-icon x-small>{{ status === 'rejected' ? 'mdi-close-circle' : 'mdi-check-circle' }}</v-icon>
+              {{ status === 'rejected' ? 'Rejected' : 'Reviewed' }} at {{ formatDate(reviewedAt) }}
+            </div>
+          </div>
+        </div>
         <v-row>
           <v-col cols="6">
             <v-btn
@@ -219,6 +273,9 @@ export default Vue.extend({
       isSubmitted: false,
       submittedBy: null,
       approvedBy: null,
+      reviewedBy: null,
+      annotatedAt: null,
+      reviewedAt: null,
       isLoadingStatus: false,
       snackbar: false,
       snackbarText: '',
@@ -255,6 +312,13 @@ export default Vue.extend({
   },
 
   async mounted() {
+    // Validate exampleId
+    if (!this.exampleId) {
+      console.error('[Monlam Approve] exampleId is required but not provided')
+      this.showSnackbar('⚠️ Example ID not found. Please reload the page.', 'warning')
+      return
+    }
+    
     // Always fetch approval chain and status (visible to all users)
     this.isLoadingStatus = true
     await this.fetchApprovalChain()
@@ -304,6 +368,11 @@ export default Vue.extend({
 
     async fetchApprovalChain() {
       try {
+        if (!this.exampleId) {
+          console.error('[Monlam Approve] Cannot fetch approval chain: exampleId is missing')
+          return
+        }
+        
         const resp = await fetch(
           `/v1/projects/${this.projectId}/assignments/approver-completion/${this.exampleId}/`
         )
@@ -348,8 +417,12 @@ export default Vue.extend({
           } catch (userError) {
             console.error('[Monlam Approve] Error fetching current user:', userError)
           }
-        } else if (resp.status === 403 || resp.status === 404) {
-          // User doesn't have permission or endpoint doesn't exist - silently fail
+        } else if (resp.status === 404) {
+          // Example not found
+          this.showSnackbar('⚠️ Example not found. Please ensure an example is loaded.', 'warning')
+          this.allApprovals = []
+        } else if (resp.status === 403) {
+          // User doesn't have permission - silently fail
           // Approval chain just won't be displayed
           this.allApprovals = []
         }
@@ -361,14 +434,25 @@ export default Vue.extend({
     },
 
     async fetchStatusSummary() {
-      // Fetch submitted by from tracking API
+      // Fetch submitted by and timestamps from tracking API
       try {
+        if (!this.exampleId) {
+          console.error('[Monlam Approve] Cannot fetch status summary: exampleId is missing')
+          return
+        }
+        
         const trackingResp = await fetch(
           `/v1/projects/${this.projectId}/tracking/${this.exampleId}/status/`
         )
         if (trackingResp.ok) {
           const trackingData = await trackingResp.json()
-          this.submittedBy = trackingData.annotated_by || null
+          // Get who submitted/confirmed (prefer annotated_by, fallback to confirmed_by)
+          this.submittedBy = trackingData.annotated_by || trackingData.confirmed_by || null
+          // Get who reviewed/approved
+          this.reviewedBy = trackingData.reviewed_by || null
+          // Store timestamps for display
+          this.annotatedAt = trackingData.annotated_at || null
+          this.reviewedAt = trackingData.reviewed_at || null
         }
       } catch (e) {
         console.error('[Monlam Approve] Error fetching tracking status:', e)
@@ -378,17 +462,40 @@ export default Vue.extend({
 
     async fetchStatus() {
       try {
+        if (!this.exampleId) {
+          console.error('[Monlam Approve] Cannot fetch status: exampleId is missing')
+          return
+        }
+        
         const resp = await fetch(
           `/v1/projects/${this.projectId}/tracking/${this.exampleId}/status/`
         )
+        if (!resp.ok) {
+          if (resp.status === 404) {
+            this.showSnackbar('⚠️ Example not found. Please ensure an example is loaded.', 'warning')
+          }
+          return
+        }
+        
         const data = await resp.json()
         this.status = data.status || 'pending'
+        // Also store timestamps and who did what for display
+        this.annotatedAt = data.annotated_at || null
+        this.reviewedAt = data.reviewed_at || null
+        this.submittedBy = data.annotated_by || data.confirmed_by || this.submittedBy
+        this.reviewedBy = data.reviewed_by || this.reviewedBy
       } catch (error) {
         console.error('[Monlam Approve] Error fetching status:', error)
+        this.showSnackbar('❌ Error loading status: ' + error.message, 'error')
       }
     },
 
     async handleApprove() {
+      if (!this.exampleId) {
+        this.showSnackbar('⚠️ Example ID not found. Please reload the page.', 'warning')
+        return
+      }
+      
       this.approving = true
       try {
         const resp = await fetch(
@@ -429,6 +536,11 @@ export default Vue.extend({
     },
 
     async handleReject() {
+      if (!this.exampleId) {
+        this.showSnackbar('⚠️ Example ID not found. Please reload the page.', 'warning')
+        return
+      }
+      
       this.rejecting = true
       try {
         const resp = await fetch(

@@ -403,10 +403,14 @@ class CompletionMatrixUpdater:
         
         Args:
             example: Example instance
-            annotator: User instance
+            annotator: User instance (can be None, in which case this is a no-op)
             is_completed: Boolean
         """
         from examples.models import Example
+        
+        # Skip if annotator is None (assignment has no assigned user)
+        if annotator is None:
+            return None
         
         # Get or create completion status
         status, created = AnnotatorCompletionStatus.objects.get_or_create(
@@ -470,8 +474,8 @@ class CompletionMatrixUpdater:
         assignments = Assignment.objects.filter(project=project, is_active=True)
         
         for assignment in assignments:
-            # Update annotator status
-            if assignment.status in ['submitted', 'approved']:
+            # Update annotator status (skip if assigned_to is None)
+            if assignment.status in ['submitted', 'approved'] and assignment.assigned_to:
                 CompletionMatrixUpdater.update_annotator_status(
                     example=assignment.example,
                     annotator=assignment.assigned_to,

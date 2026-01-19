@@ -480,7 +480,7 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
         can_review_now = False
         is_submitted = False
         
-        # Check if example is submitted
+        # Check if example is submitted or confirmed
         from .simple_tracking import AnnotationTracking
         tracking = AnnotationTracking.objects.filter(
             project=project,
@@ -500,6 +500,19 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
             
             if assignment and assignment.status == 'submitted':
                 is_submitted = True
+            else:
+                # Also check ExampleState (confirmed via checkmark)
+                from examples.models import ExampleState
+                state = ExampleState.objects.filter(example=example).first()
+                if state and state.confirmed_by:
+                    # Verify confirmed_by is still a project member
+                    from projects.models import Member
+                    is_member = Member.objects.filter(
+                        user=state.confirmed_by,
+                        project=project
+                    ).exists()
+                    if is_member or state.confirmed_by.is_superuser:
+                        is_submitted = True
         
         if can_review:
             if user_role == ROLE_PROJECT_ADMIN:
@@ -545,9 +558,9 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
         # Get user's role
         user_role = self._get_user_role(request.user, project)
         
-        # Check if example is submitted (for annotation_approvers)
+        # Check if example is submitted or confirmed (for annotation_approvers)
         if user_role == ROLE_ANNOTATION_APPROVER:
-            # Check if example has been submitted
+            # Check if example has been submitted or confirmed
             is_submitted = False
             
             # Check AnnotationTracking status
@@ -570,11 +583,24 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
                 
                 if assignment and assignment.status == 'submitted':
                     is_submitted = True
+                else:
+                    # Also check ExampleState (confirmed via checkmark)
+                    from examples.models import ExampleState
+                    state = ExampleState.objects.filter(example=example).first()
+                    if state and state.confirmed_by:
+                        # Verify confirmed_by is still a project member
+                        from projects.models import Member
+                        is_member = Member.objects.filter(
+                            user=state.confirmed_by,
+                            project=project
+                        ).exists()
+                        if is_member or state.confirmed_by.is_superuser:
+                            is_submitted = True
             
             if not is_submitted:
                 return Response(
                     {
-                        'error': 'Annotation approvers can only approve examples that have been submitted by annotators.',
+                        'error': 'Annotation approvers can only approve examples that have been submitted or confirmed by annotators.',
                         'requires_submission': True
                     },
                     status=status.HTTP_403_FORBIDDEN
@@ -641,9 +667,9 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
         # Get user's role
         user_role = self._get_user_role(request.user, project)
         
-        # Check if example is submitted (for annotation_approvers)
+        # Check if example is submitted or confirmed (for annotation_approvers)
         if user_role == ROLE_ANNOTATION_APPROVER:
-            # Check if example has been submitted
+            # Check if example has been submitted or confirmed
             is_submitted = False
             
             # Check AnnotationTracking status
@@ -666,11 +692,24 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
                 
                 if assignment and assignment.status == 'submitted':
                     is_submitted = True
+                else:
+                    # Also check ExampleState (confirmed via checkmark)
+                    from examples.models import ExampleState
+                    state = ExampleState.objects.filter(example=example).first()
+                    if state and state.confirmed_by:
+                        # Verify confirmed_by is still a project member
+                        from projects.models import Member
+                        is_member = Member.objects.filter(
+                            user=state.confirmed_by,
+                            project=project
+                        ).exists()
+                        if is_member or state.confirmed_by.is_superuser:
+                            is_submitted = True
             
             if not is_submitted:
                 return Response(
                     {
-                        'error': 'Annotation approvers can only reject examples that have been submitted by annotators.',
+                        'error': 'Annotation approvers can only reject examples that have been submitted or confirmed by annotators.',
                         'requires_submission': True
                     },
                     status=status.HTTP_403_FORBIDDEN

@@ -115,8 +115,19 @@ def track_annotation_saved(sender, instance, created, **kwargs):
         # CRITICAL: Also create ExampleState to mark as confirmed (same as tick mark)
         # This ensures Enter key and tick mark both create ExampleState
         # This is essential for completion dashboard to show correct counts
-        # Only create if user is still a project member
+        # IMPORTANT: Only annotators can confirm/submit examples
+        # Only create if user is still a project member AND is an annotator
         if is_member or user.is_superuser:
+            # Check if user is ONLY an annotator (not approver/admin/manager)
+            try:
+                from assignment.tracking_api import _is_annotator_only
+                if not _is_annotator_only(user, example.project):
+                    print(f'[Monlam Signals] ⚠️ User {user.username} is not an annotator, preventing auto-confirmation via Enter key')
+                    return  # Don't create ExampleState for non-annotators
+            except Exception as role_check_error:
+                print(f'[Monlam Signals] ⚠️ Could not verify user role, preventing auto-confirmation: {role_check_error}')
+                return  # Be safe and don't create ExampleState
+            
             try:
                 from examples.models import ExampleState
                 import traceback
@@ -196,6 +207,9 @@ def track_example_state_saved(sender, instance, created, **kwargs):
     CRITICAL: This ensures that tick mark and Enter key have the same effect:
     - Creates/updates AnnotationTracking with status='submitted'
     - Updates Assignment status to 'submitted' if exists
+    
+    IMPORTANT: Only annotators can confirm/submit examples via tick mark.
+    Reviewers, approvers, and project admins cannot use tick mark to confirm.
     """
     if not instance.confirmed_by:
         return  # Only process if confirmed_by is set
@@ -218,6 +232,21 @@ def track_example_state_saved(sender, instance, created, **kwargs):
         # Only proceed if user is a project member or superuser
         if not is_member and not confirmed_by.is_superuser:
             print(f'[Monlam Signals] ⚠️ User {confirmed_by.username} is not a project member, skipping tracking update')
+            return
+        
+        # CRITICAL: Only annotators can confirm/submit examples via tick mark
+        # Check if user is ONLY an annotator (not approver/admin/manager)
+        try:
+            from assignment.tracking_api import _is_annotator_only
+            if not _is_annotator_only(confirmed_by, example.project):
+                print(f'[Monlam Signals] ⚠️ User {confirmed_by.username} is not an annotator, preventing tick mark confirmation')
+                # Delete the ExampleState to prevent non-annotators from confirming
+                instance.delete()
+                return
+        except Exception as role_check_error:
+            # If role check fails, be safe and prevent confirmation
+            print(f'[Monlam Signals] ⚠️ Could not verify user role, preventing confirmation: {role_check_error}')
+            instance.delete()
             return
         
         # Create or update AnnotationTracking (track annotated_by in backend for comprehensive metrics)
