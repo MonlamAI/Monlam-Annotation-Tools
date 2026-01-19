@@ -846,22 +846,14 @@
                                   path.includes('/segmentation') ||
                                   path.includes('/image-captioning');
         
-        // CLEANUP: Remove buttons and lock indicator when NOT on annotation page
+        // CLEANUP: Remove buttons when NOT on annotation page
         if (!isAnnotationPage) {
             const existingButtons = document.querySelector('.monlam-approve-buttons');
             if (existingButtons) {
                 existingButtons.remove();
                 console.log('[Monlam Approve] Removed buttons (not on annotation page)');
             }
-            const existingLockIndicator = document.querySelector('.monlam-lock-indicator');
-            if (existingLockIndicator) {
-                existingLockIndicator.remove();
-                console.log('[Monlam Lock] Removed lock indicator (not on annotation page)');
-            }
-            const existingLockModal = document.querySelector('.monlam-lock-modal');
-            if (existingLockModal) {
-                existingLockModal.remove();
-            }
+            // REMOVED: Lock indicator cleanup - No longer needed
             return;
         }
         
@@ -1452,447 +1444,8 @@
     }
     
     // ========================================
-    // FEATURE: EXAMPLE LOCKING (Prevents Simultaneous Editing)
+    // NOTE: Example locking removed - single annotator per project, no race conditions
     // ========================================
-    async function handleExampleLocking() {
-        const path = window.location.pathname;
-        
-        // Only run on annotation pages
-        const isAnnotationPage = path.includes('/speech-to-text') || 
-                                  path.includes('/sequence-labeling') ||
-                                  path.includes('/document-classification') ||
-                                  path.includes('/seq2seq') ||
-                                  path.includes('/intent-detection-and-slot-filling') ||
-                                  path.includes('/image-classification') ||
-                                  path.includes('/bounding-box') ||
-                                  path.includes('/segmentation') ||
-                                  path.includes('/image-captioning');
-        
-        if (!isAnnotationPage) {
-            // If leaving annotation page, unlock any locked example
-            if (window.monlamLockedExample) {
-                try {
-                    await unlockExample(window.monlamLockedExample.projectId, window.monlamLockedExample.exampleId);
-                } catch (e) {
-                    console.log('[Monlam Lock] Error unlocking on leave:', e);
-                }
-                window.monlamLockedExample = null;
-            }
-            return;
-        }
-        
-        // Get project ID first
-        const projectMatch = path.match(/\/projects\/(\d+)/);
-        if (!projectMatch) return;
-        const projectId = projectMatch[1];
-        
-        // Check user's role - ONLY annotators need locking
-        try {
-            const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
-            if (roleResp.ok) {
-                const roleData = await roleResp.json();
-                const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
-                
-                const isAnnotatorOnly = roleName.includes('annotator') && 
-                                        !roleName.includes('admin') && 
-                                        !roleName.includes('manager') && 
-                                        !roleName.includes('approver');
-                
-                if (!isAnnotatorOnly) {
-                    console.log('[Monlam Lock] User is', roleName, '- skipping locking (reviewers can view all)');
-                    // Remove lock indicator if present
-                    const indicator = document.querySelector('.monlam-lock-indicator');
-                    if (indicator) indicator.remove();
-                    return;
-                }
-            }
-        } catch (e) {
-            console.log('[Monlam Lock] Could not check role:', e);
-        }
-        
-        console.log('[Monlam Lock] User is annotator, checking lock status...');
-        
-        try {
-            // Get example ID (retry a few times as it may take a moment to load)
-            let exampleId = null;
-            for (let i = 0; i < 10; i++) {
-                exampleId = getCurrentExampleIdForLock();
-                if (exampleId) break;
-                await new Promise(r => setTimeout(r, 300));
-            }
-            
-            if (!exampleId) {
-                console.log('[Monlam Lock] Could not find example ID');
-                return;
-            }
-            
-            console.log('[Monlam Lock] Example ID:', exampleId);
-            
-            // Check if already locked by us
-            if (window.monlamLockedExample && 
-                window.monlamLockedExample.exampleId == exampleId) {
-                console.log('[Monlam Lock] Already locked by us');
-                return;
-            }
-            
-            // Unlock previous example if different
-            if (window.monlamLockedExample && 
-                window.monlamLockedExample.exampleId != exampleId) {
-                try {
-                    await unlockExample(
-                        window.monlamLockedExample.projectId, 
-                        window.monlamLockedExample.exampleId
-                    );
-                } catch (e) {
-                    console.log('[Monlam Lock] Error unlocking previous:', e);
-                }
-            }
-            
-            // Check lock status FIRST before trying to lock (prevents showing locked examples)
-            const statusResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock-status/`);
-            if (statusResp.ok) {
-                const status = await statusResp.json();
-                if (status.is_locked && !status.is_own_lock) {
-                    // Already locked by someone else - navigate away immediately
-                    console.log('[Monlam Lock] Example locked by', status.locked_by, '- navigating away...');
-                    await navigateToNextAvailableExample(projectId, exampleId);
-                    return;
-                }
-            }
-            
-            // Try to lock the example immediately (atomic operation prevents race conditions)
-            const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/lock/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
-                }
-            });
-            
-            if (lockResp.ok) {
-                const lockData = await lockResp.json();
-                if (lockData.success) {
-                    // Successfully locked!
-                    console.log('[Monlam Lock] ✅ Locked example', exampleId);
-                    window.monlamLockedExample = { projectId, exampleId };
-                    showLockIndicator(lockData.expires_in_minutes);
-                } else if (lockData.error === 'locked_by_other') {
-                    // Locked by someone else - auto-navigate to next available!
-                    console.log('[Monlam Lock] Example locked by', lockData.locked_by, '- finding next...');
-                    await navigateToNextAvailableExample(projectId, exampleId);
-                }
-            } else if (lockResp.status === 409) {
-                // Conflict - already locked by someone else
-                try {
-                    const conflictData = await lockResp.json();
-                    console.log('[Monlam Lock] Example locked by', conflictData.locked_by || 'another user', '- finding next...');
-                } catch (e) {
-                    console.log('[Monlam Lock] Example already locked - finding next...');
-                }
-                await navigateToNextAvailableExample(projectId, exampleId);
-            }
-            
-        } catch (error) {
-            console.error('[Monlam Lock] Error:', error);
-        }
-    }
-    
-    function getCurrentExampleIdForLock() {
-        // Method 1: Check Vue app state
-        if (window.$nuxt && window.$nuxt.$store && window.$nuxt.$store.state) {
-            const state = window.$nuxt.$store.state;
-            if (state.example && state.example.id) return state.example.id;
-            if (state.examples && state.examples.current && state.examples.current.id) {
-                return state.examples.current.id;
-            }
-        }
-        
-        // Method 2: Check __NUXT__
-        if (window.__NUXT__ && window.__NUXT__.state) {
-            const state = window.__NUXT__.state;
-            if (state.example && state.example.id) return state.example.id;
-        }
-        
-        // Method 3: Performance API
-        if (window.performance) {
-            const entries = performance.getEntriesByType('resource');
-            const exampleApiCalls = entries.filter(e => e.name.includes('/examples/'));
-            if (exampleApiCalls.length > 0) {
-                const lastCall = exampleApiCalls[exampleApiCalls.length - 1];
-                const match = lastCall.name.match(/\/examples\/(\d+)/);
-                if (match) return match[1];
-            }
-        }
-        
-        return null;
-    }
-    
-    async function unlockExample(projectId, exampleId) {
-        try {
-            await fetch(`/v1/projects/${projectId}/tracking/${exampleId}/unlock/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken()
-                }
-            });
-            console.log('[Monlam Lock] Unlocked example', exampleId);
-        } catch (e) {
-            console.log('[Monlam Lock] Unlock error:', e);
-        }
-    }
-    
-    function showLockIndicator(expiresInMinutes) {
-        // Remove existing indicator
-        const existing = document.querySelector('.monlam-lock-indicator');
-        if (existing) existing.remove();
-        
-        const indicator = document.createElement('div');
-        indicator.className = 'monlam-lock-indicator';
-        indicator.style.cssText = `
-            position: fixed;
-            top: 70px;
-            right: 20px;
-            background: #e8f5e9;
-            border: 1px solid #4caf50;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 12px;
-            color: #2e7d32;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        `;
-        indicator.innerHTML = `
-            <span style="font-size: 16px;">🔒</span>
-            <span>Locked for editing (${expiresInMinutes}m)</span>
-        `;
-        document.body.appendChild(indicator);
-    }
-    
-    async function navigateToNextAvailableExample(projectId, currentExampleId) {
-        /**
-         * When current example is locked, find and navigate to next available.
-         * Locks the example before navigating to prevent race conditions.
-         */
-        console.log('[Monlam Lock] 🔍 Finding next available example...');
-        
-        // Prevent multiple navigation attempts
-        if (window.monlamNavigatingToNext) {
-            console.log('[Monlam Lock] Already navigating, skipping');
-            return;
-        }
-        window.monlamNavigatingToNext = true;
-        
-        try {
-            // Get all unconfirmed examples (this will be filtered by middleware to exclude locked ones)
-            const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000&confirmed=false`);
-            if (!examplesResp.ok) {
-                console.error('[Monlam Lock] Failed to fetch examples');
-                showNoAvailableExamplesMessage(projectId);
-                return;
-            }
-            
-            const examplesData = await examplesResp.json();
-            const examples = examplesData.results || [];
-            
-            if (examples.length === 0) {
-                console.log('[Monlam Lock] No unconfirmed examples available');
-                showNoAvailableExamplesMessage(projectId);
-                return;
-            }
-            
-            // Find current example's index in the filtered list
-            const currentIndex = examples.findIndex(e => e.id == currentExampleId);
-            
-            // Try to find next unlocked example (starting after current)
-            // The middleware already filtered out locked examples, so we just need to find the next one
-            for (let i = 1; i <= examples.length; i++) {
-                const nextIndex = currentIndex >= 0 ? (currentIndex + i) % examples.length : i - 1;
-                const nextExample = examples[nextIndex];
-                
-                if (!nextExample || nextExample.id == currentExampleId) {
-                    // Wrapped around to same example or invalid
-                    continue;
-                }
-                
-                // Try to lock this example immediately (prevents race condition)
-                try {
-                    const lockResp = await fetch(`/v1/projects/${projectId}/tracking/${nextExample.id}/lock/`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': getCsrfToken()
-                        }
-                    });
-                    
-                    if (lockResp.ok) {
-                        const lockData = await lockResp.json();
-                        if (lockData.success) {
-                            // Successfully locked! Now navigate to it
-                            console.log('[Monlam Lock] ✅ Locked and navigating to example:', nextExample.id);
-                            
-                            // Store the locked example
-                            window.monlamLockedExample = { projectId, exampleId: nextExample.id };
-                            
-                            // Navigate to it - use the index in the filtered list
-                            // Doccano uses 0-based page indexing, but we need to account for pagination
-                            // Calculate page number (assuming 10 examples per page, which is Doccano's default)
-                            const pageNumber = Math.floor(nextIndex / 10);
-                            
-                            const path = window.location.pathname;
-                            const basePath = path.replace(/\?.*$/, '').split('?')[0];
-                            
-                            // Navigate with page parameter and also try to set the example directly
-                            // Reload the page to ensure fresh state
-                            window.location.replace(`${basePath}?page=${pageNumber}`);
-                            return;
-                        }
-                    } else if (lockResp.status === 409) {
-                        // Already locked by someone else - try next
-                        console.log('[Monlam Lock] Example', nextExample.id, 'already locked, trying next...');
-                        continue;
-                    }
-                } catch (lockError) {
-                    console.error('[Monlam Lock] Error locking example:', lockError);
-                    continue;
-                }
-            }
-            
-            // All examples are locked or couldn't lock any
-            console.log('[Monlam Lock] All examples are currently locked');
-            showAllLockedMessage(projectId);
-            
-        } catch (error) {
-            console.error('[Monlam Lock] Error finding next example:', error);
-            showAllLockedMessage(projectId);
-        } finally {
-            window.monlamNavigatingToNext = false;
-        }
-    }
-    
-    function showNoAvailableExamplesMessage(projectId) {
-        const msg = document.createElement('div');
-        msg.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; padding: 32px; border-radius: 12px; text-align: center;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 10000;
-        `;
-        msg.innerHTML = `
-            <div style="font-size: 48px; margin-bottom: 16px;">🎉</div>
-            <h2 style="margin: 0 0 16px 0; color: #333;">All Done!</h2>
-            <p style="color: #666; margin-bottom: 24px;">
-                All examples have been annotated.<br>
-                Great work!
-            </p>
-            <button onclick="window.location.href='/projects/${projectId}/dataset'" style="
-                padding: 12px 24px; background: #4CAF50; color: white;
-                border: none; border-radius: 8px; cursor: pointer; font-size: 16px;
-            ">Back to Dataset</button>
-        `;
-        document.body.appendChild(msg);
-    }
-    
-    function showAllLockedMessage(projectId) {
-        const msg = document.createElement('div');
-        msg.style.cssText = `
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: white; padding: 32px; border-radius: 12px; text-align: center;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 10000;
-        `;
-        msg.innerHTML = `
-            <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
-            <h2 style="margin: 0 0 16px 0; color: #333;">All Examples Busy</h2>
-            <p style="color: #666; margin-bottom: 24px;">
-                All available examples are currently being edited<br>
-                by other annotators. Please wait a moment.
-            </p>
-            <button onclick="window.location.reload()" style="
-                padding: 12px 24px; background: #1976d2; color: white;
-                border: none; border-radius: 8px; cursor: pointer; font-size: 16px; margin-right: 8px;
-            ">Retry</button>
-            <button onclick="window.location.href='/projects/${projectId}/dataset'" style="
-                padding: 12px 24px; background: #666; color: white;
-                border: none; border-radius: 8px; cursor: pointer; font-size: 16px;
-            ">Back to Dataset</button>
-        `;
-        document.body.appendChild(msg);
-    }
-    
-    function showLockedByOtherModal(lockedByUsername, expiresInMinutes) {
-        // Remove existing modal
-        const existing = document.querySelector('.monlam-lock-modal');
-        if (existing) existing.remove();
-        
-        const modal = document.createElement('div');
-        modal.className = 'monlam-lock-modal';
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-        `;
-        
-        modal.innerHTML = `
-            <div style="
-                background: white;
-                padding: 32px;
-                border-radius: 12px;
-                max-width: 400px;
-                text-align: center;
-                box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-            ">
-                <div style="font-size: 48px; margin-bottom: 16px;">🔐</div>
-                <h2 style="margin: 0 0 16px 0; color: #333;">Example Locked</h2>
-                <p style="color: #666; margin-bottom: 24px;">
-                    This example is currently being edited by<br>
-                    <strong style="color: #1976d2;">${lockedByUsername}</strong><br>
-                    <small>(Expires in ~${expiresInMinutes} minutes)</small>
-                </p>
-                <button onclick="window.history.back()" style="
-                    padding: 12px 24px;
-                    background: #1976d2;
-                    color: white;
-                    border: none;
-                    border-radius: 6px;
-                    font-size: 14px;
-                    cursor: pointer;
-                ">← Go Back to Dataset</button>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-    }
-    
-    function getCsrfToken() {
-        // Try multiple methods to get CSRF token
-        const cookies = document.cookie.split(';');
-        for (const cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if (name === 'csrftoken') return value;
-        }
-        const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
-        if (csrfInput) return csrfInput.value;
-        return '';
-    }
-    
-    // Unlock when user leaves the page
-    window.addEventListener('beforeunload', async () => {
-        if (window.monlamLockedExample) {
-            // Use sendBeacon for reliable unlock on page leave
-            const { projectId, exampleId } = window.monlamLockedExample;
-            const url = `/v1/projects/${projectId}/tracking/${exampleId}/unlock/`;
-            navigator.sendBeacon(url);
-        }
-    });
     
     // METRICS PAGE REDIRECT - Vue Router Aware (Professional Implementation)
     function setupMetricsRedirect() {
@@ -2135,39 +1688,23 @@
                 statusHeader.className = 'monlam-status-header monlam-status-col-header';
                 statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                 
-                // Find the Action header (usually last column)
-                const actionHeader = Array.from(headers).find(h => 
-                    h.textContent.toLowerCase().includes('action') || 
-                    h.textContent.toLowerCase().includes('annotate')
-                );
-                
-                // Move Action header right after Audio (column 2), then add status column
-                // New order: Checkbox | ID | Audio | Action | Status | ...
-                const thirdHeader = headers[2]; // Audio column
-                
-                if (actionHeader) {
-                    // Move Action header to be after Audio
-                    thirdHeader.insertAdjacentElement('afterend', actionHeader);
-                    // Then add status column after Action
-                    actionHeader.insertAdjacentElement('afterend', statusHeader);
-                } else {
-                    // Fallback: insert after Audio if no Action header found
-                    thirdHeader.insertAdjacentElement('afterend', statusHeader);
-                }
-                console.log('[Monlam Dataset] ✅ Headers reordered: Audio → Action → Status');
+                // Append status column to the end (don't move it - let it stay in natural position)
+                headerRow.appendChild(statusHeader);
+                console.log('[Monlam Dataset] ✅ Status header appended to end');
                 
                 // Add data cells to rows
                 enhanceDataRows(trackingMap);
                 
-                // Watch for new rows (when pagination changes)
-                if (!window.monlamRowObserver) {
-                    window.monlamRowObserver = setInterval(() => {
+                // Set up MutationObserver immediately to watch for new rows (e.g., pagination)
+                const tbody = document.querySelector('tbody');
+                if (tbody && !window.monlamTbodyObserver) {
+                    window.monlamTbodyObserver = new MutationObserver(() => {
                         const newRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
                         if (newRows.length > 0) {
-                            console.log('[Monlam Dataset] 🔄 Found', newRows.length, 'new rows, enhancing...');
-                            enhanceDataRows(trackingMap);
+                            enhanceDataRows(trackingMap); // Process new rows only
                         }
-                    }, 500);
+                    });
+                    window.monlamTbodyObserver.observe(tbody, { childList: true, subtree: true });
                 }
                 
                 return true;
@@ -2176,14 +1713,23 @@
             function enhanceDataRows(trackingMap) {
                 const dataRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
                 if (dataRows.length === 0) return;
-                console.log('[Monlam Dataset] Processing', dataRows.length, 'unprocessed rows');
                 
+                // Status badge colors (moved outside loop for better performance)
+                const statusColors = {
+                    'pending': '#e0e0e0',
+                    'in_progress': '#2196f3',
+                    'submitted': '#ff9800',
+                    'approved': '#4caf50',
+                    'rejected': '#f44336'
+                };
+                
+                // Process rows efficiently
                 dataRows.forEach(row => {
                     // Mark as processed IMMEDIATELY
                     row.setAttribute('data-monlam-enhanced', 'true');
                     
                     // Extract example ID from first cell
-                    const cells = Array.from(row.querySelectorAll('td'));
+                    const cells = row.querySelectorAll('td');
                     if (cells.length < 3) return;
                     
                     // First cell typically contains checkbox/ID
@@ -2191,19 +1737,9 @@
                     if (!idMatch) return;
                     
                     const exampleId = parseInt(idMatch[1]);
-                    const tracking = trackingMap[exampleId] || {};
+                    const tracking = trackingMap[exampleId];
+                    const status = tracking?.status || 'pending';
                     
-                    // Get status value
-                    const status = tracking.status || 'pending';
-                    
-                    // Status badge colors
-                    const statusColors = {
-                        'pending': '#e0e0e0',
-                        'in_progress': '#2196f3',
-                        'submitted': '#ff9800',
-                        'approved': '#4caf50',
-                        'rejected': '#f44336'
-                    };
                     const color = statusColors[status] || '#e0e0e0';
                     const textColor = (status === 'pending') ? '#666' : 'white';
                     
@@ -2213,27 +1749,10 @@
                     statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                     statusCell.innerHTML = `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`;
                     
-                    // Find and move the Action cell (usually last cell with button/link)
-                    const actionCell = Array.from(cells).find(c => 
-                        c.querySelector('a[href*="speech-to-text"], a[href*="sequence-labeling"], button, .v-btn') ||
-                        c.textContent.toLowerCase().includes('annotate')
-                    );
-                    
-                    // Move Action cell right after Audio (cell 2), then add status cell
-                    const thirdCell = cells[2]; // Audio cell
-                    
-                    if (actionCell && actionCell !== thirdCell) {
-                        // Move Action cell to be after Audio
-                        thirdCell.insertAdjacentElement('afterend', actionCell);
-                        // Then add status cell after Action
-                        actionCell.insertAdjacentElement('afterend', statusCell);
-                    } else {
-                        // Fallback: insert after Audio if no Action cell found
-                        thirdCell.insertAdjacentElement('afterend', statusCell);
-                    }
+                    // Append status cell to the end (don't move it - let it stay in natural position)
+                    row.appendChild(statusCell);
                 });
                 
-                console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');
                 return true;
             }
             
@@ -2241,7 +1760,7 @@
             // Use exponential backoff to avoid hammering the DOM
             let attempt = 0;
             const maxAttempts = 5;
-            const baseDelay = 500;
+            const baseDelay = 100; // Reduced from 500ms for faster initial load
             
             function tryEnhance() {
                 attempt++;
@@ -2249,28 +1768,14 @@
                 
                 if (success) {
                     console.log('[Monlam Dataset] ✅ Enhancement complete after', attempt, 'attempts');
-                    
-                    // Set up MutationObserver to handle new rows (e.g., pagination)
-                    const tbody = document.querySelector('tbody');
-                    if (tbody && !window.monlamTbodyObserver) {
-                        window.monlamTbodyObserver = new MutationObserver(() => {
-                            const newRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
-                            if (newRows.length > 0) {
-                                console.log('[Monlam Dataset] 🔄 Detected', newRows.length, 'new rows');
-                                enhanceDataRows(trackingMap); // Process new rows only
-                            }
-                        });
-                        window.monlamTbodyObserver.observe(tbody, { childList: true, subtree: true });
-                    }
                 } else if (attempt < maxAttempts) {
                     const delay = baseDelay * Math.pow(1.5, attempt);
-                    console.log('[Monlam Dataset] Attempt', attempt, 'failed, retrying in', delay, 'ms');
                     setTimeout(tryEnhance, delay);
                 }
             }
             
-            // Start enhancement
-            setTimeout(tryEnhance, 500);
+            // Start enhancement immediately (reduced delay for faster loading)
+            setTimeout(tryEnhance, 100);
             
         } catch (error) {
             console.error('[Monlam Dataset] ❌ Error enhancing table:', error);
@@ -2580,7 +2085,7 @@
             enableAudioLoop();  // Only loops on annotation pages (not dataset)
             enhanceDatasetTable();
             addApproveRejectButtons();
-            handleExampleLocking();  // Lock examples to prevent conflicts
+            // REMOVED: handleExampleLocking() - No longer needed with single annotator per project
         }, 1000);
         
         // Monitor SPA navigation and re-initialize on route change
@@ -2605,7 +2110,7 @@
                     enableAudioLoop();  // Only loops on annotation pages (not dataset)
                     enhanceDatasetTable();
                     addApproveRejectButtons();
-                    handleExampleLocking();  // Lock examples to prevent conflicts
+                    // REMOVED: handleExampleLocking() - No longer needed with single annotator per project
                 }, 500);
             }
         }, 500);

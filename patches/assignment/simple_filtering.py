@@ -1,5 +1,5 @@
 """
-Simple Example Filtering & Locking
+Simple Example Filtering
 
 Rules:
 1. Unannotated examples: Visible to all annotators (first-come-first-serve)
@@ -7,7 +7,6 @@ Rules:
 3. Submitted/Approved: Hidden from all annotators
 4. Rejected: Visible only to original annotator (to fix)
 5. Reviewers & Project Managers: See everything
-6. Locking: Example locked when being edited
 """
 
 from django.db.models import Q
@@ -105,81 +104,5 @@ class SimpleExampleFilterMixin:
         return queryset.filter(id__in=final_ids)
 
 
-class ExampleLockingViewSet:
-    """
-    Example locking functionality
-    """
-    
-    @action(detail=True, methods=['post'])
-    def lock(self, request, pk=None, project_id=None):
-        """
-        Lock an example for editing
-        
-        POST /v1/projects/{project_id}/examples/{example_id}/lock/
-        """
-        from .simple_tracking import AnnotationTracking
-        
-        try:
-            tracking, created = AnnotationTracking.objects.get_or_create(
-                project_id=project_id,
-                example_id=pk,
-                defaults={
-                    'status': 'pending'
-                }
-            )
-            
-            # Check if already locked by someone else
-            if hasattr(tracking, 'locked_by') and tracking.locked_by and tracking.locked_by != request.user:
-                # Check if lock is expired (5 minutes)
-                if hasattr(tracking, 'locked_at') and tracking.locked_at:
-                    if timezone.now() - tracking.locked_at < timedelta(minutes=5):
-                        return Response({
-                            'locked': True,
-                            'locked_by': tracking.locked_by.username,
-                            'message': 'Example is being edited by another user'
-                        }, status=400)
-            
-            # Lock it
-            if hasattr(tracking, 'locked_by'):
-                tracking.locked_by = request.user
-                tracking.locked_at = timezone.now()
-                tracking.save()
-            
-            return Response({
-                'success': True,
-                'locked_by': request.user.username
-            })
-        
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
-    
-    @action(detail=True, methods=['post'])
-    def unlock(self, request, pk=None, project_id=None):
-        """
-        Unlock an example
-        
-        POST /v1/projects/{project_id}/examples/{example_id}/unlock/
-        """
-        from .simple_tracking import AnnotationTracking
-        
-        try:
-            tracking = AnnotationTracking.objects.filter(
-                project_id=project_id,
-                example_id=pk
-            ).first()
-            
-            if tracking and hasattr(tracking, 'locked_by'):
-                # Only allow unlock if locked by this user or lock expired
-                if tracking.locked_by == request.user or \
-                   (tracking.locked_at and timezone.now() - tracking.locked_at > timedelta(minutes=5)):
-                    tracking.locked_by = None
-                    tracking.locked_at = None
-                    tracking.save()
-                    
-                    return Response({'success': True})
-            
-            return Response({'success': True})  # Already unlocked
-        
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+# NOTE: ExampleLockingViewSet removed - single annotator per project, no race conditions
 

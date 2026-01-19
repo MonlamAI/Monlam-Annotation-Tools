@@ -1,8 +1,9 @@
 """
 Tracking API URL Configuration
 
-URLs for the annotation tracking API (approve/reject/status/lock)
+URLs for the annotation tracking API (approve/reject/status)
 Registered at: /v1/projects/<project_id>/tracking/
+NOTE: Locking endpoints removed - single annotator per project, no race conditions
 """
 
 from django.urls import path
@@ -29,18 +30,5 @@ urlpatterns = [
          AnnotationTrackingViewSet.as_view({'post': 'reject'}), 
          name='tracking-reject'),
     
-    # Lock an example
-    path('<int:pk>/lock/', 
-         AnnotationTrackingViewSet.as_view({'post': 'lock'}), 
-         name='tracking-lock'),
-    
-    # Unlock an example
-    path('<int:pk>/unlock/', 
-         AnnotationTrackingViewSet.as_view({'post': 'unlock'}), 
-         name='tracking-unlock'),
-    
-    # Check lock status
-    path('<int:pk>/lock-status/', 
-         AnnotationTrackingViewSet.as_view({'get': 'lock_status'}), 
-         name='tracking-lock-status'),
+    # NOTE: Locking URLs removed - single annotator per project, no race conditions
 ]
