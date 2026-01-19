@@ -676,14 +676,14 @@ def api_completion_stats(request, project_id):
                 annotator_dict[username] = {
                     'annotated_by__id': user_id,
                     'annotated_by__username': username,
-                    'total_annotated': 0,  # Will remain 0 if no confirmations
+                    'total_annotated': 0,  # Will be incremented below if they actually annotated
                     'submitted': 0,
                     'approved': 0,
                     'rejected': 0,
                 }
             
             # Only count if this example wasn't already counted above (via ExampleState)
-            # Check if this example has an ExampleState record
+            # Check if this example has an ExampleState record for this user
             example_has_state = any(
                 state.example_id == t.example_id 
                 for state in confirmed_states 
@@ -691,7 +691,14 @@ def api_completion_stats(request, project_id):
             )
             
             if not example_has_state:
-                # This example has tracking but no confirmation - count based on status
+                # This example has tracking but no confirmation (ExampleState)
+                # CRITICAL: If they have AnnotationTracking with submitted/approved/rejected,
+                # they DID annotate it, so increment total_annotated
+                # This fixes cases like tnamgyal who has submitted tracking but no ExampleState
+                if t.status in ['submitted', 'approved', 'rejected']:
+                    annotator_dict[username]['total_annotated'] += 1
+                
+                # Count based on status
                 if t.status == 'approved':
                     annotator_dict[username]['approved'] += 1
                 elif t.status == 'rejected':
@@ -720,9 +727,14 @@ def api_completion_stats(request, project_id):
                     stats['approved'] = int(stats['approved'] * ratio)
                     stats['rejected'] = int(stats['rejected'] * ratio)
         else:
-            # No confirmations: ensure submitted + approved + rejected makes sense
-            # For annotators without confirmations, keep counts as-is from tracking
-            pass
+            # No ExampleState records but we have tracking records (like tnamgyal)
+            # Calculate what total_annotated should be based on status counts
+            calculated_total = stats['submitted'] + stats['approved'] + stats['rejected']
+            if calculated_total > 0:
+                # Set total_annotated to match the sum of status counts
+                # This ensures: total_annotated = submitted + approved + rejected
+                stats['total_annotated'] = calculated_total
+                print(f'[Completion Stats] Fixed {username}: total_annotated was 0 but has {calculated_total} tracked examples (submitted={stats["submitted"]}, approved={stats["approved"]}, rejected={stats["rejected"]})')
     
     annotator_stats = sorted(annotator_dict.values(), key=lambda x: x['annotated_by__username'])
     
