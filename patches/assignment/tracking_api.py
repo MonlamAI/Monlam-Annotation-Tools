@@ -96,26 +96,46 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             )
         
         try:
+            # Validate that user is a project member
+            from projects.models import Member
+            is_member = Member.objects.filter(
+                user=request.user,
+                project_id=project_id
+            ).exists()
+            
+            if not is_member and not request.user.is_superuser:
+                return Response(
+                    {'error': 'You must be a project member to submit annotations'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
             with transaction.atomic():
                 tracking, created = AnnotationTracking.objects.get_or_create(
                     project_id=project_id,
                     example_id=example_id,
                     defaults={
-                        'annotated_by': request.user,
+                        'annotated_by': request.user,  # Track who annotated (for metrics, not exposed in API)
                         'annotated_at': timezone.now(),
-                        'status': 'submitted'
+                        'status': 'submitted'  # Submitted for review
                     }
                 )
                 
-                # Always update annotated_by if not set (even if record already existed)
+                # Update status to submitted if it was pending
                 needs_save = False
                 if not tracking.annotated_by:
-                    tracking.annotated_by = request.user
+                    # Only set if user is still a project member
+                    if is_member or request.user.is_superuser:
+                        tracking.annotated_by = request.user
+                        needs_save = True
+                
+                if tracking.status == 'pending':
                     tracking.annotated_at = timezone.now()
+                    tracking.status = 'submitted'
                     needs_save = True
                 
-                # Update status to submitted
-                if tracking.status != 'submitted':
+                # If rejected, update to submitted (resubmission)
+                elif tracking.status == 'rejected':
+                    tracking.annotated_at = timezone.now()
                     tracking.status = 'submitted'
                     needs_save = True
                 
@@ -131,7 +151,8 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 
                 # Also create ExampleState to mark as confirmed (for tick mark in UI)
                 # This ensures the example shows as completed/confirmed in Doccano's native UI
-                if tracking.annotated_by:
+                # Only create if user is still a project member
+                if is_member or request.user.is_superuser:
                     try:
                         from examples.models import ExampleState
                         from examples.models import Example
@@ -140,7 +161,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                         ExampleState.objects.update_or_create(
                             example=example,
                             defaults={
-                                'confirmed_by': tracking.annotated_by,
+                                'confirmed_by': request.user,  # Still need user for ExampleState
                                 'confirmed_at': tracking.annotated_at or timezone.now()
                             }
                         )
@@ -158,7 +179,6 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 return Response({
                     'success': True,
                     'status': tracking.status,
-                    'annotated_by': tracking.annotated_by.username if tracking.annotated_by else None,
                     'annotated_at': tracking.annotated_at,
                     'time_spent_seconds': time_spent
                 })
@@ -280,21 +300,21 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         
         try:
             with transaction.atomic():
-                # Update AnnotationTracking
+                # Update AnnotationTracking (track reviewed_by in backend for comprehensive metrics)
                 tracking, created = AnnotationTracking.objects.get_or_create(
                     project_id=project_id,
                     example_id=pk,
                     defaults={
-                        'status': 'approved',
-                        'reviewed_by': request.user,
+                        'status': 'reviewed',  # Changed from 'approved' to 'reviewed'
+                        'reviewed_by': request.user,  # Track who reviewed (for metrics, not exposed in API)
                         'reviewed_at': timezone.now(),
                         'review_notes': request.data.get('review_notes', '')
                     }
                 )
                 
                 if not created:
-                    tracking.status = 'approved'
-                    tracking.reviewed_by = request.user
+                    tracking.status = 'reviewed'  # Changed from 'approved' to 'reviewed'
+                    tracking.reviewed_by = request.user  # Track who reviewed (for metrics, not exposed in API)
                     tracking.reviewed_at = timezone.now()
                     tracking.review_notes = request.data.get('review_notes', '')
                     tracking.save()
@@ -304,14 +324,13 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 CompletionMatrixUpdater.update_approver_status(
                     example=example,
                     approver=request.user,
-                    status_choice='approved',
+                    status_choice='approved',  # Keep 'approved' for ApproverCompletionStatus (different model)
                     notes=request.data.get('review_notes', '')
                 )
                 
                 return Response({
                     'success': True,
-                    'status': 'approved',
-                    'reviewed_by': tracking.reviewed_by.username,
+                    'status': 'reviewed',  # Changed from 'approved' to 'reviewed'
                     'reviewed_at': tracking.reviewed_at
                 })
         
@@ -435,13 +454,13 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
         
         try:
             with transaction.atomic():
-                # Update AnnotationTracking
+                # Update AnnotationTracking (track reviewed_by in backend for comprehensive metrics)
                 tracking, created = AnnotationTracking.objects.get_or_create(
                     project_id=project_id,
                     example_id=pk,
                     defaults={
                         'status': 'rejected',
-                        'reviewed_by': request.user,
+                        'reviewed_by': request.user,  # Track who reviewed (for metrics, not exposed in API)
                         'reviewed_at': timezone.now(),
                         'review_notes': review_notes
                     }
@@ -449,7 +468,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 
                 if not created:
                     tracking.status = 'rejected'
-                    tracking.reviewed_by = request.user
+                    tracking.reviewed_by = request.user  # Track who reviewed (for metrics, not exposed in API)
                     tracking.reviewed_at = timezone.now()
                     tracking.review_notes = review_notes
                     tracking.save()
@@ -466,7 +485,6 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 return Response({
                     'success': True,
                     'status': 'rejected',
-                    'reviewed_by': tracking.reviewed_by.username,
                     'reviewed_at': tracking.reviewed_at,
                     'review_notes': review_notes
                 })
@@ -499,10 +517,23 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             confirmed_by = None
             try:
                 from examples.models import ExampleState
+                from projects.models import Member
+                
                 state = ExampleState.objects.filter(example_id=pk).select_related('confirmed_by').first()
                 if state and state.confirmed_by:
-                    is_confirmed = True
-                    confirmed_by = state.confirmed_by.username
+                    # Only show confirmed_by if they're still a project member
+                    is_member = Member.objects.filter(
+                        user=state.confirmed_by,
+                        project_id=project_id
+                    ).exists()
+                    
+                    if is_member or state.confirmed_by.is_superuser:
+                        is_confirmed = True
+                        confirmed_by = state.confirmed_by.username
+                    else:
+                        # User is no longer a project member - don't show their name
+                        is_confirmed = True  # Still confirmed, but don't show who
+                        confirmed_by = None
             except Exception:
                 pass  # ExampleState may not exist
             
@@ -516,9 +547,10 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 return Response({
                     'status': 'submitted' if is_confirmed else 'pending',  # If confirmed but no tracking, treat as submitted
                     'is_confirmed': is_confirmed,
-                    'confirmed_by': confirmed_by,
-                    'annotated_by': confirmed_by,  # Use confirmed_by as annotator if no tracking
-                    'reviewed_by': None,
+                    'confirmed_by': confirmed_by,  # Still need for ExampleState
+                    'annotated_at': None,
+                    'reviewed_at': None,
+                    'review_notes': '',
                     'locked_by': None,
                     'is_locked': False
                 })
@@ -545,10 +577,8 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             return Response({
                 'status': effective_status,
                 'is_confirmed': is_confirmed,
-                'confirmed_by': confirmed_by,
-                'annotated_by': tracking.annotated_by.username if tracking.annotated_by else confirmed_by,
+                'confirmed_by': confirmed_by,  # Still need for ExampleState
                 'annotated_at': tracking.annotated_at,
-                'reviewed_by': tracking.reviewed_by.username if tracking.reviewed_by else None,
                 'reviewed_at': tracking.reviewed_at,
                 'review_notes': tracking.review_notes,
                 'locked_by': locked_by_username,
@@ -610,28 +640,11 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                     # Lock it for this user (or renew existing lock)
                     update_fields = ['locked_by', 'locked_at']
                     
-                    # Set annotated_by ONLY if:
-                    # 1. Not already set (first time annotation), OR
-                    # 2. Status is 'pending' (no submission yet) - handles abandoned locks
-                    # 
-                    # DO NOT overwrite if status is 'submitted', 'approved', or 'rejected'
-                    # (work has already been done by someone else)
-                    if not tracking.annotated_by:
-                        # First time - set annotator
-                        tracking.annotated_by = request.user
-                        if not tracking.started_at:
-                            tracking.started_at = timezone.now()
-                            update_fields.append('started_at')
-                        update_fields.append('annotated_by')
-                    elif tracking.status == 'pending' and tracking.annotated_by != request.user:
-                        # Status is still pending but different annotator - update to current user
-                        # This handles case where someone locked but didn't submit, and lock expired
-                        tracking.annotated_by = request.user
-                        if not tracking.started_at:
-                            tracking.started_at = timezone.now()
-                            update_fields.append('started_at')
-                        update_fields.append('annotated_by')
-                    # If status is 'submitted', 'approved', or 'rejected', don't change annotated_by
+                    # Set started_at if not already set (first time locking)
+                    # Single annotator - no need to track who annotated
+                    if not tracking.started_at:
+                        tracking.started_at = timezone.now()
+                        update_fields.append('started_at')
                     
                     tracking.locked_by = request.user
                     tracking.locked_at = timezone.now()

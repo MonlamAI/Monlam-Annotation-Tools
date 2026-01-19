@@ -1092,10 +1092,8 @@
                             if (data.review_notes) {
                                 statusInfo += ` - "${data.review_notes}"`;
                             }
-                        } else if (data.annotated_by) {
-                            // Show annotator for pending/submitted
-                            statusInfo = `${data.status.toUpperCase()} - Annotated by ${data.annotated_by}`;
                         }
+                        // For submitted/pending statuses, just show the status without annotator name
                         
                         statusText.textContent = statusInfo;
                     } catch (error) {

@@ -56,30 +56,51 @@ def track_annotation_saved(sender, instance, created, **kwargs):
         if not user or not example:
             return
         
-        # Create or update tracking
+        # Validate that user is a project member
+        from projects.models import Member
+        is_member = Member.objects.filter(
+            user=user,
+            project=example.project
+        ).exists()
+        
+        # Only proceed if user is a project member or superuser
+        if not is_member and not user.is_superuser:
+            print(f'[Monlam Signals] ⚠️ User {user.username} is not a project member, skipping tracking')
+            return
+        
+        # Create or update tracking (track annotated_by in backend for comprehensive metrics)
         tracking, tracking_created = AnnotationTracking.objects.get_or_create(
             project=example.project,
             example=example,
             defaults={
-                'annotated_by': user,
+                'annotated_by': user,  # Track who annotated (for metrics, not exposed in API)
                 'annotated_at': timezone.now(),
-                'status': 'submitted'
+                'status': 'submitted'  # Submitted for review
             }
         )
         
         # Update tracking if needed
         needs_save = False
         
-        # If tracking exists but no annotator yet, update it
+        # If tracking exists but annotated_by not set, update it (only if user is still a member)
         if not tracking_created and not tracking.annotated_by:
-            tracking.annotated_by = user
+            if is_member or user.is_superuser:
+                tracking.annotated_by = user
+                tracking.annotated_at = timezone.now()
+                tracking.status = 'submitted'
+                needs_save = True
+        
+        # If tracking exists but status is pending, update to submitted
+        if not tracking_created and tracking.status == 'pending':
+            if not tracking.annotated_by and (is_member or user.is_superuser):
+                tracking.annotated_by = user
             tracking.annotated_at = timezone.now()
             tracking.status = 'submitted'
             needs_save = True
         
-        # CRITICAL: If example was rejected and same annotator is resubmitting, update status to submitted
+        # CRITICAL: If example was rejected, update status to submitted (resubmission)
         # This handles the rejected → submitted transition when annotator fixes and resubmits
-        if not tracking_created and tracking.status == 'rejected' and tracking.annotated_by == user:
+        if not tracking_created and tracking.status == 'rejected':
             tracking.status = 'submitted'
             tracking.annotated_at = timezone.now()  # Update timestamp to reflect resubmission
             needs_save = True
@@ -94,7 +115,8 @@ def track_annotation_saved(sender, instance, created, **kwargs):
         # CRITICAL: Also create ExampleState to mark as confirmed (same as tick mark)
         # This ensures Enter key and tick mark both create ExampleState
         # This is essential for completion dashboard to show correct counts
-        if tracking.annotated_by:
+        # Only create if user is still a project member
+        if is_member or user.is_superuser:
             try:
                 from examples.models import ExampleState
                 import traceback
@@ -104,40 +126,41 @@ def track_annotation_saved(sender, instance, created, **kwargs):
                 state, state_created = ExampleState.objects.update_or_create(
                     example=example,
                     defaults={
-                        'confirmed_by': tracking.annotated_by,
+                        'confirmed_by': user,  # Still need user for ExampleState
                         'confirmed_at': tracking.annotated_at or timezone.now()
                     }
                 )
+            
+            if state_created:
+                print(f'[Monlam Signals] ✅ Created ExampleState for example {example.id} (Enter key pressed)')
+            else:
+                print(f'[Monlam Signals] ✅ Updated ExampleState for example {example.id} (Enter key pressed)')
                 
-                if state_created:
-                    print(f'[Monlam Signals] ✅ Created ExampleState for example {example.id} (Enter key pressed)')
-                else:
-                    print(f'[Monlam Signals] ✅ Updated ExampleState for example {example.id} (Enter key pressed)')
-                    
-            except Exception as e:
-                import traceback
-                error_trace = traceback.format_exc()
-                print(f'[Monlam Signals] ❌ CRITICAL: Could not create ExampleState for example {example.id}')
-                print(f'[Monlam Signals] Error: {e}')
-                print(f'[Monlam Signals] Traceback: {error_trace}')
-                # Try again with more explicit error handling
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f'[Monlam Signals] ❌ CRITICAL: Could not create ExampleState for example {example.id}')
+            print(f'[Monlam Signals] Error: {e}')
+            print(f'[Monlam Signals] Traceback: {error_trace}')
+            # Try again with more explicit error handling (only if user is still a member)
+            if is_member or user.is_superuser:
                 try:
                     # Force create if update_or_create failed
                     from examples.models import ExampleState
                     ExampleState.objects.create(
                         example=example,
-                        confirmed_by=tracking.annotated_by,
+                        confirmed_by=user,
                         confirmed_at=tracking.annotated_at or timezone.now()
                     )
                     print(f'[Monlam Signals] ✅ Retry successful: Created ExampleState for example {example.id}')
                 except Exception as e2:
-                    # Check if it's because ExampleState already exists (that's okay)
-                    if 'unique constraint' in str(e2).lower() or 'already exists' in str(e2).lower():
-                        print(f'[Monlam Signals] ✅ ExampleState already exists for example {example.id} (this is okay)')
-                    else:
-                        print(f'[Monlam Signals] ❌ Retry also failed: {e2}')
-                        print(f'[Monlam Signals] Traceback: {traceback.format_exc()}')
-                    # Don't fail the whole signal, but log the error prominently
+                # Check if it's because ExampleState already exists (that's okay)
+                if 'unique constraint' in str(e2).lower() or 'already exists' in str(e2).lower():
+                    print(f'[Monlam Signals] ✅ ExampleState already exists for example {example.id} (this is okay)')
+                else:
+                    print(f'[Monlam Signals] ❌ Retry also failed: {e2}')
+                    print(f'[Monlam Signals] Traceback: {traceback.format_exc()}')
+                # Don't fail the whole signal, but log the error prominently
         
     except Exception as e:
         print(f'[Monlam Signals] ⚠️ Tracking failed: {e}')
@@ -180,17 +203,29 @@ def track_example_state_saved(sender, instance, created, **kwargs):
     try:
         from assignment.simple_tracking import AnnotationTracking
         from assignment.models_separate import Assignment
+        from projects.models import Member
         
         example = instance.example
         confirmed_by = instance.confirmed_by
         confirmed_at = instance.confirmed_at or timezone.now()
         
-        # Create or update AnnotationTracking
+        # Validate that confirmed_by is still a project member
+        is_member = Member.objects.filter(
+            user=confirmed_by,
+            project=example.project
+        ).exists()
+        
+        # Only proceed if user is a project member or superuser
+        if not is_member and not confirmed_by.is_superuser:
+            print(f'[Monlam Signals] ⚠️ User {confirmed_by.username} is not a project member, skipping tracking update')
+            return
+        
+        # Create or update AnnotationTracking (track annotated_by in backend for comprehensive metrics)
         tracking, tracking_created = AnnotationTracking.objects.get_or_create(
             project=example.project,
             example=example,
             defaults={
-                'annotated_by': confirmed_by,
+                'annotated_by': confirmed_by,  # Track who annotated (for metrics, not exposed in API)
                 'annotated_at': confirmed_at,
                 'status': 'submitted'  # Confirmed = submitted for review
             }
@@ -198,15 +233,26 @@ def track_example_state_saved(sender, instance, created, **kwargs):
         
         needs_tracking_save = False
         
-        # Update tracking if it already existed but was missing data
+        # Update tracking if it already existed
         if not tracking_created:
+            # If annotated_by not set, update it (only if user is still a member)
             if not tracking.annotated_by:
-                tracking.annotated_by = confirmed_by
-                tracking.annotated_at = confirmed_at
-                needs_tracking_save = True
+                if is_member or confirmed_by.is_superuser:
+                    tracking.annotated_by = confirmed_by
+                    tracking.annotated_at = confirmed_at
+                    needs_tracking_save = True
             
             # If status is pending, update to submitted (confirmed = submitted)
             if tracking.status == 'pending':
+                if not tracking.annotated_by and (is_member or confirmed_by.is_superuser):
+                    tracking.annotated_by = confirmed_by
+                tracking.annotated_at = confirmed_at
+                tracking.status = 'submitted'
+                needs_tracking_save = True
+            
+            # If status is rejected, update to submitted (resubmission)
+            elif tracking.status == 'rejected':
+                tracking.annotated_at = confirmed_at
                 tracking.status = 'submitted'
                 needs_tracking_save = True
         
