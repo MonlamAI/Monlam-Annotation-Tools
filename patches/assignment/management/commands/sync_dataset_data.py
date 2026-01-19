@@ -2,12 +2,16 @@
 Django management command: sync_dataset_data
 
 Syncs ExampleState, AnnotationTracking, and Assignment data to fix existing inconsistencies.
-This fixes issues like missing annotator names in the dataset table.
+This fixes:
+1. Missing annotator names in the dataset table (like ID 636)
+2. Completion dashboard tally issues (like tnamgyal: Total Annotated 0, Submitted 1)
+3. Any mismatches between ExampleState, AnnotationTracking, and Assignment
 
 Usage:
     python manage.py sync_dataset_data
     python manage.py sync_dataset_data --dry-run
     python manage.py sync_dataset_data --project-id 123
+    python manage.py sync_dataset_data --verbose  # See details for each example
 """
 
 from django.core.management.base import BaseCommand
@@ -96,35 +100,38 @@ class Command(BaseCommand):
         
         # PHASE 1: AnnotationTracking → ExampleState
         self.stdout.write("Phase 1: Creating/Updating ExampleState from AnnotationTracking...")
+        self.stdout.write("  This fixes completion dashboard tally issues (like tnamgyal: Total Annotated 0, Submitted 1)")
         for example_id in all_example_ids:
             tracking = tracking_map.get(example_id)
             state = state_map.get(example_id)
             
             if tracking and tracking.annotated_by:
-                try:
-                    if not state:
-                        # Create ExampleState from AnnotationTracking
-                        if not dry_run:
-                            ExampleState.objects.create(
-                                example=tracking.example,
-                                confirmed_by=tracking.annotated_by,
-                                confirmed_at=tracking.annotated_at or timezone.now()
-                            )
-                        state_created += 1
-                        if verbose:
-                            self.stdout.write(f"  ✓ Would create ExampleState for example {example_id} (annotated by {tracking.annotated_by.username})" if dry_run else f"  ✓ Created ExampleState for example {example_id} (annotated by {tracking.annotated_by.username})")
-                    elif not state.confirmed_by:
-                        # Update ExampleState with confirmed_by from AnnotationTracking
-                        if not dry_run:
-                            state.confirmed_by = tracking.annotated_by
-                            state.confirmed_at = tracking.annotated_at or state.confirmed_at or timezone.now()
-                            state.save()
-                        state_updated += 1
-                        if verbose:
-                            self.stdout.write(f"  ↻ Would update ExampleState for example {example_id} (added confirmed_by: {tracking.annotated_by.username})" if dry_run else f"  ↻ Updated ExampleState for example {example_id} (added confirmed_by: {tracking.annotated_by.username})")
-                except Exception as e:
-                    errors += 1
-                    self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
+                # Only create ExampleState if tracking shows they actually annotated (not just pending)
+                if tracking.status in ['submitted', 'approved', 'rejected']:
+                    try:
+                        if not state:
+                            # Create ExampleState from AnnotationTracking
+                            if not dry_run:
+                                ExampleState.objects.create(
+                                    example=tracking.example,
+                                    confirmed_by=tracking.annotated_by,
+                                    confirmed_at=tracking.annotated_at or timezone.now()
+                                )
+                            state_created += 1
+                            if verbose:
+                                self.stdout.write(f"  ✓ Would create ExampleState for example {example_id} (annotated by {tracking.annotated_by.username}, status: {tracking.status})" if dry_run else f"  ✓ Created ExampleState for example {example_id} (annotated by {tracking.annotated_by.username}, status: {tracking.status})")
+                        elif not state.confirmed_by:
+                            # Update ExampleState with confirmed_by from AnnotationTracking
+                            if not dry_run:
+                                state.confirmed_by = tracking.annotated_by
+                                state.confirmed_at = tracking.annotated_at or state.confirmed_at or timezone.now()
+                                state.save()
+                            state_updated += 1
+                            if verbose:
+                                self.stdout.write(f"  ↻ Would update ExampleState for example {example_id} (added confirmed_by: {tracking.annotated_by.username})" if dry_run else f"  ↻ Updated ExampleState for example {example_id} (added confirmed_by: {tracking.annotated_by.username})")
+                    except Exception as e:
+                        errors += 1
+                        self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
         
         # PHASE 2: ExampleState → AnnotationTracking
         self.stdout.write("\nPhase 2: Creating/Updating AnnotationTracking from ExampleState...")
