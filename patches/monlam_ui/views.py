@@ -163,7 +163,7 @@ def annotation_with_approval(request, project_id, example_id):
     # Get all approver completions for this example (multi-level approval)
     all_approvals = ApproverCompletionStatus.objects.filter(
         example=example
-    ).select_related('approver').order_by('-reviewed_at')
+    ).select_related('approver').defer('assignment').order_by('-reviewed_at')
     
     # Build approvals list with role information
     approvals_list = []
@@ -539,7 +539,7 @@ def api_completion_stats(request, project_id):
         for ap_completion in ApproverCompletionStatus.objects.filter(
             project=project,
             status='approved'
-        ).select_related('approver'):
+        ).select_related('approver').defer('assignment'):
             if ap_completion.approver:
                 try:
                     approver_member = Member.objects.filter(
@@ -675,9 +675,10 @@ def api_completion_stats(request, project_id):
     
     # Per-approver stats (who approved/rejected)
     # Get all approver completions for this project
+    # Defer 'assignment' field to avoid resolving the ForeignKey relationship
     approver_completions = ApproverCompletionStatus.objects.filter(
         project=project
-    ).select_related('approver')
+    ).select_related('approver').defer('assignment')
     
     # Debug: Check how many records we found
     approver_count = approver_completions.count()
@@ -770,7 +771,7 @@ def api_completion_stats(request, project_id):
         approver_completions = ApproverCompletionStatus.objects.filter(
             example_id__in=reviewed_example_ids,
             status__in=['approved', 'rejected']
-        ).select_related('approver')
+        ).select_related('approver').defer('assignment')
         
         for ap_completion in approver_completions:
             approver_id = ap_completion.approver.id
@@ -1175,8 +1176,9 @@ def analytics_api(request):
     rejected_count = 0
     if tracking_in_range:
         # Count approvals/rejections that happened within date range
+        # AnnotationTracking uses 'reviewed' status (not 'approved')
         approved_count = tracking_in_range.filter(
-            status='approved',
+            status='reviewed',  # AnnotationTracking uses 'reviewed' status
             reviewed_at__isnull=False,
             reviewed_at__gte=start_datetime,
             reviewed_at__lte=end_datetime
@@ -1406,7 +1408,7 @@ def analytics_api(request):
                         status='approved',  # ApproverCompletionStatus still uses 'approved'
                         reviewed_at__gte=start_datetime,
                         reviewed_at__lte=end_datetime
-                    ).select_related('approver')
+                    ).select_related('approver').defer('assignment')
                     
                     for ap_completion in approver_completions:
                         username = ap_completion.approver.username
@@ -1572,7 +1574,7 @@ def analytics_api(request):
         # Use ApproverCompletionStatus for more accurate reviewer tracking
         approver_completions = ApproverCompletionStatus.objects.filter(
             project__in=projects
-        ).select_related('approver', 'example')
+        ).select_related('approver', 'example').defer('assignment')
         
         # Check if we have any ApproverCompletionStatus records
         if not approver_completions.exists():
@@ -1655,7 +1657,7 @@ def analytics_api(request):
             example_id__in=reviewed_example_ids,
             reviewed_at__gte=start_datetime,
             reviewed_at__lte=end_datetime
-        ).select_related('approver', 'example', 'project')
+        ).select_related('approver', 'example', 'project').defer('assignment')
         
         for ap_completion in fallback_approver_completions:
             username = ap_completion.approver.username
@@ -1726,7 +1728,7 @@ def analytics_api(request):
             status='approved',  # ApproverCompletionStatus still uses 'approved'
             reviewed_at__gte=start_datetime,
             reviewed_at__lte=end_datetime
-        ).select_related('approver', 'example', 'project')
+        ).select_related('approver', 'example', 'project').defer('assignment')
         
         for ap_completion in approver_completions:
             # Get corresponding tracking to check reviewed_at matches

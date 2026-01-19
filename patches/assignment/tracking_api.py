@@ -330,7 +330,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             # Get all approvals for this example
             all_approvals = ApproverCompletionStatus.objects.filter(
                 example=example
-            ).select_related('approver')
+            ).select_related('approver').defer('assignment')
             
             # Check if any annotation_approver has approved
             annotation_approver_approved = False
@@ -494,7 +494,7 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             # Get all approvals for this example
             all_approvals = ApproverCompletionStatus.objects.filter(
                 example=example
-            ).select_related('approver')
+            ).select_related('approver').defer('assignment')
             
             # Check if any annotation_approver has approved
             annotation_approver_approved = False

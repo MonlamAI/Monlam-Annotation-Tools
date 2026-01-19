@@ -441,7 +441,7 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
         # Get all approver completions for this example (to show multi-level approval)
         all_approvals = ApproverCompletionStatus.objects.filter(
             example=example
-        ).select_related('approver').order_by('-reviewed_at')
+        ).select_related('approver').defer('assignment').order_by('-reviewed_at')
         
         # Build list of all approvals
         approvals_list = []
@@ -611,7 +611,7 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
             # Get all approvals for this example
             all_approvals = ApproverCompletionStatus.objects.filter(
                 example=example
-            ).select_related('approver')
+            ).select_related('approver').defer('assignment')
             
             # Check if any annotation_approver has approved
             annotation_approver_approved = False
@@ -720,7 +720,7 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
             # Get all approvals for this example
             all_approvals = ApproverCompletionStatus.objects.filter(
                 example=example
-            ).select_related('approver')
+            ).select_related('approver').defer('assignment')
             
             # Check if any annotation_approver has approved
             annotation_approver_approved = False
