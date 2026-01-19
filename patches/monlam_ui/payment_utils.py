@@ -61,10 +61,20 @@ def get_project_payment_config(project_name: str) -> Optional[Dict]:
     """
     Get payment configuration for a project.
     
+    Matches project names by prefix to support variants like:
+    - AM_AB_A_****** (matches AM_AB_A prefix)
+    - KH_AB_A_***** (matches KH_AB_A prefix)
+    - KH_MV_A_***** (matches KH_MV_A prefix)
+    etc.
+    
     Returns:
         Dict with payment rates, or None if project not configured
     """
+    if not project_name:
+        return None
+    
     # Project-specific payment rules
+    # Keys are prefixes that project names should start with
     payment_configs = {
         # AM_AB_A and KH_AB_A: Rs. 5 × Total Audio Minutes + Rs. 2 per audio segment
         'AM_AB_A': {
@@ -108,14 +118,18 @@ def get_project_payment_config(project_name: str) -> Optional[Dict]:
         },
     }
     
-    # Check exact match first
+    # Check exact match first (for backward compatibility)
     if project_name in payment_configs:
         return payment_configs[project_name]
     
-    # Check if project name contains any of the keys (for partial matches)
-    for key, config in payment_configs.items():
-        if key in project_name:
-            return config
+    # Check if project name starts with any of the prefix keys
+    # Sort by length (longest first) to match more specific prefixes first
+    # e.g., "STT_TEACHING_A" should match before "STT" if both existed
+    sorted_keys = sorted(payment_configs.keys(), key=len, reverse=True)
+    
+    for prefix in sorted_keys:
+        if project_name.startswith(prefix):
+            return payment_configs[prefix]
     
     return None
 
