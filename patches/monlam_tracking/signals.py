@@ -141,37 +141,37 @@ def track_annotation_saved(sender, instance, created, **kwargs):
                         'confirmed_at': tracking.annotated_at or timezone.now()
                     }
                 )
-            
-            if state_created:
-                print(f'[Monlam Signals] ✅ Created ExampleState for example {example.id} (Enter key pressed)')
-            else:
-                print(f'[Monlam Signals] ✅ Updated ExampleState for example {example.id} (Enter key pressed)')
                 
-        except Exception as e:
-            import traceback
-            error_trace = traceback.format_exc()
-            print(f'[Monlam Signals] ❌ CRITICAL: Could not create ExampleState for example {example.id}')
-            print(f'[Monlam Signals] Error: {e}')
-            print(f'[Monlam Signals] Traceback: {error_trace}')
-            # Try again with more explicit error handling (only if user is still a member)
-            if is_member or user.is_superuser:
-                try:
-                    # Force create if update_or_create failed
-                    from examples.models import ExampleState
-                    ExampleState.objects.create(
-                        example=example,
-                        confirmed_by=user,
-                        confirmed_at=tracking.annotated_at or timezone.now()
-                    )
-                    print(f'[Monlam Signals] ✅ Retry successful: Created ExampleState for example {example.id}')
-                except Exception as e2:
-                # Check if it's because ExampleState already exists (that's okay)
-                if 'unique constraint' in str(e2).lower() or 'already exists' in str(e2).lower():
-                    print(f'[Monlam Signals] ✅ ExampleState already exists for example {example.id} (this is okay)')
+                if state_created:
+                    print(f'[Monlam Signals] ✅ Created ExampleState for example {example.id} (Enter key pressed)')
                 else:
-                    print(f'[Monlam Signals] ❌ Retry also failed: {e2}')
-                    print(f'[Monlam Signals] Traceback: {traceback.format_exc()}')
-                # Don't fail the whole signal, but log the error prominently
+                    print(f'[Monlam Signals] ✅ Updated ExampleState for example {example.id} (Enter key pressed)')
+                    
+            except Exception as e:
+                import traceback
+                error_trace = traceback.format_exc()
+                print(f'[Monlam Signals] ❌ CRITICAL: Could not create ExampleState for example {example.id}')
+                print(f'[Monlam Signals] Error: {e}')
+                print(f'[Monlam Signals] Traceback: {error_trace}')
+                # Try again with more explicit error handling (only if user is still a member)
+                if is_member or user.is_superuser:
+                    try:
+                        # Force create if update_or_create failed
+                        from examples.models import ExampleState
+                        ExampleState.objects.create(
+                            example=example,
+                            confirmed_by=user,
+                            confirmed_at=tracking.annotated_at or timezone.now()
+                        )
+                        print(f'[Monlam Signals] ✅ Retry successful: Created ExampleState for example {example.id}')
+                    except Exception as e2:
+                        # Check if it's because ExampleState already exists (that's okay)
+                        if 'unique constraint' in str(e2).lower() or 'already exists' in str(e2).lower():
+                            print(f'[Monlam Signals] ✅ ExampleState already exists for example {example.id} (this is okay)')
+                        else:
+                            print(f'[Monlam Signals] ❌ Retry also failed: {e2}')
+                            print(f'[Monlam Signals] Traceback: {traceback.format_exc()}')
+                        # Don't fail the whole signal, but log the error prominently
         
     except Exception as e:
         print(f'[Monlam Signals] ⚠️ Tracking failed: {e}')
