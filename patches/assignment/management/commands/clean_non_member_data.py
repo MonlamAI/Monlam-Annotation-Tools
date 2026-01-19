@@ -17,7 +17,9 @@ Usage:
     python manage.py clean_non_member_data --project-id 123
     python manage.py clean_non_member_data --verbose
 
-Note: Non-member fields are set to NULL to preserve data structure and timestamps.
+Note: 
+- AnnotationTracking.annotated_by and Assignment.assigned_to will be set to NULL
+- ExampleState records with non-member confirmed_by will be DELETED (confirmed_by has NOT NULL constraint)
 """
 
 from django.core.management.base import BaseCommand
@@ -60,7 +62,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("DRY RUN MODE - No changes will be made"))
         if project_id:
             self.stdout.write(f"Project ID filter: {project_id}")
-        self.stdout.write("Note: Non-member fields will be set to NULL (preserves data structure)")
+        self.stdout.write("Note: 
+- AnnotationTracking.annotated_by and Assignment.assigned_to will be set to NULL
+- ExampleState records with non-member confirmed_by will be DELETED (confirmed_by has NOT NULL constraint)")
         self.stdout.write("=" * 80)
         
         # Get all projects to process
@@ -144,6 +148,9 @@ class Command(BaseCommand):
             
             if non_member_states:
                 self.stdout.write(f"\n[ExampleState] Found {len(non_member_states)} records with non-members:")
+                self.stdout.write(self.style.WARNING(
+                    "  Note: ExampleState.confirmed_by has NOT NULL constraint, so records will be deleted"
+                ))
                 for state in non_member_states:
                     self.stdout.write(
                         f"  - Example {state.example_id}: confirmed_by={state.confirmed_by.username} "
@@ -152,13 +159,14 @@ class Command(BaseCommand):
                     
                     if not dry_run:
                         with transaction.atomic():
-                            state.confirmed_by = None
-                            state.save(update_fields=['confirmed_by'])
+                            # ExampleState.confirmed_by has NOT NULL constraint, so we must delete the record
+                            example_id = state.example_id
+                            state.delete()
                             self.stdout.write(self.style.SUCCESS(
-                                f"    ✓ Set confirmed_by to NULL"
+                                f"    ✓ Deleted ExampleState record (confirmed_by cannot be NULL)"
                             ))
                     else:
-                        self.stdout.write(self.style.WARNING("    [DRY RUN] Would set confirmed_by to NULL"))
+                        self.stdout.write(self.style.WARNING("    [DRY RUN] Would delete ExampleState record"))
                 
                 total_state_cleaned += len(non_member_states)
             else:
