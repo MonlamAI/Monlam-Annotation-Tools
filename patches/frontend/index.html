@@ -1320,11 +1320,11 @@
             if (isAnnotator) {
                 console.log('[Monlam Filter] 🔍 User is annotator on', isDatasetPage ? 'dataset' : 'annotation', 'page');
                 
-                // 1. Set filter to "Undone" (isChecked=false) - works on both pages
-                clickUndoneFilter();
-                
-                // 2. Hide "Annotate" buttons on dataset page only
-                if (isDatasetPage) {
+                if (isAnnotationPage) {
+                    // On annotation pages: Set filter to "Undone" (isChecked=false) for annotators
+                    clickUndoneFilter();
+                } else if (isDatasetPage) {
+                    // On dataset page: Show all examples (no filter), but hide "Annotate" buttons
                     hideAnnotateButtonsForAnnotators();
                     setInterval(hideAnnotateButtonsForAnnotators, 1000);
                 }
@@ -2131,17 +2131,7 @@
                     return false;
                 }
                 
-                // Create headers
-                const annotatedHeader = document.createElement('th');
-                annotatedHeader.textContent = 'Annotated By';
-                annotatedHeader.className = 'monlam-status-header monlam-annotated-header';
-                annotatedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                
-                const reviewedHeader = document.createElement('th');
-                reviewedHeader.textContent = 'Reviewed By';
-                reviewedHeader.className = 'monlam-status-header monlam-reviewed-header';
-                reviewedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                
+                // Create status header
                 const statusHeader = document.createElement('th');
                 statusHeader.textContent = 'Status';
                 statusHeader.className = 'monlam-status-header monlam-status-col-header';
@@ -2153,23 +2143,20 @@
                     h.textContent.toLowerCase().includes('annotate')
                 );
                 
-                // Move Action header right after Audio (column 2), then add our columns
-                // New order: Checkbox | ID | Audio | Action | Annotated By | Reviewed By | Status | ...
+                // Move Action header right after Audio (column 2), then add status column
+                // New order: Checkbox | ID | Audio | Action | Status | ...
                 const thirdHeader = headers[2]; // Audio column
                 
                 if (actionHeader) {
                     // Move Action header to be after Audio
                     thirdHeader.insertAdjacentElement('afterend', actionHeader);
-                    // Then add our columns after Action
-                    actionHeader.insertAdjacentElement('afterend', annotatedHeader);
+                    // Then add status column after Action
+                    actionHeader.insertAdjacentElement('afterend', statusHeader);
                 } else {
                     // Fallback: insert after Audio if no Action header found
-                    thirdHeader.insertAdjacentElement('afterend', annotatedHeader);
+                    thirdHeader.insertAdjacentElement('afterend', statusHeader);
                 }
-                
-                annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
-                reviewedHeader.insertAdjacentElement('afterend', statusHeader);
-                console.log('[Monlam Dataset] ✅ Headers reordered: Audio → Action → Annotated By → Reviewed By → Status');
+                console.log('[Monlam Dataset] ✅ Headers reordered: Audio → Action → Status');
                 
                 // Add data cells to rows
                 enhanceDataRows(trackingMap);
@@ -2208,9 +2195,7 @@
                     const exampleId = parseInt(idMatch[1]);
                     const tracking = trackingMap[exampleId] || {};
                     
-                    // Get values with proper fallbacks
-                    const annotatedBy = tracking.annotated_by || '—';
-                    const reviewedBy = tracking.reviewed_by || '—';
+                    // Get status value
                     const status = tracking.status || 'pending';
                     
                     // Status badge colors
@@ -2224,17 +2209,7 @@
                     const color = statusColors[status] || '#e0e0e0';
                     const textColor = (status === 'pending') ? '#666' : 'white';
                     
-                    // Create cells
-                    const annotatedCell = document.createElement('td');
-                    annotatedCell.className = 'monlam-annotated-cell';
-                    annotatedCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    annotatedCell.textContent = annotatedBy;
-                    
-                    const reviewedCell = document.createElement('td');
-                    reviewedCell.className = 'monlam-reviewed-cell';
-                    reviewedCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    reviewedCell.textContent = reviewedBy;
-                    
+                    // Create status cell
                     const statusCell = document.createElement('td');
                     statusCell.className = 'monlam-status-cell';
                     statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
@@ -2246,21 +2221,18 @@
                         c.textContent.toLowerCase().includes('annotate')
                     );
                     
-                    // Move Action cell right after Audio (cell 2), then add our cells
+                    // Move Action cell right after Audio (cell 2), then add status cell
                     const thirdCell = cells[2]; // Audio cell
                     
                     if (actionCell && actionCell !== thirdCell) {
                         // Move Action cell to be after Audio
                         thirdCell.insertAdjacentElement('afterend', actionCell);
-                        // Then add our cells after Action
-                        actionCell.insertAdjacentElement('afterend', annotatedCell);
+                        // Then add status cell after Action
+                        actionCell.insertAdjacentElement('afterend', statusCell);
                     } else {
                         // Fallback: insert after Audio if no Action cell found
-                        thirdCell.insertAdjacentElement('afterend', annotatedCell);
+                        thirdCell.insertAdjacentElement('afterend', statusCell);
                     }
-                    
-                    annotatedCell.insertAdjacentElement('afterend', reviewedCell);
-                    reviewedCell.insertAdjacentElement('afterend', statusCell);
                 });
                 
                 console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows');

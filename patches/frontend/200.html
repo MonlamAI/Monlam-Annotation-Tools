@@ -971,41 +971,26 @@
             
             // Wait for table to appear
             setTimeout(() => {
-                // Add headers at positions 4, 5, 6 (after first 3 columns)
+                // Add status header at position 4 (after first 3 columns)
                 const headerRow = document.querySelector('thead tr');
                 if (headerRow && !headerRow.querySelector('.monlam-status-header')) {
                     const headers = Array.from(headerRow.querySelectorAll('th'));
                     
-                    // Create headers
-                    const annotatedHeader = document.createElement('th');
-                    annotatedHeader.textContent = 'Annotated By';
-                    annotatedHeader.className = 'monlam-status-header monlam-annotated-header';
-                    annotatedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    
-                    const reviewedHeader = document.createElement('th');
-                    reviewedHeader.textContent = 'Reviewed By';
-                    reviewedHeader.className = 'monlam-status-header monlam-reviewed-header';
-                    reviewedHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    
+                    // Create status header
                     const statusHeader = document.createElement('th');
                     statusHeader.textContent = 'Status';
                     statusHeader.className = 'monlam-status-header monlam-status-col-header';
                     statusHeader.style.cssText = 'padding: 8px; text-align: left; font-weight: 600; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                     
-                    // Insert after the 3rd column (positions 4, 5, 6)
+                    // Insert after the 3rd column (position 4)
                     if (headers.length >= 3) {
                         const thirdHeader = headers[2];
-                        // Insert in correct order: 4, 5, 6
-                        thirdHeader.insertAdjacentElement('afterend', annotatedHeader);
-                        annotatedHeader.insertAdjacentElement('afterend', reviewedHeader);
-                        reviewedHeader.insertAdjacentElement('afterend', statusHeader);
-                        console.log('[Monlam Dataset] ✅ Headers inserted at positions 4, 5, 6');
+                        thirdHeader.insertAdjacentElement('afterend', statusHeader);
+                        console.log('[Monlam Dataset] ✅ Status header inserted at position 4');
                     } else {
                         // Fallback: append at end
-                        headerRow.appendChild(annotatedHeader);
-                        headerRow.appendChild(reviewedHeader);
                         headerRow.appendChild(statusHeader);
-                        console.log('[Monlam Dataset] ✅ Headers appended (less than 3 columns)');
+                        console.log('[Monlam Dataset] ✅ Status header appended (less than 3 columns)');
                     }
                 }
                 
@@ -1024,9 +1009,7 @@
                     const exampleId = parseInt(idMatch[1]);
                     const assignment = assignmentMap[exampleId];
                     
-                    // Get values
-                    const annotatedBy = assignment?.assigned_to ? (userMap[assignment.assigned_to] || `User ${assignment.assigned_to}`) : '—';
-                    const reviewedBy = assignment?.reviewed_by ? (userMap[assignment.reviewed_by] || `User ${assignment.reviewed_by}`) : '—';
+                    // Get status
                     const status = assignment?.status || 'unassigned';
                     
                     // Status badge colors
@@ -1044,33 +1027,18 @@
                     // Get all cells in row
                     const cells = Array.from(row.querySelectorAll('td'));
                     
-                    // Create cells
-                    const annotatedCell = document.createElement('td');
-                    annotatedCell.className = 'monlam-annotated-cell';
-                    annotatedCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    annotatedCell.textContent = annotatedBy;
-                    
-                    const reviewedCell = document.createElement('td');
-                    reviewedCell.className = 'monlam-reviewed-cell';
-                    reviewedCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
-                    reviewedCell.textContent = reviewedBy;
-                    
+                    // Create status cell
                     const statusCell = document.createElement('td');
                     statusCell.className = 'monlam-status-cell';
                     statusCell.style.cssText = 'padding: 8px; border-bottom: 1px solid #e0e0e0; white-space: nowrap;';
                     statusCell.innerHTML = `<span style="background: ${color}; color: ${textColor}; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">${status.replace('_', ' ').toUpperCase()}</span>`;
                     
-                    // Insert after the 3rd cell (positions 4, 5, 6) - SAME as headers
+                    // Insert after the 3rd cell (position 4) - SAME as headers
                     if (cells.length >= 3) {
                         const thirdCell = cells[2];
-                        // Insert in correct order: 4, 5, 6
-                        thirdCell.insertAdjacentElement('afterend', annotatedCell);
-                        annotatedCell.insertAdjacentElement('afterend', reviewedCell);
-                        reviewedCell.insertAdjacentElement('afterend', statusCell);
+                        thirdCell.insertAdjacentElement('afterend', statusCell);
                     } else {
                         // Fallback: append at end
-                        row.appendChild(annotatedCell);
-                        row.appendChild(reviewedCell);
                         row.appendChild(statusCell);
                     }
                 });

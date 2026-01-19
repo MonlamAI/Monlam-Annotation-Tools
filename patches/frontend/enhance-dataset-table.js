@@ -1,9 +1,7 @@
 /**
- * Enhance Doccano's Dataset Table with Assignment Status Columns
+ * Enhance Doccano's Dataset Table with Assignment Status Column
  * 
- * Adds columns to the existing dataset table:
- * - Annotated By
- * - Reviewed By  
+ * Adds column to the existing dataset table:
  * - Status
  * 
  * This modifies the EXISTING Doccano dataset page instead of creating a new one.
@@ -84,15 +82,13 @@
         }
         
         // Check if we already added headers
-        if (headerRow.querySelector('.monlam-annotated-by-header')) {
+        if (headerRow.querySelector('.monlam-status-header')) {
             console.log('[Monlam Dataset] Headers already added');
             return true;
         }
         
-        // Add three new header cells
+        // Add status header cell
         const headers = [
-            { text: 'Annotated By', class: 'monlam-annotated-by-header' },
-            { text: 'Reviewed By', class: 'monlam-reviewed-by-header' },
             { text: 'Status', class: 'monlam-status-header' }
         ];
         
@@ -117,7 +113,7 @@
         
         dataRows.forEach(row => {
             // Check if we already added cells to this row
-            if (row.querySelector('.monlam-annotated-by-cell')) {
+            if (row.querySelector('.monlam-status-cell')) {
                 return;
             }
             
@@ -131,29 +127,16 @@
             // Get assignment data for this example
             const assignment = assignmentMap[exampleId];
             
-            // Create cells
-            const annotatedBy = assignment?.assigned_to ? (userMap[assignment.assigned_to] || 'User ' + assignment.assigned_to) : '—';
-            const reviewedBy = assignment?.reviewed_by ? (userMap[assignment.reviewed_by] || 'User ' + assignment.reviewed_by) : '—';
+            // Get status
             const status = assignment?.status || 'unassigned';
             
-            // Add cells
-            [
-                { value: annotatedBy, class: 'monlam-annotated-by-cell' },
-                { value: reviewedBy, class: 'monlam-reviewed-by-cell' },
-                { value: getStatusBadge(status), class: 'monlam-status-cell', html: true }
-            ].forEach(cell => {
-                const td = document.createElement('td');
-                td.className = cell.class;
-                td.style.cssText = 'padding: 8px;';
-                
-                if (cell.html) {
-                    td.innerHTML = cell.value;
-                } else {
-                    td.textContent = cell.value;
-                }
-                
-                row.appendChild(td);
-            });
+            // Add status cell
+            const td = document.createElement('td');
+            td.className = 'monlam-status-cell';
+            td.style.cssText = 'padding: 8px;';
+            td.innerHTML = getStatusBadge(status);
+            
+            row.appendChild(td);
             
             addedCount++;
         });

@@ -142,19 +142,6 @@
                                     <v-chip small color="grey lighten-2">[[ item.id ]]</v-chip>
                                 </template>
                                 
-                                <!-- Annotated By Column -->
-                                <template v-slot:item.assigned_to="{ item }">
-                                    <v-chip v-if="item.assignment && item.assignment.annotated_by_username" small color="primary" dark>
-                                        <v-icon small left>mdi-account</v-icon>
-                                        [[ item.assignment.annotated_by_username ]]
-                                    </v-chip>
-                                    <v-chip v-else-if="item.assignment && item.assignment.assigned_to_username" small color="primary" dark>
-                                        <v-icon small left>mdi-account</v-icon>
-                                        [[ item.assignment.assigned_to_username ]]
-                                    </v-chip>
-                                    <v-chip v-else small>-</v-chip>
-                                </template>
-                                
                                 <!-- Status Column -->
                                 <template v-slot:item.status="{ item }">
                                     <v-chip 
@@ -167,19 +154,6 @@
                                         [[ item.assignment.status.toUpperCase() ]]
                                     </v-chip>
                                     <v-chip v-else small>-</v-chip>
-                                </template>
-                                
-                                <!-- Reviewed By Column -->
-                                <template v-slot:item.reviewed_by="{ item }">
-                                    <div v-if="item.assignment && item.assignment.reviewed_by_username">
-                                        <v-chip small :color="getReviewerColor(item.assignment)" dark>
-                                            [[ item.assignment.reviewed_by_username ]]
-                                        </v-chip>
-                                        <v-chip x-small :color="getRoleBadgeColor(item.assignment)" dark class="ml-1">
-                                            [[ getRoleLabel(item.assignment) ]]
-                                        </v-chip>
-                                    </div>
-                                    <v-chip v-else small>Pending</v-chip>
                                 </template>
                                 
                                 <!-- Final Approval By Column -->
@@ -241,9 +215,7 @@
             filterStatus: null,
             headers: [
                 { text: 'ID', value: 'id', sortable: true },
-                { text: 'Annotated By', value: 'assigned_to', sortable: true },
                 { text: 'Status', value: 'status', sortable: true },
-                { text: 'Reviewed By', value: 'reviewed_by', sortable: true },
                 { text: 'Final Approval By', value: 'final_approval_by', sortable: true },
                 { text: 'Actions', value: 'actions', sortable: false },
             ],
