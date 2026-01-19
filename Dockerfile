@@ -51,8 +51,7 @@ COPY patches/backend/celery_tasks.py /doccano/backend/data_import/celery_tasks.p
 # Fix external audio/image URLs (don't prepend /media/)
 COPY patches/backend/serializers.py /doccano/backend/examples/serializers.py
 
-# Visibility filtering patch (filters locked examples at queryset level)
-COPY patches/backend/examples_views_patch.py /doccano/backend/backend/examples_views_patch.py
+# NOTE: Visibility filtering is now handled by frontend toolbar (no backend patch needed)
 
 # Export correct audio URL instead of upload filename
 COPY patches/backend/export_models.py /doccano/backend/data_export/models.py
@@ -104,19 +103,18 @@ RUN if ! grep -q "assignment.tracking_urls" /doccano/backend/config/urls.py; the
 # TODO: Create proper Python patch file for examples/views.py
 
 # ============================================
-# MONLAM TRACKING - VISIBILITY + LOCKING
+# MONLAM TRACKING - AUTO-TRACKING SIGNALS
 # ============================================
-# Copy the Monlam Tracking app (visibility middleware + auto-tracking)
+# Copy the Monlam Tracking app (auto-tracking signals only, no visibility filtering)
+# Visibility filtering is handled by frontend toolbar
 COPY patches/monlam_tracking /doccano/backend/monlam_tracking
 
 # Register the Monlam Tracking app in settings
-RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Visibility + Tracking\n/" /doccano/backend/config/settings/base.py || \
+RUN sed -i "s/INSTALLED_APPS = \[/INSTALLED_APPS = [\n    'monlam_tracking',  # Monlam: Auto-tracking signals\n/" /doccano/backend/config/settings/base.py || \
     echo "INSTALLED_APPS += ['monlam_tracking']" >> /doccano/backend/config/settings/base.py
 
-# Add Visibility Middleware (SAFE approach - filters at response time)
-RUN echo "" >> /doccano/backend/config/settings/base.py && \
-    echo "# Monlam: Add visibility middleware" >> /doccano/backend/config/settings/base.py && \
-    echo "MIDDLEWARE += ['monlam_tracking.middleware.VisibilityMiddleware']" >> /doccano/backend/config/settings/base.py
+# NOTE: Visibility filtering is now handled by frontend toolbar (no backend middleware needed)
+# The frontend sets default filter to "undone" for annotators on annotation pages
 
 # ============================================
 # MONLAM UI - PROFESSIONAL DJANGO INTEGRATION

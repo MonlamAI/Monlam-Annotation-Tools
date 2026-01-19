@@ -193,60 +193,7 @@ class CanEditExample(permissions.BasePermission):
             return False
 
 
-class CanLockExample(permissions.BasePermission):
-    """
-    Permission to lock/unlock examples.
-    
-    An example can be locked when an annotator starts working on it.
-    Other annotators cannot access locked examples.
-    Privileged users (Admins, Managers, Approvers) can view locked examples.
-    """
-    
-    def has_object_permission(self, request, view, obj):
-        """Check if user can lock/access this example."""
-        user = request.user
-        project = obj.project
-        
-        # Get user's role
-        role_name, is_privileged = get_user_role(user, project.id)
-        
-        # Privileged users can always access (they're reviewing, not editing)
-        if is_privileged:
-            return True
-        
-        # Check AnnotationTracking for locking
-        try:
-            from .simple_tracking import AnnotationTracking
-            tracking = AnnotationTracking.objects.filter(
-                project=project,
-                example=obj
-            ).first()
-            
-            if tracking:
-                # Check if locked by someone else
-                if tracking.locked_by and tracking.locked_by != user:
-                    # Check if lock is expired (5 minutes default)
-                    from django.utils import timezone
-                    from datetime import timedelta
-                    
-                    if tracking.locked_at:
-                        lock_expiry = tracking.locked_at + timedelta(minutes=5)
-                        if timezone.now() < lock_expiry:
-                            # Still locked by someone else
-                            return False
-                        else:
-                            # Lock expired, clear it
-                            tracking.locked_by = None
-                            tracking.locked_at = None
-                            tracking.save(update_fields=['locked_by', 'locked_at'])
-            
-            # Either not locked, locked by this user, or lock expired
-            return True
-            
-        except Exception as e:
-            print(f'[Monlam Permissions] Error checking lock permission: {e}')
-            # On error, be safe and deny
-            return False
+# NOTE: CanLockExample permission removed - single annotator per project, no race conditions
 
 
 

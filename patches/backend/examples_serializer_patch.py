@@ -1,8 +1,9 @@
 """
 Patch for Doccano's Example Serializer
-Adds tracking information to example API responses
+Adds tracking status to example API responses (but NOT annotated_by/reviewed_by)
 
-Simple tracking system - no assignments, just tracking who did what.
+Note: annotated_by and reviewed_by are tracked in backend but NOT exposed in dataset API
+for performance and privacy. Metrics can still access them via direct database queries.
 """
 
 from rest_framework import serializers
@@ -11,67 +12,18 @@ from examples.serializers import ExampleSerializer as OriginalExampleSerializer
 
 class ExampleSerializer(OriginalExampleSerializer):
     """
-    Extended Example Serializer with annotation tracking
+    Extended Example Serializer with tracking status only.
+    Does NOT include annotated_by_username or reviewed_by_username (tracked in backend only).
     """
-    annotated_by_username = serializers.SerializerMethodField()
-    reviewed_by_username = serializers.SerializerMethodField()
     tracking_status = serializers.SerializerMethodField()
     
     class Meta(OriginalExampleSerializer.Meta):
         fields = OriginalExampleSerializer.Meta.fields + [
-            'annotated_by_username',
-            'reviewed_by_username',
             'tracking_status',
         ]
     
-    def get_annotated_by_username(self, obj):
-        """Get the username of who annotated this example"""
-        try:
-            # Try to get from prefetched data first (for efficiency)
-            if hasattr(obj, 'tracking'):
-                tracking = obj.tracking
-                if tracking and tracking.annotated_by:
-                    return tracking.annotated_by.username
-                return None
-            
-            # Fallback: query database
-            from assignment.simple_tracking import AnnotationTracking
-            tracking = AnnotationTracking.objects.filter(
-                example_id=obj.id,
-                project_id=obj.project_id
-            ).select_related('annotated_by').first()
-            
-            if tracking and tracking.annotated_by:
-                return tracking.annotated_by.username
-            return None
-        except Exception:
-            return None
-    
-    def get_reviewed_by_username(self, obj):
-        """Get the username of who reviewed this example"""
-        try:
-            # Try to get from prefetched data first (for efficiency)
-            if hasattr(obj, 'tracking'):
-                tracking = obj.tracking
-                if tracking and tracking.reviewed_by:
-                    return tracking.reviewed_by.username
-                return None
-            
-            # Fallback: query database
-            from assignment.simple_tracking import AnnotationTracking
-            tracking = AnnotationTracking.objects.filter(
-                example_id=obj.id,
-                project_id=obj.project_id
-            ).select_related('reviewed_by').first()
-            
-            if tracking and tracking.reviewed_by:
-                return tracking.reviewed_by.username
-            return None
-        except Exception:
-            return None
-    
     def get_tracking_status(self, obj):
-        """Get the tracking status"""
+        """Get the tracking status (who annotated/reviewed is tracked in backend but not exposed)"""
         try:
             # Try to get from prefetched data first (for efficiency)
             if hasattr(obj, 'tracking'):

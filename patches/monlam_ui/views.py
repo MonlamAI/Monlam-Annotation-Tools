@@ -558,7 +558,7 @@ def api_completion_stats(request, project_id):
     
     # Get tracking stats (our approve/reject workflow)
     tracking = AnnotationTracking.objects.filter(project=project)
-    approved_count = tracking.filter(status='approved').count()
+    approved_count = tracking.filter(status='reviewed').count()  # Changed from 'approved' to 'reviewed'
     rejected_count = tracking.filter(status='rejected').count()
     
     # Get final approvals (project_admin approvals only)
@@ -641,70 +641,56 @@ def api_completion_stats(request, project_id):
             annotator_dict[username]['total_annotated'] += 1
             
             # Check tracking status for this specific example
-            # IMPORTANT: Only count if this example was annotated by this user
+            # Since single annotator per project, if ExampleState exists for this user, tracking is theirs
             tracking_record = tracking_by_example.get(example_id)
             if tracking_record:
-                # Only count if the tracking record's annotated_by matches this user
-                # This ensures we only count approvals/rejections for examples this annotator actually worked on
-                if tracking_record.annotated_by and tracking_record.annotated_by.id == user_id:
-                    # Match by example_id to get accurate status
-                    if tracking_record.status == 'approved':
-                        annotator_dict[username]['approved'] += 1
-                    elif tracking_record.status == 'rejected':
-                        annotator_dict[username]['rejected'] += 1
-                    elif tracking_record.status == 'submitted':
-                        annotator_dict[username]['submitted'] += 1
-                    # If status is 'pending', it's still submitted (confirmed but not reviewed)
-                    elif tracking_record.status == 'pending':
-                        annotator_dict[username]['submitted'] += 1
-                else:
-                    # Tracking exists but for different annotator - this confirmed example is submitted
+                # Match by example_id to get accurate status (single annotator, so this is their work)
+                if tracking_record.status == 'reviewed':  # Changed from 'approved' to 'reviewed'
+                    annotator_dict[username]['approved'] += 1
+                elif tracking_record.status == 'rejected':
+                    annotator_dict[username]['rejected'] += 1
+                elif tracking_record.status == 'submitted':
+                    annotator_dict[username]['submitted'] += 1
+                # If status is 'pending', it's still submitted (confirmed but not reviewed)
+                elif tracking_record.status == 'pending':
                     annotator_dict[username]['submitted'] += 1
             else:
                 # No tracking record exists - confirmed but not yet reviewed = submitted
                 annotator_dict[username]['submitted'] += 1
     
-    # Also add annotators from AnnotationTracking who may not have confirmed yet
-    # This ensures all annotators with tracked work appear in the dashboard
+    # Also add annotators from ExampleState who may have confirmed but tracking shows different status
+    # Since single annotator per project, we use ExampleState.confirmed_by to identify annotators
+    # Group tracking by example and match with ExampleState to get annotator info
     for t in tracking:
-        if t.annotated_by:
-            username = t.annotated_by.username
-            user_id = t.annotated_by.id
+        # Find the ExampleState for this example to get the annotator
+        example_state = next(
+            (state for state in confirmed_states if state.example_id == t.example_id),
+            None
+        )
+        
+        if example_state and example_state.confirmed_by:
+            username = example_state.confirmed_by.username
+            user_id = example_state.confirmed_by.id
             
             if username not in annotator_dict:
                 # Add annotator if they have tracking but no confirmations yet
                 annotator_dict[username] = {
                     'annotated_by__id': user_id,
                     'annotated_by__username': username,
-                    'total_annotated': 0,  # Will be incremented below if they actually annotated
+                    'total_annotated': 0,
                     'submitted': 0,
                     'approved': 0,
                     'rejected': 0,
                 }
             
-            # Only count if this example wasn't already counted above (via ExampleState)
-            # Check if this example has an ExampleState record for this user
-            example_has_state = any(
-                state.example_id == t.example_id 
-                for state in confirmed_states 
-                if state.confirmed_by and state.confirmed_by.username == username
-            )
-            
-            if not example_has_state:
-                # This example has tracking but no confirmation (ExampleState)
-                # CRITICAL: If they have AnnotationTracking with submitted/approved/rejected,
-                # they DID annotate it, so increment total_annotated
-                # This fixes cases like tnamgyal who has submitted tracking but no ExampleState
-                if t.status in ['submitted', 'approved', 'rejected']:
-                    annotator_dict[username]['total_annotated'] += 1
-                
-                # Count based on status
-                if t.status == 'approved':
-                    annotator_dict[username]['approved'] += 1
-                elif t.status == 'rejected':
-                    annotator_dict[username]['rejected'] += 1
-                elif t.status == 'submitted' or t.status == 'pending':
-                    annotator_dict[username]['submitted'] += 1
+            # Count based on status (single annotator, so this is their work)
+            # Note: 'approved' changed to 'reviewed' in model, but keeping 'approved' in metrics for compatibility
+            if t.status == 'reviewed':  # Changed from 'approved' to 'reviewed'
+                annotator_dict[username]['approved'] += 1
+            elif t.status == 'rejected':
+                annotator_dict[username]['rejected'] += 1
+            elif t.status == 'submitted' or t.status == 'pending':
+                annotator_dict[username]['submitted'] += 1
     
     # Final calculation: ensure total_annotated = submitted + approved + rejected for all annotators
     # This ensures consistency even if tracking records are missing or mismatched
@@ -826,36 +812,40 @@ def api_completion_stats(request, project_id):
     # This supplements ApproverCompletionStatus data (some reviewers might only be in AnnotationTracking)
     # Only add if not already in approver_dict (to avoid double counting)
     if True:  # Always check AnnotationTracking as supplement
-        # Get reviewers from AnnotationTracking
-        reviewed_tracking = tracking.filter(
-            reviewed_by__isnull=False,
-            status__in=['approved', 'rejected']
-        ).select_related('reviewed_by')
+        # Get reviewers from ApproverCompletionStatus (since AnnotationTracking no longer has reviewed_by)
+        from assignment.completion_tracking import ApproverCompletionStatus
+        reviewed_example_ids = tracking.filter(
+            status__in=['reviewed', 'rejected']  # Changed from 'approved' to 'reviewed'
+        ).values_list('example_id', flat=True)
         
-        for t in reviewed_tracking:
-            if t.reviewed_by:
-                approver_id = t.reviewed_by.id
-                approver_username = t.reviewed_by.username
-                
-                # Get approver's role
-                if approver_id not in approver_roles_cache:
+        approver_completions = ApproverCompletionStatus.objects.filter(
+            example_id__in=reviewed_example_ids,
+            status__in=['approved', 'rejected']
+        ).select_related('approver')
+        
+        for ap_completion in approver_completions:
+            approver_id = ap_completion.approver.id
+            approver_username = ap_completion.approver.username
+            
+            # Get approver's role
+            if approver_id not in approver_roles_cache:
+                approver_role = None
+                try:
+                    approver_member = Member.objects.filter(
+                        user=ap_completion.approver,
+                        project=project
+                    ).select_related('role').first()
+                    if approver_member and approver_member.role:
+                        approver_role = approver_member.role.name.lower().strip()
+                except Exception as e:
+                    print(f'[Completion Stats] Error getting approver role from ApproverCompletionStatus: {e}')
                     approver_role = None
-                    try:
-                        approver_member = Member.objects.filter(
-                            user=t.reviewed_by,
-                            project=project
-                        ).select_related('role').first()
-                        if approver_member and approver_member.role:
-                            approver_role = approver_member.role.name.lower().strip()
-                    except Exception as e:
-                        print(f'[Completion Stats] Error getting approver role from tracking: {e}')
-                        approver_role = None
-                    approver_roles_cache[approver_id] = approver_role
-                else:
-                    approver_role = approver_roles_cache[approver_id]
-                
-                # Only add if not already processed from ApproverCompletionStatus
-                # This prevents double counting if the same approver exists in both systems
+                approver_roles_cache[approver_id] = approver_role
+            else:
+                approver_role = approver_roles_cache[approver_id]
+            
+            # Only add if not already processed from ApproverCompletionStatus
+            # This prevents double counting if the same approver exists in both systems
                 if approver_id not in approver_dict:
                     approver_dict[approver_id] = {
                         'reviewed_by__id': approver_id,
@@ -1361,23 +1351,37 @@ def analytics_api(request):
     # Add tracking status and time spent (from tracking_in_range - DATE-FILTERED)
     # For annotator stats: count approved/rejected examples that were annotated by this user
     # AND approved/rejected within the date range
+    # Since single annotator, match tracking with ExampleState to get annotator info
     total_time_all = 0
     if tracking_in_range:
+        # Get ExampleState for all examples in tracking to identify annotators
+        example_ids_in_range = [t.example_id for t in tracking_in_range]
+        states_in_range = ExampleState.objects.filter(
+            example_id__in=example_ids_in_range,
+            confirmed_by__isnull=False
+        ).select_related('confirmed_by')
+        
+        # Create mapping: example_id -> confirmed_by user
+        example_to_annotator = {s.example_id: s.confirmed_by for s in states_in_range}
+        
         for t in tracking_in_range:
-            if t.annotated_by and t.annotated_by.username in annotator_stats:
+            # Get annotator from ExampleState
+            annotator = example_to_annotator.get(t.example_id)
+            
+            if annotator and annotator.username in annotator_stats:
                 # Only count if the approval/rejection happened within date range
                 # AND the example was annotated by this user
-                if t.status == 'approved' and t.reviewed_at:
+                if t.status == 'reviewed' and t.reviewed_at:  # Changed from 'approved' to 'reviewed'
                     if start_datetime <= t.reviewed_at <= end_datetime:
-                        annotator_stats[t.annotated_by.username]['approved'] += 1
+                        annotator_stats[annotator.username]['approved'] += 1
                 elif t.status == 'rejected' and t.reviewed_at:
                     if start_datetime <= t.reviewed_at <= end_datetime:
-                        annotator_stats[t.annotated_by.username]['rejected'] += 1
+                        annotator_stats[annotator.username]['rejected'] += 1
                 
                 # Add time spent (only for annotations within date range)
                 if t.annotated_at and start_datetime <= t.annotated_at <= end_datetime:
                     if hasattr(t, 'time_spent_seconds') and t.time_spent_seconds:
-                        annotator_stats[t.annotated_by.username]['total_time_seconds'] += t.time_spent_seconds
+                        annotator_stats[annotator.username]['total_time_seconds'] += t.time_spent_seconds
                         total_time_all += t.time_spent_seconds
     
     # ============================================
@@ -1440,25 +1444,36 @@ def analytics_api(request):
                     syllables = count_tibetan_syllables(text)
                     annotator_payment_data[username][project_name]['submitted_syllables'] += syllables
             
-            # Reviewer payment (for approved examples - filter by reviewed_at within date range)
+            # Reviewer payment (for reviewed examples - filter by reviewed_at within date range)
+            # Use ApproverCompletionStatus to identify reviewers (since AnnotationTracking no longer has reviewed_by)
             # Reviewers get the same payment as annotators: audio + segments/syllables
-            if t.reviewed_by and t.status == 'approved' and t.reviewed_by != t.annotated_by and t.reviewed_at:
+            if t.status == 'reviewed' and t.reviewed_at:  # Changed from 'approved' to 'reviewed'
                 # Only count if reviewed_at is within the date+time range
                 if start_datetime <= t.reviewed_at <= end_datetime:
-                    username = t.reviewed_by.username
-                    if username not in reviewer_payment_data:
-                        reviewer_payment_data[username] = {}
-                    if project_name not in reviewer_payment_data[username]:
-                        reviewer_payment_data[username][project_name] = {
-                            'audio_minutes': 0.0,
-                            'reviewed_segments': 0,  # Each reviewed example counts as a segment
-                            'reviewed_syllables': 0
-                        }
-                    reviewer_payment_data[username][project_name]['audio_minutes'] += duration
-                    reviewer_payment_data[username][project_name]['reviewed_segments'] += 1
-                    # Count syllables from the annotation text
-                    syllables = count_tibetan_syllables(text)
-                    reviewer_payment_data[username][project_name]['reviewed_syllables'] += syllables
+                    # Get reviewers from ApproverCompletionStatus for this example
+                    from assignment.completion_tracking import ApproverCompletionStatus
+                    approver_completions = ApproverCompletionStatus.objects.filter(
+                        example_id=t.example_id,
+                        status='approved',  # ApproverCompletionStatus still uses 'approved'
+                        reviewed_at__gte=start_datetime,
+                        reviewed_at__lte=end_datetime
+                    ).select_related('approver')
+                    
+                    for ap_completion in approver_completions:
+                        username = ap_completion.approver.username
+                        if username not in reviewer_payment_data:
+                            reviewer_payment_data[username] = {}
+                        if project_name not in reviewer_payment_data[username]:
+                            reviewer_payment_data[username][project_name] = {
+                                'audio_minutes': 0.0,
+                                'reviewed_segments': 0,  # Each reviewed example counts as a segment
+                                'reviewed_syllables': 0
+                            }
+                        reviewer_payment_data[username][project_name]['audio_minutes'] += duration
+                        reviewer_payment_data[username][project_name]['reviewed_segments'] += 1
+                        # Count syllables from the annotation text
+                        syllables = count_tibetan_syllables(text)
+                        reviewer_payment_data[username][project_name]['reviewed_syllables'] += syllables
     
     # Calculate payments for annotators
     for username, stats in annotator_stats.items():
@@ -1582,7 +1597,7 @@ def analytics_api(request):
             if t.reviewed_at:
                 date_str = t.reviewed_at.strftime('%Y-%m-%d')
                 if date_str in daily_activity:
-                    if t.status == 'approved':
+                    if t.status == 'reviewed':  # Changed from 'approved' to 'reviewed'
                         daily_activity[date_str]['approved'] += 1
                     elif t.status == 'rejected':
                         daily_activity[date_str]['rejected'] += 1
@@ -1679,88 +1694,108 @@ def analytics_api(request):
         print(f"[Analytics] Error calculating reviewer stats from ApproverCompletionStatus: {e}")
         use_fallback = True
     
-    # Fallback to AnnotationTracking if ApproverCompletionStatus is empty or failed
+    # Fallback: If ApproverCompletionStatus is empty, use ApproverCompletionStatus for reviewed examples
+    # Since AnnotationTracking no longer has reviewed_by, we must use ApproverCompletionStatus
     if use_fallback or not reviewer_stats:
-        if tracking_in_range:
-            for t in tracking_in_range:
-                if t.reviewed_by and t.status in ['approved', 'rejected']:
-                    username = t.reviewed_by.username
-                    project_id = t.project.id
-                    cache_key = f"{username}_{project_id}"
-                    
-                    if username not in reviewer_stats:
-                        reviewer_stats[username] = {
-                            'username': username,
-                            'total_reviewed': 0,
-                            'approved': 0,
-                            'final_approved': 0,
-                            'rejected': 0,
-                            'total_audio_minutes': 0.0,
-                            'total_syllables': 0,
-                            'total_rupees': 0.0,
-                            'payment_breakdown': []
-                        }
-                    reviewer_stats[username]['total_reviewed'] += 1
-                    
-                    if t.status == 'approved':
-                        reviewer_stats[username]['approved'] += 1
-                        
-                        # Check if this reviewer is project_admin and count as final_approved
-                        if cache_key not in approver_roles_cache:
-                            approver_role = None
-                            try:
-                                approver_member = Member.objects.filter(
-                                    user=t.reviewed_by,
-                                    project=t.project
-                                ).select_related('role').first()
-                                if approver_member and approver_member.role:
-                                    approver_role = approver_member.role.name.lower().strip()
-                            except Exception as e:
-                                print(f'[Analytics] Error getting approver role in fallback: {e}')
-                                approver_role = None
-                            approver_roles_cache[cache_key] = approver_role
-                        else:
-                            approver_role = approver_roles_cache[cache_key]
-                        
-                        # Count as final approved ONLY if this approver is project_admin
-                        # Final approved = ALWAYS project_admin approvals only
-                        is_project_admin = (
-                            approver_role == ROLE_PROJECT_ADMIN or 
-                            (approver_role and 'project_admin' in approver_role)
-                        )
-                        if is_project_admin:
-                            reviewer_stats[username]['final_approved'] += 1  # Only project_admin approvals count as final
-                        
-                        # Add payment data for reviewers (only for approved reviews)
-                        if t.example_id in example_meta_map:
-                            ex_meta = example_meta_map[t.example_id]
-                            reviewer_stats[username]['total_audio_minutes'] += ex_meta['duration_minutes']
-                            syllables = count_tibetan_syllables(ex_meta['text'])
-                            reviewer_stats[username]['total_syllables'] += syllables
-                    elif t.status == 'rejected':
-                        reviewer_stats[username]['rejected'] += 1
+        # Get reviewed example IDs from tracking
+        reviewed_example_ids = [t.example_id for t in tracking_in_range if t.status in ['reviewed', 'rejected']]
+        
+        # Get ApproverCompletionStatus records for these examples
+        from assignment.completion_tracking import ApproverCompletionStatus
+        fallback_approver_completions = ApproverCompletionStatus.objects.filter(
+            example_id__in=reviewed_example_ids,
+            reviewed_at__gte=start_datetime,
+            reviewed_at__lte=end_datetime
+        ).select_related('approver', 'example', 'project')
+        
+        for ap_completion in fallback_approver_completions:
+            username = ap_completion.approver.username
+            project_id = ap_completion.project.id
+            cache_key = f"{username}_{project_id}"
+            
+            if username not in reviewer_stats:
+                reviewer_stats[username] = {
+                    'username': username,
+                    'total_reviewed': 0,
+                    'approved': 0,
+                    'final_approved': 0,
+                    'rejected': 0,
+                    'total_audio_minutes': 0.0,
+                    'total_syllables': 0,
+                    'total_rupees': 0.0,
+                    'payment_breakdown': []
+                }
+            reviewer_stats[username]['total_reviewed'] += 1
+            
+            if ap_completion.status == 'approved':  # ApproverCompletionStatus still uses 'approved'
+                reviewer_stats[username]['approved'] += 1
+                
+                # Check if this reviewer is project_admin and count as final_approved
+                if cache_key not in approver_roles_cache:
+                    approver_role = None
+                    try:
+                        approver_member = Member.objects.filter(
+                            user=ap_completion.approver,
+                            project=ap_completion.project
+                        ).select_related('role').first()
+                        if approver_member and approver_member.role:
+                            approver_role = approver_member.role.name.lower().strip()
+                    except Exception as e:
+                        print(f'[Analytics] Error getting approver role in fallback: {e}')
+                        approver_role = None
+                    approver_roles_cache[cache_key] = approver_role
+                else:
+                    approver_role = approver_roles_cache[cache_key]
+                
+                # Count as final approved ONLY if this approver is project_admin
+                # Final approved = ALWAYS project_admin approvals only
+                is_project_admin = (
+                    approver_role == ROLE_PROJECT_ADMIN or 
+                    (approver_role and 'project_admin' in approver_role)
+                )
+                if is_project_admin:
+                    reviewer_stats[username]['final_approved'] += 1  # Only project_admin approvals count as final
+                
+                # Add payment data for reviewers (only for approved reviews)
+                if ap_completion.example_id in example_meta_map:
+                    ex_meta = example_meta_map[ap_completion.example_id]
+                    reviewer_stats[username]['total_audio_minutes'] += ex_meta['duration_minutes']
+                    syllables = count_tibetan_syllables(ex_meta['text'])
+                    reviewer_stats[username]['total_syllables'] += syllables
+            elif ap_completion.status == 'rejected':
+                reviewer_stats[username]['rejected'] += 1
     
-    # Calculate reviewer payments (use tracking_for_payment - FILTERED BY DATE RANGE)
+    # Calculate reviewer payments (use ApproverCompletionStatus - FILTERED BY DATE RANGE)
+    # Since AnnotationTracking no longer has reviewed_by, use ApproverCompletionStatus
     for username, stats in reviewer_stats.items():
         # Group by project for payment calculation
         reviewer_projects = {}
-        if tracking_for_payment:
-            for t in tracking_for_payment:
-                if t.reviewed_by and t.reviewed_by.username == username and t.status == 'approved' and t.reviewed_at:
-                    # Only count if reviewed_at is within the date+time range
-                    if start_datetime <= t.reviewed_at <= end_datetime:
-                        if t.example_id in example_meta_map:
-                            ex_meta = example_meta_map[t.example_id]
-                            project_name = ex_meta['project_name']
-                            if project_name not in reviewer_projects:
-                                reviewer_projects[project_name] = {
-                                    'audio_minutes': 0.0,
-                                    'reviewed_segments': 0,
-                                    'reviewed_syllables': 0
-                                }
-                            reviewer_projects[project_name]['audio_minutes'] += ex_meta['duration_minutes']
-                            reviewer_projects[project_name]['reviewed_segments'] += 1
-                            reviewer_projects[project_name]['reviewed_syllables'] += count_tibetan_syllables(ex_meta['text'])
+        # Get ApproverCompletionStatus records for this reviewer within date range
+        from assignment.completion_tracking import ApproverCompletionStatus
+        approver_completions = ApproverCompletionStatus.objects.filter(
+            approver__username=username,
+            status='approved',  # ApproverCompletionStatus still uses 'approved'
+            reviewed_at__gte=start_datetime,
+            reviewed_at__lte=end_datetime
+        ).select_related('approver', 'example', 'project')
+        
+        for ap_completion in approver_completions:
+            # Get corresponding tracking to check reviewed_at matches
+            tracking = tracking_for_payment.filter(example_id=ap_completion.example_id).first()
+            if tracking and tracking.status == 'reviewed' and tracking.reviewed_at:
+                if start_datetime <= tracking.reviewed_at <= end_datetime:
+                    if ap_completion.example_id in example_meta_map:
+                        ex_meta = example_meta_map[ap_completion.example_id]
+                        project_name = ex_meta['project_name']
+                        if project_name not in reviewer_projects:
+                            reviewer_projects[project_name] = {
+                                'audio_minutes': 0.0,
+                                'reviewed_segments': 0,
+                                'reviewed_syllables': 0
+                            }
+                        reviewer_projects[project_name]['audio_minutes'] += ex_meta['duration_minutes']
+                        reviewer_projects[project_name]['reviewed_segments'] += 1
+                        reviewer_projects[project_name]['reviewed_syllables'] += count_tibetan_syllables(ex_meta['text'])
         
         # Calculate payment for each project
         for project_name, data in reviewer_projects.items():

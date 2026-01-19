@@ -129,9 +129,24 @@ class Command(BaseCommand):
                             state_updated += 1
                             if verbose:
                                 self.stdout.write(f"  ↻ Would update ExampleState for example {example_id} (added confirmed_by: {tracking.annotated_by.username})" if dry_run else f"  ↻ Updated ExampleState for example {example_id} (added confirmed_by: {tracking.annotated_by.username})")
-                    except Exception as e:
-                        errors += 1
-                        self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
+                except Exception as e:
+                    errors += 1
+                    self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
+        
+        # Refresh tracking_map before Phase 2 (include ALL records, even those with NULL annotated_by)
+        # This ensures we don't try to create duplicates
+        # Always refresh, not just in non-dry-run mode, so we can check properly
+        # Get ALL tracking records for these examples (not just those with annotated_by)
+        # Use a composite key (project_id, example_id) to handle cases where same example_id exists in multiple projects
+        all_trackings_all = AnnotationTracking.objects.filter(
+            example_id__in=all_example_ids
+        ).select_related('project', 'example', 'annotated_by')
+        # Create map with composite key (project_id, example_id) to avoid conflicts
+        tracking_map = {}
+        for t in all_trackings_all:
+            # Use example_id as key (should be unique per project)
+            # But also store project_id for verification
+            tracking_map[t.example_id] = t
         
         # PHASE 2: ExampleState → AnnotationTracking
         self.stdout.write("\nPhase 2: Creating/Updating AnnotationTracking from ExampleState...")
@@ -141,19 +156,60 @@ class Command(BaseCommand):
             
             if state and state.confirmed_by:
                 try:
+                    # Double-check if tracking exists in database (might exist but not in our map)
+                    # Use project_id and example_id to match the unique constraint exactly
                     if not tracking:
-                        # Create AnnotationTracking from ExampleState
+                        tracking = AnnotationTracking.objects.filter(
+                            project_id=state.example.project_id,
+                            example_id=example_id
+                        ).first()
+                        if tracking:
+                            tracking_map[example_id] = tracking
+                    
+                    if not tracking:
+                        # Create AnnotationTracking from ExampleState using get_or_create to avoid duplicates
+                        # Use project_id and example_id to match the unique constraint exactly
                         if not dry_run:
-                            AnnotationTracking.objects.create(
-                                project=state.example.project,
-                                example=state.example,
-                                annotated_by=state.confirmed_by,
-                                annotated_at=state.confirmed_at or timezone.now(),
-                                status='submitted'  # Confirmed = submitted for review
+                            tracking, created = AnnotationTracking.objects.get_or_create(
+                                project_id=state.example.project_id,
+                                example_id=example_id,
+                                defaults={
+                                    'annotated_by': state.confirmed_by,
+                                    'annotated_at': state.confirmed_at or timezone.now(),
+                                    'status': 'submitted'  # Confirmed = submitted for review
+                                }
                             )
-                        tracking_created += 1
-                        if verbose:
-                            self.stdout.write(f"  ✓ Would create AnnotationTracking for example {example_id} (confirmed by {state.confirmed_by.username})" if dry_run else f"  ✓ Created AnnotationTracking for example {example_id} (confirmed by {state.confirmed_by.username})")
+                            if created:
+                                tracking_created += 1
+                                tracking_map[example_id] = tracking
+                                if verbose:
+                                    self.stdout.write(f"  ✓ Created AnnotationTracking for example {example_id} (confirmed by {state.confirmed_by.username})")
+                            else:
+                                # Already exists, update it
+                                tracking_map[example_id] = tracking
+                                if not tracking.annotated_by:
+                                    tracking.annotated_by = state.confirmed_by
+                                    tracking.annotated_at = state.confirmed_at or tracking.annotated_at or timezone.now()
+                                    if tracking.status == 'pending':
+                                        tracking.status = 'submitted'
+                                    tracking.save()
+                                    tracking_updated += 1
+                                    if verbose:
+                                        self.stdout.write(f"  ↻ Updated AnnotationTracking for example {example_id} (added annotated_by: {state.confirmed_by.username})")
+                        else:
+                            # Dry run: check if it would be created or updated
+                            exists = AnnotationTracking.objects.filter(
+                                project_id=state.example.project_id,
+                                example_id=example_id
+                            ).exists()
+                            if not exists:
+                                tracking_created += 1
+                                if verbose:
+                                    self.stdout.write(f"  ✓ Would create AnnotationTracking for example {example_id} (confirmed by {state.confirmed_by.username})")
+                            else:
+                                tracking_updated += 1
+                                if verbose:
+                                    self.stdout.write(f"  ↻ Would update AnnotationTracking for example {example_id} (confirmed by {state.confirmed_by.username})")
                     elif not tracking.annotated_by:
                         # Update AnnotationTracking with annotated_by from ExampleState
                         if not dry_run:
@@ -166,8 +222,41 @@ class Command(BaseCommand):
                         if verbose:
                             self.stdout.write(f"  ↻ Would update AnnotationTracking for example {example_id} (added annotated_by: {state.confirmed_by.username})" if dry_run else f"  ↻ Updated AnnotationTracking for example {example_id} (added annotated_by: {state.confirmed_by.username})")
                 except Exception as e:
-                    errors += 1
-                    self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
+                    error_msg = str(e)
+                    # Handle duplicate key errors gracefully - record already exists
+                    if 'duplicate key' in error_msg.lower() or 'unique constraint' in error_msg.lower():
+                        # Try to get the existing record and update it instead
+                        try:
+                            existing_tracking = AnnotationTracking.objects.filter(
+                                project_id=state.example.project_id,
+                                example_id=example_id
+                            ).first()
+                            if existing_tracking:
+                                tracking_map[example_id] = existing_tracking
+                                # Update if needed
+                                if not existing_tracking.annotated_by and state.confirmed_by:
+                                    if not dry_run:
+                                        existing_tracking.annotated_by = state.confirmed_by
+                                        existing_tracking.annotated_at = state.confirmed_at or existing_tracking.annotated_at or timezone.now()
+                                        if existing_tracking.status == 'pending':
+                                            existing_tracking.status = 'submitted'
+                                        existing_tracking.save()
+                                    tracking_updated += 1
+                                    if verbose:
+                                        self.stdout.write(f"  ↻ Updated existing AnnotationTracking for example {example_id} (added annotated_by: {state.confirmed_by.username})")
+                                else:
+                                    if verbose:
+                                        self.stdout.write(f"  ℹ Skipped example {example_id} - AnnotationTracking already exists and is up to date")
+                            else:
+                                # Shouldn't happen, but log it
+                                errors += 1
+                                self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
+                        except Exception as e2:
+                            errors += 1
+                            self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e} (recovery also failed: {e2})"))
+                    else:
+                        errors += 1
+                        self.stdout.write(self.style.ERROR(f"  ✗ Error processing example {example_id}: {e}"))
         
         # PHASE 3: Sync Assignment status
         self.stdout.write("\nPhase 3: Syncing Assignment status...")

@@ -1,8 +1,11 @@
 """
 Monlam Tracking App Configuration
 
-Proper Django AppConfig that initializes visibility filtering
+Proper Django AppConfig that initializes auto-tracking signals
 after all apps are loaded.
+
+Auto-tracking signals automatically create AnnotationTracking records
+when annotations are saved, ensuring the system tracks who annotated what.
 """
 
 from django.apps import AppConfig
@@ -19,56 +22,16 @@ class MonlamTrackingConfig(AppConfig):
         """
         print('[Monlam Tracking] App initializing...')
         
-        # Apply visibility filtering to Doccano's example viewsets
-        # This filters locked examples at the queryset level (most robust)
-        try:
-            # Import from the correct module path
-            from examples.views.example import ExampleList, ExampleDetail
-            
-            # Try to import the patch - it should be in the backend directory
-            try:
-                from backend.examples_views_patch import ExampleVisibilityMixin
-            except ImportError:
-                # If that fails, try direct import (file might be in examples/)
-                try:
-                    from examples.examples_views_patch import ExampleVisibilityMixin
-                except ImportError:
-                    print('[Monlam Tracking] ⚠️ Could not find examples_views_patch - using middleware only')
-                    raise
-            
-            # Create new classes that inherit from both the mixin and the original
-            # The mixin must come FIRST so its get_queryset is called
-            class PatchedExampleList(ExampleVisibilityMixin, ExampleList):
-                """ExampleList with visibility filtering including lock filtering"""
-                pass
-            
-            class PatchedExampleDetail(ExampleVisibilityMixin, ExampleDetail):
-                """ExampleDetail with visibility filtering including lock filtering"""
-                pass
-            
-            # Replace the original classes in the module
-            import examples.views.example as example_views_module
-            example_views_module.ExampleList = PatchedExampleList
-            example_views_module.ExampleDetail = PatchedExampleDetail
-            
-            # Also update the views __init__.py if it exports these
-            try:
-                from examples import views as examples_views
-                if hasattr(examples_views, 'ExampleList'):
-                    examples_views.ExampleList = PatchedExampleList
-                if hasattr(examples_views, 'ExampleDetail'):
-                    examples_views.ExampleDetail = PatchedExampleDetail
-            except:
-                pass  # Not critical if __init__ doesn't export them
-            
-            print('[Monlam Tracking] ✅ Applied queryset-level filtering (with lock filtering) to example viewsets')
-            print('[Monlam Tracking] ✅ ExampleList patched successfully')
-            print('[Monlam Tracking] ✅ ExampleDetail patched successfully')
-        except Exception as e:
-            print(f'[Monlam Tracking] ⚠️ Could not apply queryset filtering: {e}')
-            print('[Monlam Tracking] ⚠️ Falling back to middleware-only filtering')
-            import traceback
-            traceback.print_exc()
+        # No backend filtering - frontend toolbar handles filtering
+        # The frontend (patches/frontend/index.html) sets default filter to "undone" 
+        # for annotators on annotation pages using Doccano's native toolbar filter
+        # This allows:
+        # 1. Dataset table to show all examples (no filtering)
+        # 2. Annotation page toolbar to filter using Doccano's native mechanism (isChecked query param)
+        # 3. Detail views to access any example by ID (no filtering)
+        
+        print('[Monlam Tracking] ✅ No backend filtering - using frontend toolbar filter')
+        print('[Monlam Tracking] ✅ Frontend will set default filter to "undone" for annotators on annotation pages')
         
         # Set up auto-tracking signals
         try:
