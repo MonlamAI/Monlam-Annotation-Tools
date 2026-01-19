@@ -26,7 +26,6 @@ class ExampleVisibilityMixin:
     def get_queryset(self):
         """
         Filter examples based on user role and tracking status
-        Includes lock filtering to prevent conflicts between annotators
         """
         queryset = super().get_queryset()
         user = self.request.user
@@ -82,15 +81,9 @@ class ExampleVisibilityMixin:
             # If we can't check membership, be safe and return empty
             return queryset.none()
         
-        # Try to determine if user is a reviewer/approver
-        # For now, assume non-admins who aren't project admins might be annotators
-        # More sophisticated role checking can be added here
-        
         # Import tracking model
         try:
             from assignment.simple_tracking import AnnotationTracking
-            from django.utils import timezone
-            from datetime import timedelta
         except ImportError:
             # If tracking not available, return full queryset
             import sys
@@ -101,7 +94,7 @@ class ExampleVisibilityMixin:
         # Use project_id instead of project object to avoid issues
         tracking_qs = AnnotationTracking.objects.filter(
             project_id=project_id
-        ).select_related('annotated_by', 'reviewed_by', 'locked_by')
+        ).select_related('annotated_by', 'reviewed_by')
         
         # Get all example IDs in this project - EXPLICITLY filter by project_id to prevent cross-project contamination
         all_example_ids = set(queryset.filter(project_id=project_id).values_list('id', flat=True))
@@ -113,37 +106,13 @@ class ExampleVisibilityMixin:
         # Build filter conditions
         show_example_ids = []
         hide_example_ids = []
-        locked_by_others = set()
         
-        # First pass: Check for locked examples (highest priority)
+        # Check tracking status
         for tracking in tracking_qs:
             example_id = tracking.example_id
             
             # Skip if this example doesn't exist in the queryset
             if example_id not in all_example_ids:
-                continue
-            
-            # Check if locked by someone else
-            if tracking.locked_by and tracking.locked_by != user:
-                if tracking.locked_at:
-                    lock_expiry = tracking.locked_at + timedelta(minutes=5)
-                    if timezone.now() < lock_expiry:
-                        # Still locked by someone else - HIDE
-                        locked_by_others.add(example_id)
-                        hide_example_ids.append(example_id)
-                        continue  # Skip other checks for this example
-                    else:
-                        # Lock expired, clear it
-                        tracking.locked_by = None
-                        tracking.locked_at = None
-                        tracking.save(update_fields=['locked_by', 'locked_at'])
-        
-        # Second pass: Check tracking status (only for non-locked examples)
-        for tracking in tracking_qs:
-            example_id = tracking.example_id
-            
-            # Skip if this example doesn't exist in the queryset or is locked
-            if example_id not in all_example_ids or example_id in locked_by_others:
                 continue
             
             # CRITICAL: If annotated_by is set and it's NOT the current user, HIDE it
@@ -158,7 +127,7 @@ class ExampleVisibilityMixin:
                 if tracking.status == 'rejected':
                     show_example_ids.append(example_id)
                 # Hide if submitted or approved (already done, no longer editable)
-                elif tracking.status in ['submitted', 'approved']:
+                elif tracking.status in ['submitted', 'approved', 'reviewed']:
                     hide_example_ids.append(example_id)
                 # If status is 'pending' but annotated_by is set, it means user started working on it
                 # Show it so they can continue (but it's already hidden from others above)
@@ -169,29 +138,29 @@ class ExampleVisibilityMixin:
             elif not tracking.annotated_by and tracking.status == 'pending':
                 show_example_ids.append(example_id)
             
-            # Hide if approved (completely done, regardless of who did it)
-            elif tracking.status == 'approved':
+            # Hide if approved/reviewed (completely done, regardless of who did it)
+            elif tracking.status in ['approved', 'reviewed']:
                 hide_example_ids.append(example_id)
         
-        # Examples with no tracking record = unannotated = show to everyone (unless locked)
+        # Examples with no tracking record = unannotated = show to everyone
         tracked_ids = set(t.example_id for t in tracking_qs if t.example_id in all_example_ids)
         untracked_ids = all_example_ids - tracked_ids
         
-        # Final list: (explicitly shown + untracked) - explicitly hidden - locked by others
-        final_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids) - locked_by_others
+        # Final list: (explicitly shown + untracked) - explicitly hidden
+        final_ids = (set(show_example_ids) | untracked_ids) - set(hide_example_ids)
         
         # Debug logging
         import sys
         print(f'[ExampleVisibilityMixin] User: {user.username}, Project: {project_id}', file=sys.stderr, flush=True)
         print(f'[ExampleVisibilityMixin] Total examples: {len(all_example_ids)}, Tracked: {len(tracked_ids)}, Untracked: {len(untracked_ids)}', file=sys.stderr, flush=True)
-        print(f'[ExampleVisibilityMixin] Show: {len(show_example_ids)}, Hide: {len(hide_example_ids)}, Locked by others: {len(locked_by_others)}', file=sys.stderr, flush=True)
+        print(f'[ExampleVisibilityMixin] Show: {len(show_example_ids)}, Hide: {len(hide_example_ids)}', file=sys.stderr, flush=True)
         print(f'[ExampleVisibilityMixin] Final IDs: {len(final_ids)}', file=sys.stderr, flush=True)
         
         # Safety check: if final_ids is empty but there are untracked examples, something went wrong
         # In that case, show untracked examples (they're unannotated and should be visible)
         if not final_ids and untracked_ids:
             print(f'[ExampleVisibilityMixin] ⚠️ WARNING: Final IDs empty but untracked exists, showing untracked only', file=sys.stderr, flush=True)
-            final_ids = untracked_ids - locked_by_others
+            final_ids = untracked_ids
         
         # CRITICAL SAFETY: If still empty and there are examples in the project, 
         # something is wrong with filtering - return all examples to prevent breaking the UI
@@ -199,8 +168,8 @@ class ExampleVisibilityMixin:
         if not final_ids and all_example_ids:
             print(f'[ExampleVisibilityMixin] ⚠️ CRITICAL: No examples visible but project has {len(all_example_ids)} examples!', file=sys.stderr, flush=True)
             print(f'[ExampleVisibilityMixin] ⚠️ Returning all examples to prevent empty page (filtering may have bug)', file=sys.stderr, flush=True)
-            # Return queryset filtered by project and exclude locked examples (safety fallback)
-            return queryset.filter(project_id=project_id).exclude(id__in=locked_by_others)
+            # Return queryset filtered by project (safety fallback)
+            return queryset.filter(project_id=project_id)
         
         # If project has no examples, return empty
         if not final_ids:
