@@ -1,20 +1,16 @@
 """
 URL Redirects for Doccano Menu Items
 
-These URLs intercept standard Doccano paths and redirect to Monlam enhanced views.
-They must be included in the main urls.py BEFORE Doccano's URL patterns to take precedence.
+DEPRECATED: This file is no longer used. Redirects are handled client-side in index.html.
 
-Usage in config/urls.py:
-    from monlam_ui.redirect_urls import redirect_patterns
-    
-    urlpatterns = [
-        *redirect_patterns,  # Include redirects first
-        # ... rest of Doccano URLs
-    ]
+All redirects are now handled by JavaScript in patches/frontend/index.html
+which can check user roles and decide whether to redirect.
+
+This file is kept for backwards compatibility with Dockerfile, but redirect_patterns
+is empty and no longer used.
 """
 
 from django.urls import path
-from .views import DatasetRedirectView, MetricsRedirectView
 
 # SERVER-SIDE REDIRECTS DISABLED
 # Reason: Server-side redirects can't "pass through" to Doccano's original views

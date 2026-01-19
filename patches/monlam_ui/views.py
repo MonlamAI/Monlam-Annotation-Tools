@@ -12,11 +12,6 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import Count, Q
 
 
-from django.views import View
-from django.shortcuts import redirect
-from django.http import HttpResponseRedirect
-from django.urls import reverse
-
 # Import role constants for consistency
 try:
     from assignment.roles import (
@@ -29,52 +24,6 @@ except ImportError:
     ROLE_PROJECT_ADMIN = 'project_admin'
     ROLE_ANNOTATION_APPROVER = 'annotation_approver'
     ROLE_PROJECT_MANAGER = 'project_manager'
-
-
-class DatasetRedirectView(View):
-    """
-    Redirect standard dataset page to enhanced dataset view.
-    Intercepts /projects/{id}/dataset and redirects to /monlam/{id}/dataset-enhanced/
-    
-    EXCEPTION: Project Admins (role=3) are NOT redirected - they need
-    the original dataset page for upload/download functionality.
-    """
-    def get(self, request, project_id):
-        # Check if user is a Project Admin for this project
-        try:
-            from projects.models import Project, Member
-            
-            # Check if user is project admin by role name
-            is_admin = Member.objects.filter(
-                project_id=project_id,
-                user=request.user
-            ).select_related('role').filter(
-                role__name__iexact=ROLE_PROJECT_ADMIN
-            ).exists()
-            
-            if is_admin:
-                # Project Admins should NOT be redirected
-                # Return None to let the request continue to Doccano's original view
-                # We can't directly call Doccano's view, so we'll raise an exception
-                # that signals "let the original view handle this"
-                from django.http import Http404
-                raise Http404("Let original view handle this")
-            
-        except Exception as e:
-            # If anything goes wrong, redirect to enhanced view (safer default)
-            print(f"[Monlam] Error checking admin role: {e}")
-        
-        # Non-admins: redirect to enhanced view
-        return redirect(f'/monlam/{project_id}/dataset-enhanced/')
-
-
-class MetricsRedirectView(View):
-    """
-    Redirect standard metrics page to completion dashboard.
-    Intercepts /projects/{id}/metrics and redirects to /monlam/{project_id}/completion/
-    """
-    def get(self, request, project_id):
-        return redirect(f'/monlam/{project_id}/completion/')
 
 
 @login_required
