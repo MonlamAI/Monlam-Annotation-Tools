@@ -37,5 +37,5 @@ check_database.py
 check_tracking.py
 init_monlam.py
 reset_db.py
-scripts/create_assignments.py
+scripts/*.py
 PUSH_READY.txt
