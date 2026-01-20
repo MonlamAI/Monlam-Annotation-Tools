@@ -1361,7 +1361,9 @@ def analytics_api(request):
             text = ex_meta['text']
             
             # Annotator payment (for SUBMITTED examples - filter by annotated_at within date range)
-            if t.annotated_by and t.status == 'submitted' and t.annotated_at:
+            # Include examples that were submitted (have annotated_at), regardless of current status
+            # This ensures payment is calculated even after examples are reviewed/rejected
+            if t.annotated_by and t.annotated_at and t.status in ['submitted', 'reviewed', 'rejected']:
                 # Only count if annotated_at is within the date+time range
                 if start_datetime <= t.annotated_at <= end_datetime:
                     username = t.annotated_by.username
