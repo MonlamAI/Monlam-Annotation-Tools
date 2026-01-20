@@ -68,27 +68,49 @@ for project in projects:
         new_status = None
         update_fields = []
         
-        if not is_finished and assignment.status in ['approved', 'rejected', 'submitted']:
-            needs_fix = True
-            new_status = 'in_progress' if assignment.started_at else 'assigned'
-            print(f"  🔧 Example {example_id}, Assignment {assignment.id}: '{original_status}' → '{new_status}' (example not finished)")
+        # Case 1: Example is NOT finished, but has ApproverCompletionStatus records (INVALID!)
+        # These should not exist - you can't approve/reject unfinished examples
+        if not is_finished:
+            has_approval_records = example_id in approval_map and (
+                approval_map[example_id]['approved'] or approval_map[example_id]['rejected']
+            )
             
-            if not DRY_RUN:
-                assignment.status = new_status
-                update_fields.append('status')
-                if original_status == 'submitted' and assignment.submitted_at:
-                    assignment.submitted_at = None
-                    update_fields.append('submitted_at')
-                if original_status in ['approved', 'rejected']:
-                    if assignment.reviewed_by:
-                        assignment.reviewed_by = None
-                        update_fields.append('reviewed_by')
-                    if assignment.reviewed_at:
-                        assignment.reviewed_at = None
-                        update_fields.append('reviewed_at')
-                    if assignment.review_notes:
-                        assignment.review_notes = ''
-                        update_fields.append('review_notes')
+            if has_approval_records:
+                needs_fix = True
+                print(f"  🔧 Example {example_id}: Removing invalid ApproverCompletionStatus (example not finished but has approval records)")
+                
+                if not DRY_RUN:
+                    deleted_count = ApproverCompletionStatus.objects.filter(
+                        example_id=example_id,
+                        project=project
+                    ).delete()[0]
+                    print(f"     ✓ Deleted {deleted_count} ApproverCompletionStatus record(s)")
+                    # Remove from approval_map so it doesn't affect status calculation
+                    if example_id in approval_map:
+                        del approval_map[example_id]
+            
+            # Also fix Assignment.status if it's wrong
+            if assignment.status in ['approved', 'rejected', 'submitted']:
+                needs_fix = True
+                new_status = 'in_progress' if assignment.started_at else 'assigned'
+                print(f"  🔧 Example {example_id}, Assignment {assignment.id}: '{original_status}' → '{new_status}' (example not finished)")
+                
+                if not DRY_RUN:
+                    assignment.status = new_status
+                    update_fields.append('status')
+                    if original_status == 'submitted' and assignment.submitted_at:
+                        assignment.submitted_at = None
+                        update_fields.append('submitted_at')
+                    if original_status in ['approved', 'rejected']:
+                        if assignment.reviewed_by:
+                            assignment.reviewed_by = None
+                            update_fields.append('reviewed_by')
+                        if assignment.reviewed_at:
+                            assignment.reviewed_at = None
+                            update_fields.append('reviewed_at')
+                        if assignment.review_notes:
+                            assignment.review_notes = ''
+                            update_fields.append('review_notes')
         
         elif is_finished:
             approval_info = approval_map.get(example_id, {'approved': False, 'rejected': False})
