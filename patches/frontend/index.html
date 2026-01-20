@@ -1312,11 +1312,23 @@
                 
                 if (isAnnotationPage) {
                     // On annotation pages: Set filter to "Undone" (isChecked=false) for annotators
+                    // This hides confirmed/finished examples (status='submitted', not approved)
+                    // Note: Approved examples (status='approved') are hidden separately below
                     clickUndoneFilter();
+                    // Also hide approved examples specifically (status='approved')
+                    hideApprovedExamplesForAnnotators();
+                    setInterval(() => {
+                        hideApprovedExamplesForAnnotators();
+                    }, 1000);
                 } else if (isDatasetPage) {
                     // On dataset page: Show all examples (no filter), but hide "Annotate" buttons
+                    // Also hide approved examples from annotators (status='approved')
                     hideAnnotateButtonsForAnnotators();
-                    setInterval(hideAnnotateButtonsForAnnotators, 1000);
+                    hideApprovedExamplesForAnnotators();
+                    setInterval(() => {
+                        hideAnnotateButtonsForAnnotators();
+                        hideApprovedExamplesForAnnotators();
+                    }, 1000);
                 }
                 
             } else {
@@ -1332,7 +1344,13 @@
     function clickUndoneFilter() {
         /**
          * Set Doccano's filter to "Undone" (isChecked=false) via Vue Router.
-         * This shows only unconfirmed examples.
+         * This shows only unconfirmed/unfinished examples.
+         * 
+         * IMPORTANT DISTINCTION:
+         * - Confirmed/Finished/Submitted: Annotator completed their work (ExampleState exists, status='submitted')
+         *   This filter hides these examples from annotators.
+         * - Approved: Approver reviewed and approved (status='approved')
+         *   Approved examples are hidden separately via hideApprovedExamplesForAnnotators()
          * 
          * Based on Doccano's ToolbarLaptop.vue:
          * - Filter stored in URL query param: isChecked
@@ -1441,6 +1459,82 @@
                 }
             });
         });
+    }
+    
+    function hideApprovedExamplesForAnnotators() {
+        /**
+         * Hide approved examples from annotators.
+         * 
+         * IMPORTANT: This is different from hiding confirmed/finished examples.
+         * - Confirmed/Finished/Submitted: Annotator completed their work (status='submitted')
+         * - Approved: Approver reviewed and approved (status='approved')
+         * - Rejected: Approver rejected (status='rejected') - SHOULD BE VISIBLE to annotator
+         * 
+         * Annotators should NOT see approved examples, but they CAN see:
+         * - Their own submitted examples (to check status)
+         * - Rejected examples (to fix and resubmit)
+         */
+        
+        const table = document.querySelector('table');
+        if (!table) return;
+        
+        // Get all table rows
+        const rows = table.querySelectorAll('tbody tr, tr[data-example-id]');
+        
+        rows.forEach(row => {
+            // Check if row has status indicator or assignment data
+            const statusCell = row.querySelector('[data-status], .status, .v-chip');
+            const statusText = statusCell ? statusCell.textContent.toLowerCase() : '';
+            
+            // Check for rejected status - DO NOT HIDE rejected examples
+            const isRejected = statusText.includes('rejected') || 
+                              statusText.includes('❌ rejected') ||
+                              row.dataset.status === 'rejected';
+            
+            // If rejected, make sure it's visible (annotator needs to fix it)
+            if (isRejected) {
+                if (row.dataset.monlamApprovedHidden) {
+                    row.style.display = '';
+                    delete row.dataset.monlamApprovedHidden;
+                    console.log('[Monlam Filter] Showing rejected example row (annotator needs to fix)');
+                }
+                return; // Don't hide rejected examples
+            }
+            
+            // Check for approved status indicators
+            const isApproved = statusText.includes('approved') && !statusText.includes('rejected') ||
+                              statusText.includes('✅ approved') ||
+                              (row.querySelector('[style*="green"], [class*="approved"]') && !isRejected) ||
+                              row.dataset.status === 'approved';
+            
+            // Also check if row has a data attribute indicating approval
+            if (isApproved || row.dataset.approved === 'true') {
+                if (!row.dataset.monlamApprovedHidden) {
+                    row.style.display = 'none';
+                    row.dataset.monlamApprovedHidden = 'true';
+                    console.log('[Monlam Filter] Hidden approved example row');
+                }
+            } else {
+                // Make sure we show non-approved rows (including rejected)
+                if (row.dataset.monlamApprovedHidden) {
+                    row.style.display = '';
+                    delete row.dataset.monlamApprovedHidden;
+                }
+            }
+        });
+        
+        // Also check Vue component data if available (for enhanced dataset view)
+        if (window.$nuxt && window.$nuxt.$root) {
+            try {
+                // Try to access Vue component instances that might have example data
+                const vueInstances = document.querySelectorAll('[data-v-]');
+                vueInstances.forEach(instance => {
+                    // This is a fallback - the main filtering should happen via API
+                });
+            } catch (e) {
+                // Vue might not be ready, that's okay
+            }
+        }
     }
     
     // ========================================

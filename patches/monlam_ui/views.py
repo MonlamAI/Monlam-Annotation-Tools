@@ -154,6 +154,31 @@ def annotation_with_approval(request, project_id, example_id):
         if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return render(request, '403.html', status=403)
     
+    # CRITICAL: Check if annotator can access/edit this example
+    # This prevents annotators from accessing approved examples
+    from assignment.permissions import CanAccessExample, CanEditExample, get_user_role
+    
+    # Check access permission (prevents annotators from seeing approved examples)
+    access_permission = CanAccessExample()
+    if not access_permission.has_object_permission(request, None, example):
+        return render(request, '403.html', {
+            'error': 'You do not have permission to access this example. It may have been approved or assigned to another annotator.'
+        }, status=403)
+    
+    # Check edit permission (prevents annotators from editing approved examples)
+    edit_permission = CanEditExample()
+    can_edit = edit_permission.has_object_permission(request, None, example)
+    
+    # Get user role to determine if they're privileged
+    role_name, is_privileged = get_user_role(request.user, project.id)
+    
+    # If annotator cannot edit (example is approved), show read-only view
+    if not can_edit and not is_privileged:
+        # Annotator trying to access approved example - deny access completely
+        return render(request, '403.html', {
+            'error': 'This example has been approved and cannot be edited. Only approvers and admins can modify approved examples.'
+        }, status=403)
+    
     # Get assignment for this example
     try:
         assignment = Assignment.objects.get(project=project, example=example, is_active=True)
@@ -515,6 +540,29 @@ def api_dataset_assignments(request, project_id):
         project=project,
         is_active=True
     ).select_related('assigned_to', 'reviewed_by')
+    
+    # CRITICAL: Filter approved examples for annotators
+    # Only privileged users (admins, managers, approvers) can see approved examples
+    from assignment.permissions import get_user_role
+    role_name, is_privileged = get_user_role(request.user, project.id)
+    
+    if not is_privileged:
+        # Annotator - filter out approved examples
+        # BUT keep rejected examples visible (annotator needs to fix them)
+        # Also filter out submitted examples that are not assigned to this user
+        assignments = assignments.exclude(status='approved')
+        # Only show examples assigned to this user or unassigned
+        assignments = assignments.filter(
+            Q(assigned_to=request.user) | Q(assigned_to__isnull=True)
+        )
+        # Also filter based on AnnotationTracking status
+        # IMPORTANT: Exclude approved, but keep rejected (status='rejected' should be visible)
+        approved_example_ids = AnnotationTracking.objects.filter(
+            project=project,
+            status='approved'
+        ).values_list('example_id', flat=True)
+        assignments = assignments.exclude(example_id__in=approved_example_ids)
+        # Note: Rejected examples (status='rejected') are NOT filtered out - annotator can see and fix them
     
     serializer = AssignmentSerializer(assignments, many=True)
     

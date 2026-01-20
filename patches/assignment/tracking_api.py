@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 from .simple_tracking import AnnotationTracking
 from .completion_tracking import ApproverCompletionStatus
 from .roles import ROLE_PROJECT_ADMIN, ROLE_ANNOTATION_APPROVER, ROLE_PROJECT_MANAGER
@@ -144,6 +145,21 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
             if not _is_annotator_only(request.user, project):
                 return Response(
                     {'error': 'Only annotators can confirm or submit examples. Reviewers and approvers should use the approve/reject buttons instead.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # CRITICAL: Check if example is already approved - prevent annotators from submitting approved examples
+            from examples.models import Example
+            example = get_object_or_404(Example, pk=example_id, project=project)
+            
+            existing_tracking = AnnotationTracking.objects.filter(
+                project=project,
+                example=example
+            ).first()
+            
+            if existing_tracking and existing_tracking.status == 'approved':
+                return Response(
+                    {'error': 'This example has already been approved and cannot be modified. Only approvers and admins can modify approved examples.'},
                     status=status.HTTP_403_FORBIDDEN
                 )
             

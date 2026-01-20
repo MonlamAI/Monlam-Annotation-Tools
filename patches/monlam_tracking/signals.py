@@ -68,6 +68,36 @@ def track_annotation_saved(sender, instance, created, **kwargs):
             print(f'[Monlam Signals] ⚠️ User {user.username} is not a project member, skipping tracking')
             return
         
+        # CRITICAL: Check if example is approved and user is annotator
+        # Prevent annotators from saving annotations to approved examples
+        from assignment.simple_tracking import AnnotationTracking
+        from assignment.permissions import get_user_role
+        
+        # Check current tracking status
+        existing_tracking = AnnotationTracking.objects.filter(
+            project=example.project,
+            example=example
+        ).first()
+        
+        # CRITICAL: Block annotators from saving to approved examples
+        # BUT allow them to save to rejected examples (to fix and resubmit)
+        if existing_tracking and existing_tracking.status == 'approved':
+            # Example is approved - check if user is privileged
+            role_name, is_privileged = get_user_role(user, example.project.id)
+            
+            if not is_privileged:
+                # Annotator trying to save to approved example - prevent it
+                print(f'[Monlam Signals] ❌ BLOCKED: User {user.username} (annotator) attempted to save annotation to approved example {example.id}')
+                # Delete the annotation instance to prevent saving
+                try:
+                    instance.delete()
+                except Exception as e:
+                    print(f'[Monlam Signals] ⚠️ Could not delete annotation instance: {e}')
+                return
+        
+        # NOTE: Rejected examples are allowed - annotator can fix and resubmit
+        # The rejected → submitted transition is handled below (lines 103-107)
+        
         # Create or update tracking (track annotated_by in backend for comprehensive metrics)
         tracking, tracking_created = AnnotationTracking.objects.get_or_create(
             project=example.project,
@@ -248,6 +278,23 @@ def track_example_state_saved(sender, instance, created, **kwargs):
             print(f'[Monlam Signals] ⚠️ Could not verify user role, preventing confirmation: {role_check_error}')
             instance.delete()
             return
+        
+        # CRITICAL: Check if example is already approved - prevent annotators from confirming approved examples
+        existing_tracking = AnnotationTracking.objects.filter(
+            project=example.project,
+            example=example
+        ).first()
+        
+        if existing_tracking and existing_tracking.status == 'approved':
+            # Example is approved - annotators cannot confirm approved examples
+            from assignment.permissions import get_user_role
+            role_name, is_privileged = get_user_role(confirmed_by, example.project.id)
+            
+            if not is_privileged:
+                print(f'[Monlam Signals] ❌ BLOCKED: User {confirmed_by.username} (annotator) attempted to confirm approved example {example.id} via tick mark')
+                # Delete the ExampleState to prevent confirmation
+                instance.delete()
+                return
         
         # Create or update AnnotationTracking (track annotated_by in backend for comprehensive metrics)
         tracking, tracking_created = AnnotationTracking.objects.get_or_create(
