@@ -32,13 +32,7 @@ class AssignmentSerializer(serializers.Serializer):
     annotated_by_username = serializers.SerializerMethodField()
     assigned_by_id = serializers.IntegerField(allow_null=True, read_only=True)
     assigned_at = serializers.DateTimeField(read_only=True)
-    status = serializers.ChoiceField(choices=[
-        ('assigned', 'Assigned'),
-        ('in_progress', 'In Progress'),
-        ('submitted', 'Submitted for Review'),
-        ('approved', 'Approved'),
-        ('rejected', 'Needs Revision'),
-    ])
+    status = serializers.SerializerMethodField()
     started_at = serializers.DateTimeField(read_only=True, allow_null=True)
     submitted_at = serializers.DateTimeField(read_only=True, allow_null=True)
     reviewed_by_id = serializers.SerializerMethodField()
@@ -53,6 +47,72 @@ class AssignmentSerializer(serializers.Serializer):
     final_approval_by_username = serializers.SerializerMethodField()
     final_approval_at = serializers.SerializerMethodField()
     has_final_approval = serializers.SerializerMethodField()
+    
+    def get_status(self, obj):
+        """
+        Compute status based on:
+        1. If example is NOT finished (ExampleState.confirmed_by is None): return annotator progress status
+        2. If example IS finished: check ApproverCompletionStatus for approval status
+        
+        This ensures "approved" is only shown for finished examples.
+        """
+        try:
+            # First check if example is finished (ExampleState.confirmed_by exists)
+            from examples.models import ExampleState
+            example_state = ExampleState.objects.filter(
+                example=obj.example
+            ).select_related('confirmed_by').first()
+            
+            is_finished = example_state and example_state.confirmed_by is not None
+            
+            # If not finished, return annotator progress status (never show submitted/approved/rejected)
+            if not is_finished:
+                # Unfinished examples can only be 'assigned' or 'in_progress'
+                # Never 'submitted', 'approved', or 'rejected' because those require the example to be finished
+                if obj.status in ['approved', 'rejected', 'submitted']:
+                    # If assignment says approved/rejected/submitted but example isn't finished, fix it
+                    if obj.started_at:
+                        return 'in_progress'
+                    else:
+                        return 'assigned'
+                # If status is already 'assigned' or 'in_progress', return it
+                if obj.status in ['assigned', 'in_progress']:
+                    return obj.status
+                # Fallback: determine based on whether work has started
+                if obj.started_at:
+                    return 'in_progress'
+                else:
+                    return 'assigned'
+            
+            # Example is finished - check ApproverCompletionStatus for approval status
+            from assignment.completion_tracking import ApproverCompletionStatus
+            
+            # Check for rejections first (rejected takes precedence)
+            has_rejection = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='rejected'
+            ).exists()
+            
+            if has_rejection:
+                return 'rejected'
+            
+            # Check for approvals
+            has_approval = ApproverCompletionStatus.objects.filter(
+                example=obj.example,
+                project=obj.project,
+                status='approved'
+            ).exists()
+            
+            if has_approval:
+                return 'approved'
+            
+            # Finished but not yet approved/rejected = submitted
+            return 'submitted'
+            
+        except Exception as e:
+            # Fallback to assignment status if there's an error
+            return obj.status
     
     def get_annotated_by_id(self, obj):
         """Get who actually annotated this example (from AnnotationTracking)."""

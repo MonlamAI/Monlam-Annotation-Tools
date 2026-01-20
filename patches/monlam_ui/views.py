@@ -445,6 +445,71 @@ def api_dataset_assignments(request, project_id):
                 state.save()
                 print(f'[Dataset API] ✅ Fixed ExampleState for example {example_id} (added confirmed_by from AnnotationTracking)')
     
+    # SYNC DIRECTION 4: Fix incorrect Assignment.status values
+    # If Assignment.status is 'approved'/'rejected'/'submitted' but example is NOT finished, correct it
+    from assignment.completion_tracking import ApproverCompletionStatus
+    
+    for example_id, assignment in assignment_map.items():
+        example_state = all_states_map.get(example_id)
+        is_finished = example_state and example_state.confirmed_by is not None
+        
+        # If example is NOT finished, Assignment.status should NOT be 'approved', 'rejected', or 'submitted'
+        if not is_finished and assignment.status in ['approved', 'rejected', 'submitted']:
+            # Store original status for logging
+            original_status = assignment.status
+            
+            # Determine correct status based on progress
+            if assignment.started_at:
+                correct_status = 'in_progress'
+            else:
+                correct_status = 'assigned'
+            
+            print(f'[Dataset API] 🔧 Fixing Assignment {assignment.id} for example {example_id}: status="{original_status}" but example not finished → changing to "{correct_status}"')
+            assignment.status = correct_status
+            
+            # Clear submitted_at if it was incorrectly set
+            if original_status == 'submitted':
+                assignment.submitted_at = None
+            
+            # Clear review fields if they were incorrectly set
+            if original_status in ['approved', 'rejected']:
+                assignment.reviewed_by = None
+                assignment.reviewed_at = None
+                assignment.review_notes = ''
+            
+            assignment.save(update_fields=['status', 'submitted_at', 'reviewed_by', 'reviewed_at', 'review_notes'])
+        
+        # If example IS finished, ensure Assignment.status matches ApproverCompletionStatus
+        elif is_finished:
+            # Check ApproverCompletionStatus for this example
+            has_rejection = ApproverCompletionStatus.objects.filter(
+                example_id=example_id,
+                project=project,
+                status='rejected'
+            ).exists()
+            
+            has_approval = ApproverCompletionStatus.objects.filter(
+                example_id=example_id,
+                project=project,
+                status='approved'
+            ).exists()
+            
+            # Determine what status should be
+            if has_rejection:
+                expected_status = 'rejected'
+            elif has_approval:
+                expected_status = 'approved'
+            else:
+                expected_status = 'submitted'
+            
+            # Fix if Assignment.status doesn't match
+            if assignment.status != expected_status:
+                print(f'[Dataset API] 🔧 Fixing Assignment {assignment.id} for example {example_id}: status="{assignment.status}" but should be "{expected_status}" (finished example)')
+                assignment.status = expected_status
+                if expected_status == 'submitted' and not assignment.submitted_at:
+                    assignment.submitted_at = example_state.confirmed_at or timezone.now()
+                assignment.save(update_fields=['status', 'submitted_at'])
+    
     # Refresh assignments after syncing
     assignments = Assignment.objects.filter(
         project=project,
