@@ -65,6 +65,10 @@ class AssignmentSerializer(serializers.Serializer):
             
             is_finished = example_state and example_state.confirmed_by is not None
             
+            # Debug logging for specific examples that show the issue
+            if obj.example_id in [615, 616, 617, 618, 619]:
+                print(f'[Serializer Debug] Example {obj.example_id}: is_finished={is_finished}, ExampleState.confirmed_by={example_state.confirmed_by.username if example_state and example_state.confirmed_by else "NULL"}, Assignment.status={obj.status}')
+            
             # If not finished, return annotator progress status (never show submitted/approved/rejected)
             if not is_finished:
                 # Unfinished examples can only be 'assigned' or 'in_progress'
