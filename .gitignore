@@ -31,7 +31,12 @@ README*
 # Shell scripts (keep locally, don't push to GitHub)
 *.sh
 
-# Utility/test scripts (keep locally, don't push to GitHub)
+# Root-level utility/test scripts and text files (keep locally, don't push to GitHub)
+# Note: Python files in patches/ and doccano-src/ are part of the codebase and should be tracked
+/*.py
+/*.txt
+
+# Specific utility scripts (explicit list for clarity)
 backfill_tracking.py
 check_database.py
 check_tracking.py
