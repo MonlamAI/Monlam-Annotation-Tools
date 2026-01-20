@@ -1,0 +1,24 @@
+═══════════════════════════════════════════════════════════════
+ONE-LINER TO DOWNLOAD AND RUN FIX FROM GIT
+═══════════════════════════════════════════════════════════════
+
+Copy and paste this entire command in Render shell:
+
+curl -s https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py | python manage.py shell
+
+═══════════════════════════════════════════════════════════════
+
+This will:
+1. Download fix_status_simple.py from GitHub
+2. Pipe it directly to Django shell
+3. Fix all incorrect Assignment.status values
+4. Show what was fixed
+
+═══════════════════════════════════════════════════════════════
+
+To preview first (dry-run), use this instead:
+
+curl -s https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py | sed 's/DRY_RUN = False/DRY_RUN = True/' | python manage.py shell
+
+═══════════════════════════════════════════════════════════════
+
