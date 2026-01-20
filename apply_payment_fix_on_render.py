@@ -12,22 +12,41 @@ from datetime import datetime
 def download_and_apply_fix():
     """Download updated views.py and apply the fix"""
     
-    # Path to views.py on Render
-    views_path = '/doccano/backend/patches/monlam_ui/views.py'
-    backup_path = f'/doccano/backend/patches/monlam_ui/views.py.backup.{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    # Try multiple possible paths (patches are copied to backend/monlam_ui on Render)
+    possible_paths = [
+        '/doccano/backend/monlam_ui/views.py',  # Most likely (based on Dockerfile)
+        '/doccano/backend/patches/monlam_ui/views.py',  # Alternative
+        '/doccano/monlam_ui/views.py',  # Another possibility
+    ]
+    
+    views_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            views_path = path
+            break
+    
+    if not views_path:
+        print("="*80)
+        print("PAYMENT CALCULATION FIX - Download and Apply")
+        print("="*80)
+        print(f"\n❌ Could not find views.py file!")
+        print(f"   Searched in:")
+        for path in possible_paths:
+            print(f"     - {path}")
+        print(f"\n   Please check the file location and update the script.")
+        return False
+    
+    backup_path = f'{views_path}.backup.{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     
     print("="*80)
     print("PAYMENT CALCULATION FIX - Download and Apply")
     print("="*80)
+    print(f"\n📁 Found file at: {views_path}")
     
     # Step 1: Backup existing file
-    if os.path.exists(views_path):
-        print(f"\n1. Backing up existing file...")
-        shutil.copy2(views_path, backup_path)
-        print(f"   ✅ Backup created: {backup_path}")
-    else:
-        print(f"   ⚠️  File not found at {views_path}")
-        return False
+    print(f"\n1. Backing up existing file...")
+    shutil.copy2(views_path, backup_path)
+    print(f"   ✅ Backup created: {backup_path}")
     
     # Step 2: Download updated file from GitHub
     print(f"\n2. Downloading updated views.py from GitHub...")
