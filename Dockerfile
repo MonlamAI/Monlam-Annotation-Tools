@@ -74,6 +74,14 @@ COPY patches/backend/create_roles.py /doccano/backend/roles/management/commands/
 # MONLAM: Patched permissions (adds project_manager to IsProjectMember)
 COPY patches/backend/project_permissions.py /doccano/backend/projects/permissions.py
 
+# CRITICAL FIX: Patch example delete endpoint to prevent accidental deletion of all examples
+# Original bug: If delete_ids is empty [], it deletes ALL examples
+# Fix: Require explicit IDs, return error if none provided
+COPY patches/backend/patch_example_delete.py /tmp/patch_example_delete.py
+RUN python3 /tmp/patch_example_delete.py /doccano/backend/examples/views/example.py && \
+    rm /tmp/patch_example_delete.py && \
+    echo "✅ Patched example delete endpoint to prevent accidental deletion"
+
 # Example JSONL files (required for import options to appear)
 COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
