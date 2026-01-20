@@ -2,29 +2,28 @@
 ONE-LINER TO DOWNLOAD AND RUN FIX FROM GIT (Python Version)
 ═══════════════════════════════════════════════════════════════
 
-OPTION 1: Direct Python execution (recommended)
+OPTION 1: Download then run via Django shell (RECOMMENDED)
 ───────────────────────────────────────────────────────────────
 Copy and paste this entire command:
 
-python -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode())"
+python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py', '/tmp/fix_status_simple.py')" && python manage.py shell < /tmp/fix_status_simple.py
 
 ═══════════════════════════════════════════════════════════════
 
-OPTION 2: Via Django shell
+OPTION 2: Download to current directory then run
 ───────────────────────────────────────────────────────────────
-python -c "import urllib.request; code = urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode(); exec(code)" | python manage.py shell
+python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py', 'fix_status_simple.py')" && python manage.py shell < fix_status_simple.py
 
 ═══════════════════════════════════════════════════════════════
 
-OPTION 3: Download first, then run
+OPTION 3: Direct execution via Django shell (if Django is ready)
 ───────────────────────────────────────────────────────────────
-python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py', 'fix_status_simple.py')"
-python manage.py shell < fix_status_simple.py
+python manage.py shell -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode())"
 
 ═══════════════════════════════════════════════════════════════
 
-To preview first (dry-run), add this to Option 1:
+To preview first (dry-run), add this modification to Option 1:
 
-python -c "import urllib.request; code = urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode(); exec(code.replace('DRY_RUN = False', 'DRY_RUN = True'))"
+python -c "import urllib.request; code = urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode(); open('/tmp/fix_status_simple.py', 'w').write(code.replace('DRY_RUN = False', 'DRY_RUN = True'))" && python manage.py shell < /tmp/fix_status_simple.py
 
 ═══════════════════════════════════════════════════════════════
