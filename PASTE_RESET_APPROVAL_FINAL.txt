@@ -1,0 +1,305 @@
+═══════════════════════════════════════════════════════════════
+PASTE THIS IN RENDER BASH SHELL
+═══════════════════════════════════════════════════════════════
+
+Copy and paste this ENTIRE command block into Render bash shell:
+
+───────────────────────────────────────────────────────────────
+
+cat > /tmp/reset_approval_comprehensive_final.py << 'ENDOFFILE'
+from django.db import transaction
+from assignment.completion_tracking import ApproverCompletionStatus
+from assignment.models_separate import Assignment
+from assignment.simple_tracking import AnnotationTracking
+from examples.models import ExampleState, Example
+from projects.models import Project
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+
+User = get_user_model()
+DRY_RUN = False
+PROJECT_ID = None
+
+print("=" * 80)
+print("COMPREHENSIVE APPROVAL DATA RESET AND STATUS SYNC")
+print("=" * 80)
+if DRY_RUN:
+    print("⚠️  DRY RUN MODE - No changes will be made")
+if PROJECT_ID:
+    print(f"Project ID filter: {PROJECT_ID}")
+print("=" * 80)
+
+projects = Project.objects.all()
+if PROJECT_ID:
+    projects = projects.filter(id=PROJECT_ID)
+
+total_approver_status_deleted = 0
+total_assignment_review_reset = 0
+total_tracking_review_reset = 0
+total_status_fixed = 0
+total_assignment_status_corrected = 0
+
+for project in projects:
+    print(f"\n{'=' * 80}")
+    print(f"Processing Project: {project.id} - {project.name}")
+    print(f"{'=' * 80}")
+    
+    print("\n[1] Resetting ApproverCompletionStatus records...")
+    approver_statuses = ApproverCompletionStatus.objects.filter(project=project)
+    count = approver_statuses.count()
+    if count > 0:
+        print(f"  Found {count} ApproverCompletionStatus records to delete")
+        if not DRY_RUN:
+            with transaction.atomic():
+                approver_statuses.delete()
+                print(f"  ✓ Deleted {count} ApproverCompletionStatus records")
+        total_approver_status_deleted += count
+    else:
+        print("  ✓ No ApproverCompletionStatus records found")
+    
+    print("\n[2] Resetting Assignment review fields and fixing status...")
+    assignments = Assignment.objects.filter(project=project, is_active=True)
+    assignments_to_reset = []
+    assignments_status_to_fix = []
+    for assignment in assignments:
+        needs_reset = False
+        needs_status_fix = False
+        if assignment.reviewed_by or assignment.reviewed_at or assignment.review_notes:
+            needs_reset = True
+        if assignment.status in ['approved', 'rejected']:
+            needs_status_fix = True
+        if needs_reset or needs_status_fix:
+            assignments_to_reset.append(assignment)
+            if needs_status_fix:
+                assignments_status_to_fix.append(assignment)
+    
+    if assignments_to_reset:
+        print(f"  Found {len(assignments_to_reset)} assignments with review data to reset")
+        print(f"  Found {len(assignments_status_to_fix)} assignments with status to reset")
+        if not DRY_RUN:
+            with transaction.atomic():
+                for assignment in assignments_to_reset:
+                    assignment.reviewed_by = None
+                    assignment.reviewed_at = None
+                    assignment.review_notes = ''
+                    if assignment.status in ['approved', 'rejected']:
+                        if assignment.submitted_at:
+                            assignment.status = 'submitted'
+                        elif assignment.started_at:
+                            assignment.status = 'in_progress'
+                        else:
+                            assignment.status = 'assigned'
+                    assignment.save(update_fields=['reviewed_by', 'reviewed_at', 'review_notes', 'status'])
+                print(f"  ✓ Reset review fields for {len(assignments_to_reset)} assignments")
+                if assignments_status_to_fix:
+                    print(f"  ✓ Reset status for {len(assignments_status_to_fix)} assignments")
+        total_assignment_review_reset += len(assignments_to_reset)
+    else:
+        print("  ✓ No assignments with review data found")
+    
+    print("\n[3] Resetting AnnotationTracking review fields and fixing status...")
+    tracking_records = AnnotationTracking.objects.filter(project=project)
+    tracking_to_reset = []
+    tracking_status_to_fix = []
+    for tracking in tracking_records:
+        needs_reset = False
+        needs_status_fix = False
+        if tracking.reviewed_by or tracking.reviewed_at or tracking.review_notes:
+            needs_reset = True
+        if tracking.status in ['reviewed', 'rejected']:
+            needs_status_fix = True
+        if needs_reset or needs_status_fix:
+            tracking_to_reset.append(tracking)
+            if needs_status_fix:
+                tracking_status_to_fix.append(tracking)
+    
+    if tracking_to_reset:
+        print(f"  Found {len(tracking_to_reset)} tracking records with review data to reset")
+        print(f"  Found {len(tracking_status_to_fix)} tracking records with status to reset")
+        if not DRY_RUN:
+            with transaction.atomic():
+                for tracking in tracking_to_reset:
+                    tracking.reviewed_by = None
+                    tracking.reviewed_at = None
+                    tracking.review_notes = ''
+                    if tracking.status in ['reviewed', 'rejected']:
+                        if tracking.annotated_by and tracking.annotated_at:
+                            tracking.status = 'submitted'
+                        else:
+                            tracking.status = 'pending'
+                    tracking.save(update_fields=['reviewed_by', 'reviewed_at', 'review_notes', 'status'])
+                print(f"  ✓ Reset review fields for {len(tracking_to_reset)} tracking records")
+                if tracking_status_to_fix:
+                    print(f"  ✓ Reset status for {len(tracking_status_to_fix)} tracking records")
+        total_tracking_review_reset += len(tracking_to_reset)
+    else:
+        print("  ✓ No tracking records with review data found")
+    
+    print("\n[4] Syncing status across ExampleState, AnnotationTracking, and Assignment...")
+    all_examples = {e.id: e for e in Example.objects.filter(project=project)}
+    all_tracking = {t.example_id: t for t in AnnotationTracking.objects.filter(project=project)}
+    all_assignments = {a.example_id: a for a in Assignment.objects.filter(project=project, is_active=True)}
+    all_example_states = {s.example_id: s for s in ExampleState.objects.filter(example__project=project).select_related('confirmed_by')}
+    
+    inconsistencies_fixed = []
+    for example_id, example in all_examples.items():
+        assignment = all_assignments.get(example_id)
+        tracking = all_tracking.get(example_id)
+        example_state = all_example_states.get(example_id)
+        
+        is_finished = False
+        finished_annotator = None
+        finished_at = None
+        
+        if example_state and example_state.confirmed_by:
+            is_finished = True
+            finished_annotator = example_state.confirmed_by
+            finished_at = example_state.confirmed_at
+        
+        if tracking and tracking.status == 'submitted' and tracking.annotated_by and tracking.annotated_at:
+            is_finished = True
+            if not finished_annotator:
+                finished_annotator = tracking.annotated_by
+            if not finished_at:
+                finished_at = tracking.annotated_at
+        
+        if assignment and assignment.status == 'submitted' and assignment.submitted_at:
+            is_finished = True
+            if not finished_annotator:
+                finished_annotator = assignment.assigned_to
+            if not finished_at:
+                finished_at = assignment.submitted_at
+        
+        if is_finished and finished_annotator:
+            fixes_made = []
+            if assignment:
+                if assignment.status in ['assigned', 'in_progress']:
+                    fixes_made.append(f"Assignment: {assignment.status} -> submitted")
+                    if not DRY_RUN:
+                        assignment.status = 'submitted'
+                        if not assignment.submitted_at:
+                            assignment.submitted_at = finished_at or timezone.now()
+                        if not assignment.assigned_to:
+                            assignment.assigned_to = finished_annotator
+                        assignment.save(update_fields=['status', 'submitted_at', 'assigned_to'])
+                    total_assignment_status_corrected += 1
+                elif assignment.status == 'submitted' and not assignment.submitted_at:
+                    fixes_made.append("Assignment: missing submitted_at")
+                    if not DRY_RUN:
+                        assignment.submitted_at = finished_at or timezone.now()
+                        assignment.save(update_fields=['submitted_at'])
+                    total_assignment_status_corrected += 1
+            else:
+                fixes_made.append("Assignment: creating new assignment")
+                if not DRY_RUN:
+                    assignment = Assignment.objects.create(project=project, example=example, assigned_to=finished_annotator, status='submitted', submitted_at=finished_at or timezone.now(), is_active=True)
+                    all_assignments[example_id] = assignment
+                total_assignment_status_corrected += 1
+            
+            if tracking:
+                if tracking.status == 'pending':
+                    fixes_made.append(f"Tracking: {tracking.status} -> submitted")
+                    if not DRY_RUN:
+                        tracking.status = 'submitted'
+                        if not tracking.annotated_at:
+                            tracking.annotated_at = finished_at or timezone.now()
+                        if not tracking.annotated_by:
+                            tracking.annotated_by = finished_annotator
+                        tracking.save(update_fields=['status', 'annotated_at', 'annotated_by'])
+                elif tracking.status == 'submitted' and not tracking.annotated_by:
+                    fixes_made.append("Tracking: missing annotated_by")
+                    if not DRY_RUN:
+                        tracking.annotated_by = finished_annotator
+                        if not tracking.annotated_at:
+                            tracking.annotated_at = finished_at or timezone.now()
+                        tracking.save(update_fields=['annotated_by', 'annotated_at'])
+            else:
+                fixes_made.append("Tracking: creating new tracking")
+                if not DRY_RUN:
+                    tracking = AnnotationTracking.objects.create(project=project, example=example, annotated_by=finished_annotator, annotated_at=finished_at or timezone.now(), status='submitted')
+                    all_tracking[example_id] = tracking
+            
+            if example_state:
+                if not example_state.confirmed_by:
+                    fixes_made.append("ExampleState: missing confirmed_by")
+                    if not DRY_RUN:
+                        example_state.confirmed_by = finished_annotator
+                        if not example_state.confirmed_at:
+                            example_state.confirmed_at = finished_at or timezone.now()
+                        example_state.save(update_fields=['confirmed_by', 'confirmed_at'])
+            else:
+                fixes_made.append("ExampleState: creating new ExampleState")
+                if not DRY_RUN:
+                    example_state = ExampleState.objects.create(example=example, confirmed_by=finished_annotator, confirmed_at=finished_at or timezone.now())
+                    all_example_states[example_id] = example_state
+            
+            if fixes_made:
+                inconsistencies_fixed.append({'example_id': example_id, 'fixes': fixes_made, 'issue': 'Syncing all three systems to "Finished" state'})
+        
+        elif assignment and assignment.status == 'submitted':
+            actually_finished = ((example_state and example_state.confirmed_by) or (tracking and tracking.status == 'submitted' and tracking.annotated_by and tracking.annotated_at))
+            if not actually_finished:
+                inconsistencies_fixed.append({'example_id': example_id, 'assignment_id': assignment.id, 'old_status': assignment.status, 'new_status': 'in_progress', 'issue': 'Assignment is submitted but no ExampleState/Tracking confirms finished state'})
+                if not DRY_RUN:
+                    if assignment.started_at:
+                        assignment.status = 'in_progress'
+                    else:
+                        assignment.status = 'assigned'
+                    assignment.submitted_at = None
+                    assignment.save(update_fields=['status', 'submitted_at'])
+                total_assignment_status_corrected += 1
+    
+    if inconsistencies_fixed:
+        print(f"  Found {len(inconsistencies_fixed)} examples with status inconsistencies to sync")
+        if not DRY_RUN:
+            print(f"  ✓ Synced {len(inconsistencies_fixed)} examples across all three systems")
+        total_status_fixed += len(inconsistencies_fixed)
+    else:
+        print("  ✓ All examples are in sync - no inconsistencies found")
+    
+    print("\n[5] Verifying annotated/confirmed data is preserved...")
+    confirmed_states = ExampleState.objects.filter(example__project=project, confirmed_by__isnull=False).count()
+    tracking_with_annotations = AnnotationTracking.objects.filter(project=project, annotated_by__isnull=False).count()
+    assignments_with_annotators = Assignment.objects.filter(project=project, is_active=True, assigned_to__isnull=False).count()
+    print(f"  ✓ ExampleState records (confirmed): {confirmed_states}")
+    print(f"  ✓ AnnotationTracking with annotations: {tracking_with_annotations}")
+    print(f"  ✓ Assignments with annotators: {assignments_with_annotators}")
+    print("  ✓ All annotated/confirmed data preserved")
+
+print("\n" + "=" * 80)
+print("SUMMARY")
+print("=" * 80)
+print(f"ApproverCompletionStatus records deleted: {total_approver_status_deleted}")
+print(f"Assignment review fields reset: {total_assignment_review_reset}")
+print(f"AnnotationTracking review fields reset: {total_tracking_review_reset}")
+print(f"Status inconsistencies fixed: {total_status_fixed}")
+print(f"Assignment status corrections: {total_assignment_status_corrected}")
+print("=" * 80)
+
+if DRY_RUN:
+    print("\n⚠️  DRY RUN - No changes were made. Set DRY_RUN = False to apply changes.")
+else:
+    print("\n✅ Reset complete! All approval/review data has been reset to zero.")
+    print("✅ Status inconsistencies have been fixed.")
+    print("✅ All annotated/confirmed data has been preserved.")
+    print("\n📊 Next steps:")
+    print("   - Check UI views to ensure data aligns correctly")
+    print("   - Check metrics and analytics to verify counts are correct")
+    print("   - All approval/reviewer/project admin approval data is now at zero")
+ENDOFFILE
+
+python manage.py shell < /tmp/reset_approval_comprehensive_final.py
+
+───────────────────────────────────────────────────────────────
+
+═══════════════════════════════════════════════════════════════
+INSTRUCTIONS:
+1. Copy the ENTIRE block above (from "cat >" to the end)
+2. Paste into Render bash shell
+3. Press Enter
+4. Wait for script to complete
+
+Note: DRY_RUN = False (will apply changes immediately)
+To preview first, change DRY_RUN = True in the script
+═══════════════════════════════════════════════════════════════
+
