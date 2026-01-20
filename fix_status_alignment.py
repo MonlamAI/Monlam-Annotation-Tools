@@ -77,6 +77,9 @@ for project in projects:
         if assignment.status == 'approved':
             example_state = all_example_states.get(example_id)
             
+            # Check if there's actually an ApproverCompletionStatus record
+            has_approval_record = example_id in approved_example_ids
+            
             # If approved but no ExampleState.confirmed_by, it shows "In progress" + "APPROVED"
             if not example_state or not example_state.confirmed_by:
                 annotator = assignment.assigned_to
@@ -104,6 +107,22 @@ for project in projects:
                     
                     total_approved_without_confirmed += 1
                     total_fixed += 1
+            
+            # Also reset Assignment.status if there's no ApproverCompletionStatus record
+            # (This shouldn't happen after reset, but just in case)
+            if not has_approval_record:
+                fixes_made.append({
+                    'example_id': example_id,
+                    'issue': 'Assignment.status=approved but no ApproverCompletionStatus record exists',
+                    'fix': "Reset Assignment.status to 'submitted'",
+                    'type': 'approved_without_record'
+                })
+                
+                if not DRY_RUN:
+                    assignment.status = 'submitted'
+                    assignment.save(update_fields=['status'])
+                    print(f"  ⚠️  Reset Assignment {assignment.id} status from 'approved' to 'submitted' (no ApproverCompletionStatus record)")
+                total_fixed += 1
     
     # Also check ApproverCompletionStatus records (if any exist after reset)
     for example_id in approved_example_ids:
