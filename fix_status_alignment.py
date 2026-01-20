@@ -72,6 +72,40 @@ for project in projects:
     # ============================================
     print("\n[1] Fixing 'In progress' + 'APPROVED' inconsistencies...")
     
+    # Check assignments with status='approved' (UI shows APPROVED based on Assignment.status)
+    for example_id, assignment in all_assignments.items():
+        if assignment.status == 'approved':
+            example_state = all_example_states.get(example_id)
+            
+            # If approved but no ExampleState.confirmed_by, it shows "In progress" + "APPROVED"
+            if not example_state or not example_state.confirmed_by:
+                annotator = assignment.assigned_to
+                if annotator:
+                    fixes_made.append({
+                        'example_id': example_id,
+                        'issue': 'Assignment.status=approved but missing ExampleState.confirmed_by (shows "In progress" instead of "Finished")',
+                        'fix': f'Set ExampleState.confirmed_by to {annotator.username}',
+                        'type': 'approved_without_confirmed'
+                    })
+                    
+                    if not DRY_RUN:
+                        if example_state:
+                            example_state.confirmed_by = annotator
+                            if not example_state.confirmed_at:
+                                example_state.confirmed_at = assignment.submitted_at or assignment.started_at or timezone.now()
+                            example_state.save(update_fields=['confirmed_by', 'confirmed_at'])
+                        else:
+                            example_state = ExampleState.objects.create(
+                                example=all_examples[example_id],
+                                confirmed_by=annotator,
+                                confirmed_at=assignment.submitted_at or assignment.started_at or timezone.now()
+                            )
+                            all_example_states[example_id] = example_state
+                    
+                    total_approved_without_confirmed += 1
+                    total_fixed += 1
+    
+    # Also check ApproverCompletionStatus records (if any exist after reset)
     for example_id in approved_example_ids:
         example = all_examples.get(example_id)
         if not example:
