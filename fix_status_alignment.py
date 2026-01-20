@@ -73,6 +73,8 @@ for project in projects:
     print("\n[1] Fixing 'In progress' + 'APPROVED' inconsistencies...")
     
     # Check assignments with status='approved' (UI shows APPROVED based on Assignment.status)
+    # RULE: "In progress" = not finished yet, so CANNOT be approved
+    # If Assignment.status='approved' but ExampleState.confirmed_by is NULL → INVALID, reset status
     for example_id, assignment in all_assignments.items():
         if assignment.status == 'approved':
             example_state = all_example_states.get(example_id)
@@ -80,37 +82,41 @@ for project in projects:
             # Check if there's actually an ApproverCompletionStatus record
             has_approval_record = example_id in approved_example_ids
             
-            # If approved but no ExampleState.confirmed_by, it shows "In progress" + "APPROVED"
+            # If approved but no ExampleState.confirmed_by → INVALID
+            # "In progress" cannot be approved - reset the status
             if not example_state or not example_state.confirmed_by:
-                annotator = assignment.assigned_to
-                if annotator:
-                    fixes_made.append({
-                        'example_id': example_id,
-                        'issue': 'Assignment.status=approved but missing ExampleState.confirmed_by (shows "In progress" instead of "Finished")',
-                        'fix': f'Set ExampleState.confirmed_by to {annotator.username}',
-                        'type': 'approved_without_confirmed'
-                    })
-                    
-                    if not DRY_RUN:
-                        if example_state:
-                            example_state.confirmed_by = annotator
-                            if not example_state.confirmed_at:
-                                example_state.confirmed_at = assignment.submitted_at or assignment.started_at or timezone.now()
-                            example_state.save(update_fields=['confirmed_by', 'confirmed_at'])
-                        else:
-                            example_state = ExampleState.objects.create(
-                                example=all_examples[example_id],
-                                confirmed_by=annotator,
-                                confirmed_at=assignment.submitted_at or assignment.started_at or timezone.now()
-                            )
-                            all_example_states[example_id] = example_state
-                    
-                    total_approved_without_confirmed += 1
-                    total_fixed += 1
+                # Determine correct status based on actual progress
+                if assignment.submitted_at:
+                    # Was submitted, so set to 'submitted'
+                    new_status = 'submitted'
+                elif assignment.started_at:
+                    # Was started but not submitted, so 'in_progress'
+                    new_status = 'in_progress'
+                else:
+                    # Just assigned, never started
+                    new_status = 'assigned'
+                
+                fixes_made.append({
+                    'example_id': example_id,
+                    'issue': f'Assignment.status=approved but missing ExampleState.confirmed_by (INVALID: "In progress" cannot be approved)',
+                    'fix': f"Reset Assignment.status from 'approved' to '{new_status}'",
+                    'type': 'approved_without_confirmed'
+                })
+                
+                if not DRY_RUN:
+                    assignment.status = new_status
+                    assignment.reviewed_by = None
+                    assignment.reviewed_at = None
+                    assignment.review_notes = ''
+                    assignment.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_notes'])
+                    print(f"  ✓ Reset Assignment {assignment.id} status from 'approved' to '{new_status}' (not finished, cannot be approved)")
+                
+                total_approved_without_confirmed += 1
+                total_fixed += 1
             
             # Also reset Assignment.status if there's no ApproverCompletionStatus record
             # (This shouldn't happen after reset, but just in case)
-            if not has_approval_record:
+            elif not has_approval_record:
                 fixes_made.append({
                     'example_id': example_id,
                     'issue': 'Assignment.status=approved but no ApproverCompletionStatus record exists',
@@ -120,8 +126,11 @@ for project in projects:
                 
                 if not DRY_RUN:
                     assignment.status = 'submitted'
-                    assignment.save(update_fields=['status'])
-                    print(f"  ⚠️  Reset Assignment {assignment.id} status from 'approved' to 'submitted' (no ApproverCompletionStatus record)")
+                    assignment.reviewed_by = None
+                    assignment.reviewed_at = None
+                    assignment.review_notes = ''
+                    assignment.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'review_notes'])
+                    print(f"  ✓ Reset Assignment {assignment.id} status from 'approved' to 'submitted' (no ApproverCompletionStatus record)")
                 total_fixed += 1
     
     # Also check ApproverCompletionStatus records (if any exist after reset)
