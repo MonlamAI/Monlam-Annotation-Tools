@@ -2,23 +2,29 @@
 ONE-LINER TO DOWNLOAD AND RUN FIX FROM GIT (Python Version)
 ═══════════════════════════════════════════════════════════════
 
-Copy and paste this entire command in Render shell:
+OPTION 1: Direct Python execution (recommended)
+───────────────────────────────────────────────────────────────
+Copy and paste this entire command:
 
 python -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode())"
 
 ═══════════════════════════════════════════════════════════════
 
-This will:
-1. Download fix_status_simple.py from GitHub using Python's urllib
-2. Execute it directly in Django context
-3. Fix all incorrect Assignment.status values
-4. Show what was fixed
+OPTION 2: Via Django shell
+───────────────────────────────────────────────────────────────
+python -c "import urllib.request; code = urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode(); exec(code)" | python manage.py shell
 
 ═══════════════════════════════════════════════════════════════
 
-To preview first (dry-run), use this instead:
+OPTION 3: Download first, then run
+───────────────────────────────────────────────────────────────
+python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py', 'fix_status_simple.py')"
+python manage.py shell < fix_status_simple.py
+
+═══════════════════════════════════════════════════════════════
+
+To preview first (dry-run), add this to Option 1:
 
 python -c "import urllib.request; code = urllib.request.urlopen('https://raw.githubusercontent.com/MonlamAI/Monlam-Annotation-Tools/main/fix_status_simple.py').read().decode(); exec(code.replace('DRY_RUN = False', 'DRY_RUN = True'))"
 
 ═══════════════════════════════════════════════════════════════
-
