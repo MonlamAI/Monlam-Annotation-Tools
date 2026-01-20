@@ -18,8 +18,9 @@ def patch_example_delete(file_path):
         # Pattern to match the delete method
         old_pattern = r'    def delete\(self, request, \*args, \*\*kwargs\):\s+queryset = self\.project\.examples\s+delete_ids = request\.data\["ids"\]\s+if delete_ids:\s+queryset\.filter\(pk__in=delete_ids\)\.delete\(\)\s+else:\s+queryset\.all\(\)\.delete\(\)\s+return Response\(status=status\.HTTP_204_NO_CONTENT\)'
         
-        # New implementation
-        new_code = '''    def delete(self, request, *args, **kwargs):
+        # New implementation (with blank line before method)
+        new_code = '''
+    def delete(self, request, *args, **kwargs):
         queryset = self.project.examples
         delete_ids = request.data.get("ids", [])
         
@@ -38,12 +39,12 @@ def patch_example_delete(file_path):
             status=status.HTTP_200_OK
         )'''
         
-        # Try multiline pattern match
-        pattern = r'(\s+)def delete\(self, request, \*args, \*\*kwargs\):.*?return Response\(status=status\.HTTP_204_NO_CONTENT\)'
+        # Try multiline pattern match (include blank line before method if present)
+        pattern = r'(\n\s+)def delete\(self, request, \*args, \*\*kwargs\):.*?return Response\(status=status\.HTTP_204_NO_CONTENT\)'
         
         if re.search(pattern, content, re.DOTALL):
-            # Replace the entire method
-            content = re.sub(pattern, new_code, content, flags=re.DOTALL)
+            # Replace the entire method (preserve blank line before)
+            content = re.sub(pattern, r'\1' + new_code.lstrip(), content, flags=re.DOTALL)
             
             with open(file_path, 'w') as f:
                 f.write(content)
@@ -72,6 +73,9 @@ def patch_example_delete(file_path):
                 if in_delete_method:
                     # Check if this is the return statement that ends the method
                     if 'return Response(status=status.HTTP_204_NO_CONTENT)' in line:
+                        # Add blank line before new method (if previous line wasn't blank)
+                        if new_lines and new_lines[-1].strip():
+                            new_lines.append('')
                         # Add the new implementation
                         new_lines.append('        queryset = self.project.examples')
                         new_lines.append('        delete_ids = request.data.get("ids", [])')
