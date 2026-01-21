@@ -1,90 +1,152 @@
 <template>
   <div>
-    <!-- Status Summary Card - Always visible -->
-    <v-card class="mb-4" elevation="2">
-      <v-card-title class="text-subtitle-2 font-weight-bold pa-2" style="background-color: #1976d2; color: white;">
-        <v-icon left small dark>mdi-information</v-icon>
+    <!-- Status Summary Card - Prominent display at the top -->
+    <v-card class="mb-4" elevation="4" style="border: 2px solid #1976d2; border-radius: 8px;">
+      <v-card-title class="text-h6 font-weight-bold pa-3" style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); color: white;">
+        <v-icon left dark size="24">mdi-information</v-icon>
         Status Summary
       </v-card-title>
-      <v-card-text class="pa-3">
-        <div v-if="isLoadingStatus" class="text-center">
-          <v-progress-circular indeterminate size="20" class="mr-2"></v-progress-circular>
-          <span class="text-caption">Loading status...</span>
+      <v-card-text class="pa-4">
+        <div v-if="isLoadingStatus" class="text-center py-4">
+          <v-progress-circular indeterminate size="32" class="mr-2"></v-progress-circular>
+          <span class="text-body-1">Loading status...</span>
         </div>
         <div v-else>
           <!-- Submitted Status -->
-          <div v-if="submittedBy" class="mb-2">
-            <v-chip color="info" text-color="white" small class="mr-2">
-              <v-icon small left>mdi-clock-outline</v-icon>
+          <div v-if="submittedBy" class="mb-3">
+            <v-chip color="info" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+              <v-icon left size="18">mdi-clock-outline</v-icon>
               Submitted
             </v-chip>
-            <span class="text-caption">by <strong>{{ submittedBy }}</strong></span>
-            <span v-if="annotatedAt" class="text-caption ml-2 text--secondary">
-              at {{ formatDate(annotatedAt) }}
-            </span>
+            <div class="mt-2">
+              <span class="text-body-2">by <strong style="font-size: 15px;">{{ submittedBy }}</strong></span>
+              <span v-if="annotatedAt" class="text-body-2 ml-3 text--secondary">
+                at {{ formatDate(annotatedAt) }}
+              </span>
+            </div>
           </div>
-          <div v-else-if="isSubmitted" class="mb-2">
-            <v-chip color="info" text-color="white" small class="mr-2">
-              <v-icon small left>mdi-clock-outline</v-icon>
+          <div v-else-if="isSubmitted" class="mb-3">
+            <v-chip color="info" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+              <v-icon left size="18">mdi-clock-outline</v-icon>
               Submitted
             </v-chip>
-            <span v-if="annotatedAt" class="text-caption ml-2 text--secondary">
-              at {{ formatDate(annotatedAt) }}
-            </span>
+            <div class="mt-2" v-if="annotatedAt">
+              <span class="text-body-2 text--secondary">
+                at {{ formatDate(annotatedAt) }}
+              </span>
+            </div>
           </div>
           
           <!-- Approved Status - Only show if status is actually approved/reviewed -->
           <div v-if="status === 'reviewed' || status === 'approved'">
-            <div v-if="reviewedBy" class="mb-2">
-              <v-chip color="success" text-color="white" small class="mr-2">
-                <v-icon small left>mdi-check-circle</v-icon>
+            <!-- Show reviewedBy if available (from tracking API or approval chain fallback) -->
+            <div v-if="reviewedBy" class="mb-3">
+              <v-chip color="success" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-check-circle</v-icon>
                 {{ status === 'reviewed' ? 'Reviewed' : 'Approved' }}
               </v-chip>
-              <span class="text-caption">by <strong>{{ reviewedBy }}</strong></span>
-              <span v-if="reviewedAt" class="text-caption ml-2 text--secondary">
-                at {{ formatDate(reviewedAt) }}
-              </span>
+              <div class="mt-2">
+                <span class="text-body-2">by <strong style="font-size: 15px;">{{ reviewedBy }}</strong></span>
+                <span v-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
+                  at {{ formatDate(reviewedAt) }}
+                </span>
+              </div>
             </div>
-            <div v-else-if="approvedBy" class="mb-2">
-              <v-chip color="success" text-color="white" small class="mr-2">
-                <v-icon small left>mdi-check-circle</v-icon>
-                Approved
+            <!-- Show approvedBy if available (from approval chain) and reviewedBy is not set -->
+            <div v-else-if="approvedBy" class="mb-3">
+              <v-chip color="success" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-check-circle</v-icon>
+                {{ status === 'reviewed' ? 'Reviewed' : 'Approved' }}
               </v-chip>
-              <span class="text-caption">by <strong>{{ approvedBy }}</strong></span>
-              <span v-if="reviewedAt" class="text-caption ml-2 text--secondary">
-                at {{ formatDate(reviewedAt) }}
-              </span>
+              <div class="mt-2">
+                <span class="text-body-2">by <strong style="font-size: 15px;">{{ approvedBy }}</strong></span>
+                <span v-if="approvedAt" class="text-body-2 ml-3 text--secondary">
+                  at {{ formatDate(approvedAt) }}
+                </span>
+                <span v-else-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
+                  at {{ formatDate(reviewedAt) }}
+                </span>
+              </div>
             </div>
-            <div v-else-if="projectAdminApproved" class="mb-2">
-              <v-chip color="success" text-color="white" small>
-                <v-icon small left>mdi-check-circle</v-icon>
-                Final Approved
+            <!-- Show project admin approval status if no specific reviewer info -->
+            <div v-else-if="projectAdminApproved" class="mb-3">
+              <v-chip color="success" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-check-circle</v-icon>
+                {{ status === 'reviewed' ? 'Reviewed' : 'Final Approved' }}
               </v-chip>
+              <div class="mt-2">
+                <span class="text-body-2">by Project Admin</span>
+              </div>
             </div>
-            <div v-else-if="annotationApproverApproved" class="mb-2">
-              <v-chip color="success" text-color="white" small>
-                <v-icon small left>mdi-check-circle</v-icon>
-                Approved by Approver
+            <!-- Show annotation approver approval status if no specific reviewer info -->
+            <div v-else-if="annotationApproverApproved" class="mb-3">
+              <v-chip color="success" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-check-circle</v-icon>
+                {{ status === 'reviewed' ? 'Reviewed' : 'Approved' }}
               </v-chip>
+              <div class="mt-2">
+                <span class="text-body-2">by Annotation Approver</span>
+              </div>
+            </div>
+            <!-- Fallback: show status without specific reviewer (should rarely happen) -->
+            <div v-else class="mb-3">
+              <v-chip color="success" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-check-circle</v-icon>
+                {{ status === 'reviewed' ? 'Reviewed' : 'Approved' }}
+              </v-chip>
+              <div class="mt-2">
+                <span class="text-body-2">by Reviewer</span>
+              </div>
             </div>
           </div>
           
           <!-- Rejected Status -->
-          <div v-if="status === 'rejected' && reviewedBy" class="mb-2">
-            <v-chip color="error" text-color="white" small class="mr-2">
-              <v-icon small left>mdi-close-circle</v-icon>
-              Rejected
-            </v-chip>
-            <span class="text-caption">by <strong>{{ reviewedBy }}</strong></span>
-            <span v-if="reviewedAt" class="text-caption ml-2 text--secondary">
-              at {{ formatDate(reviewedAt) }}
-            </span>
+          <div v-if="status === 'rejected'">
+            <!-- Show reviewedBy if available (from tracking API) -->
+            <div v-if="reviewedBy" class="mb-3">
+              <v-chip color="error" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-close-circle</v-icon>
+                Rejected
+              </v-chip>
+              <div class="mt-2">
+                <span class="text-body-2">by <strong style="font-size: 15px;">{{ reviewedBy }}</strong></span>
+                <span v-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
+                  at {{ formatDate(reviewedAt) }}
+                </span>
+              </div>
+            </div>
+            <!-- Show rejectedBy if available (from approval chain) and reviewedBy is not set -->
+            <div v-else-if="rejectedBy" class="mb-3">
+              <v-chip color="error" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-close-circle</v-icon>
+                Rejected
+              </v-chip>
+              <div class="mt-2">
+                <span class="text-body-2">by <strong style="font-size: 15px;">{{ rejectedBy }}</strong></span>
+                <span v-if="rejectedAt" class="text-body-2 ml-3 text--secondary">
+                  at {{ formatDate(rejectedAt) }}
+                </span>
+                <span v-else-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
+                  at {{ formatDate(reviewedAt) }}
+                </span>
+              </div>
+            </div>
+            <!-- Fallback: show rejection status without specific reviewer -->
+            <div v-else class="mb-3">
+              <v-chip color="error" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+                <v-icon left size="18">mdi-close-circle</v-icon>
+                Rejected
+              </v-chip>
+              <div class="mt-2">
+                <span class="text-body-2">by Reviewer</span>
+              </div>
+            </div>
           </div>
           
           <!-- No Status -->
           <div v-if="!submittedBy && !approvedBy && !isSubmitted && !annotationApproverApproved && !projectAdminApproved && status !== 'reviewed' && status !== 'approved' && status !== 'rejected'">
-            <v-chip color="grey" text-color="white" small>
-              <v-icon small left>mdi-information-outline</v-icon>
+            <v-chip color="grey" text-color="white" class="mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
+              <v-icon left size="18">mdi-information-outline</v-icon>
               Not submitted yet
             </v-chip>
           </div>
@@ -273,6 +335,9 @@ export default Vue.extend({
       isSubmitted: false,
       submittedBy: null,
       approvedBy: null,
+      approvedAt: null,
+      rejectedBy: null,
+      rejectedAt: null,
       reviewedBy: null,
       annotatedAt: null,
       reviewedAt: null,
@@ -321,22 +386,41 @@ export default Vue.extend({
     
     // Always fetch approval chain and status (visible to all users)
     this.isLoadingStatus = true
-    await this.fetchApprovalChain()
+    // Fetch tracking API first to get primary data
     await this.fetchStatusSummary()
+    // Then fetch approval chain and apply fallback if needed
+    await this.fetchApprovalChain()
+    // Apply fallback logic after both API calls complete
+    this.applyApprovalChainFallback()
     await this.checkRole()
     if (this.canApprove) {
       await this.fetchStatus()
+      // Apply fallback again after fetchStatus in case it overwrote something
+      this.applyApprovalChainFallback()
     }
     this.isLoadingStatus = false
   },
 
   watch: {
-    exampleId() {
+    async exampleId() {
+      // Validate exampleId
+      if (!this.exampleId) {
+        return
+      }
+      
+      // Always fetch approval chain and status (visible to all users)
       this.isLoadingStatus = true
-      this.fetchApprovalChain()
-      this.fetchStatusSummary()
+      // Fetch tracking API first to get primary data
+      await this.fetchStatusSummary()
+      // Then fetch approval chain and apply fallback if needed
+      await this.fetchApprovalChain()
+      // Apply fallback logic after both API calls complete
+      this.applyApprovalChainFallback()
+      await this.checkRole()
       if (this.canApprove) {
-        this.fetchStatus()
+        await this.fetchStatus()
+        // Apply fallback again after fetchStatus in case it overwrote something
+        this.applyApprovalChainFallback()
       }
       this.isLoadingStatus = false
     }
@@ -385,8 +469,12 @@ export default Vue.extend({
           this.isSubmitted = data.is_submitted || false
           this.userRole = data.user_role || null
           
-          // Extract approved by from approval chain
+          // Extract approved/rejected by from approval chain
+          // This will be used by applyApprovalChainFallback() method
           this.approvedBy = null // Reset first
+          this.approvedAt = null // Reset timestamp
+          this.rejectedBy = null // Reset first
+          this.rejectedAt = null // Reset timestamp
           if (this.allApprovals && this.allApprovals.length > 0) {
             // Find the first annotation_approver who approved
             const approverApproval = this.allApprovals.find(
@@ -394,6 +482,7 @@ export default Vue.extend({
             )
             if (approverApproval) {
               this.approvedBy = approverApproval.approver_username
+              this.approvedAt = approverApproval.reviewed_at || null
             } else {
               // If no annotation approver, check for project admin approval
               const adminApproval = this.allApprovals.find(
@@ -401,7 +490,17 @@ export default Vue.extend({
               )
               if (adminApproval) {
                 this.approvedBy = adminApproval.approver_username
+                this.approvedAt = adminApproval.reviewed_at || null
               }
+            }
+            
+            // Find the first rejection (any role)
+            const rejectionApproval = this.allApprovals.find(
+              ap => ap.status === 'rejected'
+            )
+            if (rejectionApproval) {
+              this.rejectedBy = rejectionApproval.approver_username
+              this.rejectedAt = rejectionApproval.reviewed_at || null
             }
           }
           
@@ -433,6 +532,57 @@ export default Vue.extend({
       }
     },
 
+    applyApprovalChainFallback() {
+      // Apply fallback logic: if reviewedBy is not set but we have approval chain data, use it
+      if (!this.reviewedBy && this.allApprovals && this.allApprovals.length > 0) {
+        // Priority: annotation_approver > project_admin > any other approver
+        const approverApproval = this.allApprovals.find(
+          ap => ap.approver_role === 'annotation_approver' && ap.status === 'approved'
+        )
+        if (approverApproval) {
+          this.reviewedBy = approverApproval.approver_username
+          this.reviewedAt = approverApproval.reviewed_at || this.reviewedAt
+          return
+        }
+        
+        const adminApproval = this.allApprovals.find(
+          ap => ap.approver_role === 'project_admin' && ap.status === 'approved'
+        )
+        if (adminApproval) {
+          this.reviewedBy = adminApproval.approver_username
+          this.reviewedAt = adminApproval.reviewed_at || this.reviewedAt
+          return
+        }
+        
+        // Fallback: find ANY approval (for cases where status is 'reviewed' but no specific role)
+        const anyApproval = this.allApprovals.find(
+          ap => ap.status === 'approved'
+        )
+        if (anyApproval) {
+          this.reviewedBy = anyApproval.approver_username
+          this.reviewedAt = anyApproval.reviewed_at || this.reviewedAt
+          return
+        }
+        
+        // For rejections - set both reviewedBy (for display) and rejectedBy (for fallback)
+        const rejectionApproval = this.allApprovals.find(
+          ap => ap.status === 'rejected'
+        )
+        if (rejectionApproval) {
+          // Set reviewedBy as primary (for consistent display)
+          if (!this.reviewedBy) {
+            this.reviewedBy = rejectionApproval.approver_username
+            this.reviewedAt = rejectionApproval.reviewed_at || this.reviewedAt
+          }
+          // Also ensure rejectedBy is set (for fallback display)
+          if (!this.rejectedBy) {
+            this.rejectedBy = rejectionApproval.approver_username
+            this.rejectedAt = rejectionApproval.reviewed_at || null
+          }
+        }
+      }
+    },
+
     async fetchStatusSummary() {
       // Fetch submitted by and timestamps from tracking API
       try {
@@ -448,11 +598,18 @@ export default Vue.extend({
           const trackingData = await trackingResp.json()
           // Get who submitted/confirmed (prefer annotated_by, fallback to confirmed_by)
           this.submittedBy = trackingData.annotated_by || trackingData.confirmed_by || null
-          // Get who reviewed/approved
-          this.reviewedBy = trackingData.reviewed_by || null
-          // Store timestamps for display
-          this.annotatedAt = trackingData.annotated_at || null
-          this.reviewedAt = trackingData.reviewed_at || null
+          // Get who reviewed/approved - only overwrite if tracking API has a value
+          // This preserves values set from approval chain fallback
+          if (trackingData.reviewed_by) {
+            this.reviewedBy = trackingData.reviewed_by
+          }
+          // Store timestamps for display - prefer tracking API timestamps
+          if (trackingData.annotated_at) {
+            this.annotatedAt = trackingData.annotated_at
+          }
+          if (trackingData.reviewed_at) {
+            this.reviewedAt = trackingData.reviewed_at
+          }
         }
       } catch (e) {
         console.error('[Monlam Approve] Error fetching tracking status:', e)
@@ -480,10 +637,21 @@ export default Vue.extend({
         const data = await resp.json()
         this.status = data.status || 'pending'
         // Also store timestamps and who did what for display
-        this.annotatedAt = data.annotated_at || null
-        this.reviewedAt = data.reviewed_at || null
-        this.submittedBy = data.annotated_by || data.confirmed_by || this.submittedBy
-        this.reviewedBy = data.reviewed_by || this.reviewedBy
+        // Only update if we have new data, preserve existing values from approval chain
+        if (data.annotated_at) {
+          this.annotatedAt = data.annotated_at
+        }
+        if (data.reviewed_at) {
+          this.reviewedAt = data.reviewed_at
+        }
+        if (data.annotated_by || data.confirmed_by) {
+          this.submittedBy = data.annotated_by || data.confirmed_by || this.submittedBy
+        }
+        // Only overwrite reviewedBy if tracking API has a value
+        // This preserves values set from approval chain fallback
+        if (data.reviewed_by) {
+          this.reviewedBy = data.reviewed_by
+        }
       } catch (error) {
         console.error('[Monlam Approve] Error fetching status:', error)
         this.showSnackbar('❌ Error loading status: ' + error.message, 'error')
@@ -512,9 +680,12 @@ export default Vue.extend({
 
         if (resp.ok) {
           this.$emit('approved')
-          await this.fetchApprovalChain()
+          // Refresh all data in correct order
           await this.fetchStatusSummary()
+          await this.fetchApprovalChain()
+          this.applyApprovalChainFallback()
           await this.fetchStatus()
+          this.applyApprovalChainFallback()
           this.showSnackbar('✅ Example approved successfully!', 'success')
         } else {
           const data = await resp.json()
@@ -557,9 +728,12 @@ export default Vue.extend({
 
         if (resp.ok) {
           this.$emit('rejected')
-          await this.fetchApprovalChain()
+          // Refresh all data in correct order
           await this.fetchStatusSummary()
+          await this.fetchApprovalChain()
+          this.applyApprovalChainFallback()
           await this.fetchStatus()
+          this.applyApprovalChainFallback()
           this.showSnackbar('✅ Example rejected. Annotator will see it again for revision.', 'warning')
         } else {
           const data = await resp.json()
