@@ -15,6 +15,11 @@ urlpatterns = [
          AnnotationTrackingViewSet.as_view({'post': 'mark_submitted'}), 
          name='tracking-mark-submitted'),
     
+    # Get review statistics for the project
+    path('review-stats/', 
+         AnnotationTrackingViewSet.as_view({'get': 'review_stats'}), 
+         name='tracking-review-stats'),
+    
     # Get status of specific example
     path('<int:pk>/status/', 
          AnnotationTrackingViewSet.as_view({'get': 'get_status'}), 

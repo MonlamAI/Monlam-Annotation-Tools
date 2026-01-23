@@ -805,6 +805,102 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=False, methods=['get'], url_path='review-stats')
+    def review_stats(self, request, project_id=None):
+        """
+        Get review statistics for a project (approved/reviewed and rejected counts)
+        
+        GET /v1/projects/{project_id}/tracking/review-stats/
+        
+        Returns:
+        - approved_count: Number of examples that have been approved/reviewed
+        - rejected_count: Number of examples that have been rejected
+        - total_examples: Total number of examples in the project
+        
+        Safe to call frequently - uses efficient database queries with indexes.
+        """
+        from projects.models import Project, Member
+        
+        try:
+            project = Project.objects.get(pk=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': 'Project not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check access - user must be a project member
+        if not request.user.is_superuser:
+            is_member = Member.objects.filter(
+                user=request.user,
+                project_id=project_id
+            ).exists()
+            if not is_member:
+                return Response(
+                    {'error': 'Permission denied'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        try:
+            # Get total examples count
+            total_examples = project.examples.count()
+            
+            # Count approved/reviewed examples using AnnotationTracking
+            # Status 'reviewed' means approved/reviewed
+            approved_count = AnnotationTracking.objects.filter(
+                project=project,
+                status='reviewed'
+            ).count()
+            
+            # Count rejected examples
+            rejected_count = AnnotationTracking.objects.filter(
+                project=project,
+                status='rejected'
+            ).count()
+            
+            # Also count from ApproverCompletionStatus for consistency
+            # This ensures we capture all approvals even if AnnotationTracking is missing
+            from .completion_tracking import ApproverCompletionStatus
+            
+            # Count distinct examples that have been approved (at least one approver approved)
+            approved_example_ids = ApproverCompletionStatus.objects.filter(
+                project=project,
+                status='approved'
+            ).values_list('example_id', flat=True).distinct()
+            approver_approved_count = approved_example_ids.count()
+            
+            # Count distinct examples that have been rejected (at least one approver rejected)
+            rejected_example_ids = ApproverCompletionStatus.objects.filter(
+                project=project,
+                status='rejected'
+            ).values_list('example_id', flat=True).distinct()
+            approver_rejected_count = rejected_example_ids.count()
+            
+            # Use the maximum of both counts to ensure we don't miss any
+            # This handles edge cases where one system might be out of sync
+            final_approved_count = max(approved_count, approver_approved_count)
+            final_rejected_count = max(rejected_count, approver_rejected_count)
+            
+            return Response({
+                'approved_count': final_approved_count,
+                'rejected_count': final_rejected_count,
+                'total_examples': total_examples,
+                'submitted_count': AnnotationTracking.objects.filter(
+                    project=project,
+                    status='submitted'
+                ).count(),
+                'pending_count': total_examples - final_approved_count - final_rejected_count - AnnotationTracking.objects.filter(
+                    project=project,
+                    status='submitted'
+                ).count()
+            })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     # ========================================
     # NOTE: Locking endpoints removed - single annotator per project, no race conditions
     # ========================================

@@ -1,5 +1,58 @@
 <template>
   <div>
+    <!-- Review Statistics Counter - Real-time project stats -->
+    <v-card v-if="canApprove" class="mb-4" elevation="2" style="border: 2px solid #4CAF50; border-radius: 8px;">
+      <v-card-title class="text-subtitle-1 font-weight-bold pa-3" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); color: white;">
+        <v-icon left dark size="20">mdi-chart-box</v-icon>
+        Project Review Statistics
+      </v-card-title>
+      <v-card-text class="pa-3">
+        <div v-if="isLoadingStats" class="text-center py-2">
+          <v-progress-circular indeterminate size="24" class="mr-2"></v-progress-circular>
+          <span class="text-body-2">Loading statistics...</span>
+        </div>
+        <div v-else class="d-flex flex-wrap align-center">
+          <v-chip
+            color="success"
+            text-color="white"
+            class="mr-3 mb-2"
+            style="font-size: 14px; height: 36px; padding: 0 16px; font-weight: 600;"
+          >
+            <v-icon left size="18">mdi-check-circle</v-icon>
+            Approved: {{ reviewStats.approved_count || 0 }}
+          </v-chip>
+          <v-chip
+            color="error"
+            text-color="white"
+            class="mr-3 mb-2"
+            style="font-size: 14px; height: 36px; padding: 0 16px; font-weight: 600;"
+          >
+            <v-icon left size="18">mdi-close-circle</v-icon>
+            Rejected: {{ reviewStats.rejected_count || 0 }}
+          </v-chip>
+          <v-chip
+            color="info"
+            text-color="white"
+            class="mr-3 mb-2"
+            style="font-size: 14px; height: 36px; padding: 0 16px; font-weight: 600;"
+          >
+            <v-icon left size="18">mdi-file-document</v-icon>
+            Total: {{ reviewStats.total_examples || 0 }}
+          </v-chip>
+          <v-chip
+            v-if="reviewStats.submitted_count !== undefined"
+            color="warning"
+            text-color="white"
+            class="mb-2"
+            style="font-size: 14px; height: 36px; padding: 0 16px; font-weight: 600;"
+          >
+            <v-icon left size="18">mdi-clock-outline</v-icon>
+            Submitted: {{ reviewStats.submitted_count || 0 }}
+          </v-chip>
+        </div>
+      </v-card-text>
+    </v-card>
+
     <!-- Status Summary Card - Prominent display at the top -->
     <v-card class="mb-4" elevation="4" style="border: 2px solid #1976d2; border-radius: 8px;">
       <v-card-title class="text-h6 font-weight-bold pa-3" style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); color: white;">
@@ -349,7 +402,17 @@ export default Vue.extend({
       mdiCloseCircleOutline,
       mdiClockOutline,
       mdiCheckCircle,
-      mdiAlertCircle
+      mdiAlertCircle,
+      // Review statistics
+      reviewStats: {
+        approved_count: 0,
+        rejected_count: 0,
+        total_examples: 0,
+        submitted_count: 0,
+        pending_count: 0
+      },
+      isLoadingStats: false,
+      statsPollInterval: null
     }
   },
 
@@ -397,8 +460,19 @@ export default Vue.extend({
       await this.fetchStatus()
       // Apply fallback again after fetchStatus in case it overwrote something
       this.applyApprovalChainFallback()
+      // Fetch review statistics and start polling
+      await this.fetchReviewStats()
+      this.startStatsPolling()
     }
     this.isLoadingStatus = false
+  },
+
+  beforeDestroy() {
+    // Clean up polling interval
+    if (this.statsPollInterval) {
+      clearInterval(this.statsPollInterval)
+      this.statsPollInterval = null
+    }
   },
 
   watch: {
@@ -421,6 +495,8 @@ export default Vue.extend({
         await this.fetchStatus()
         // Apply fallback again after fetchStatus in case it overwrote something
         this.applyApprovalChainFallback()
+        // Refresh review statistics when example changes
+        await this.fetchReviewStats()
       }
       this.isLoadingStatus = false
     }
@@ -686,6 +762,8 @@ export default Vue.extend({
           this.applyApprovalChainFallback()
           await this.fetchStatus()
           this.applyApprovalChainFallback()
+          // Refresh review statistics after approval
+          await this.fetchReviewStats()
           this.showSnackbar('✅ Example approved successfully!', 'success')
         } else {
           const data = await resp.json()
@@ -734,6 +812,8 @@ export default Vue.extend({
           this.applyApprovalChainFallback()
           await this.fetchStatus()
           this.applyApprovalChainFallback()
+          // Refresh review statistics after rejection
+          await this.fetchReviewStats()
           this.showSnackbar('✅ Example rejected. Annotator will see it again for revision.', 'warning')
         } else {
           const data = await resp.json()
@@ -787,6 +867,47 @@ export default Vue.extend({
     getCsrfToken() {
       const token = document.querySelector('[name=csrfmiddlewaretoken]')
       return token ? token.value : ''
+    },
+
+    async fetchReviewStats() {
+      // Fetch review statistics for the project
+      try {
+        this.isLoadingStats = true
+        const resp = await fetch(
+          `/v1/projects/${this.projectId}/tracking/review-stats/`
+        )
+        if (resp.ok) {
+          const data = await resp.json()
+          this.reviewStats = {
+            approved_count: data.approved_count || 0,
+            rejected_count: data.rejected_count || 0,
+            total_examples: data.total_examples || 0,
+            submitted_count: data.submitted_count || 0,
+            pending_count: data.pending_count || 0
+          }
+        } else {
+          console.error('[Monlam Approve] Error fetching review stats:', resp.status)
+        }
+      } catch (error) {
+        console.error('[Monlam Approve] Error fetching review stats:', error)
+        // Don't show error to user, just log it
+      } finally {
+        this.isLoadingStats = false
+      }
+    },
+
+    startStatsPolling() {
+      // Poll review statistics every 10 seconds for real-time updates
+      // This ensures the counter updates even if other reviewers approve/reject examples
+      if (this.statsPollInterval) {
+        clearInterval(this.statsPollInterval)
+      }
+      
+      this.statsPollInterval = setInterval(() => {
+        if (this.canApprove && this.projectId) {
+          this.fetchReviewStats()
+        }
+      }, 10000) // Poll every 10 seconds
     }
   }
 })

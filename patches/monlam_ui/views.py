@@ -62,8 +62,15 @@ def completion_dashboard(request, project_id):
     - Per-annotator progress
     - Per-approver review status
     - Examples completion matrix
+    
+    Payment metrics (Audio Minutes, Syllables, Payment) are only visible to:
+    - Reviewers/Approvers
+    - Project Managers
+    - Project Admins
+    - NOT visible to Annotators
     """
     from projects.models import Project, Member
+    from assignment.permissions import get_user_role
     
     project = get_object_or_404(Project, pk=project_id)
     
@@ -73,9 +80,15 @@ def completion_dashboard(request, project_id):
         if not Member.objects.filter(project_id=project_id, user=request.user).exists():
             return render(request, '403.html', status=403)
     
+    # Get user role to determine if they can see payment metrics
+    role_name, is_privileged = get_user_role(request.user, project_id)
+    can_see_payment_metrics = is_privileged or request.user.is_superuser
+    
     context = {
         'project': project,
         'project_id': project_id,
+        'user_role': role_name or 'unknown',
+        'can_see_payment_metrics': can_see_payment_metrics,
     }
     
     return render(request, 'monlam_ui/completion_dashboard.html', context)
@@ -704,9 +717,19 @@ def api_completion_stats(request, project_id):
     
     annotator_dict = {}
     
+    # Get current project member user IDs for filtering
+    current_member_user_ids = set(
+        Member.objects.filter(project=project).values_list('user_id', flat=True)
+    )
+    
     # Process ExampleState records (confirmed examples) and match with ApproverCompletionStatus
+    # Only include users who are CURRENT project members
     for state in confirmed_states:
         if state.confirmed_by:
+            # Only include if user is still a project member
+            if state.confirmed_by.id not in current_member_user_ids and not state.confirmed_by.is_superuser:
+                continue  # Skip users who are no longer project members
+            
             username = state.confirmed_by.username
             user_id = state.confirmed_by.id
             example_id = state.example_id
@@ -781,6 +804,7 @@ def api_completion_stats(request, project_id):
     approver_roles_cache = {}  # Cache roles per approver to avoid repeated lookups
     
     # Process ApproverCompletionStatus records (primary source)
+    # Only include approvers who are CURRENT project members
     processed_count = 0
     error_count = 0
     for ap_completion in approver_completions:
@@ -790,6 +814,10 @@ def api_completion_stats(request, project_id):
                 print(f'[Completion Stats] Warning: ApproverCompletionStatus {ap_completion.id} has no approver')
                 error_count += 1
                 continue
+            
+            # Only include if approver is still a project member
+            if ap_completion.approver.id not in current_member_user_ids and not ap_completion.approver.is_superuser:
+                continue  # Skip approvers who are no longer project members
                 
             approver_id = ap_completion.approver.id
             approver_username = ap_completion.approver.username
@@ -874,10 +902,111 @@ def api_completion_stats(request, project_id):
         print(f'[Completion Stats] Using calculated final_approved ({calculated_final_approved}) instead of DB query result ({final_approved_count})')
         final_approved_count = calculated_final_approved
     
+    # ============================================
+    # PAYMENT CALCULATION FOR APPROVERS
+    # Uses same logic as analytics dashboard for consistency
+    # ============================================
+    from .payment_utils import count_tibetan_syllables, calculate_payment
+    from examples.models import Example
+    
+    # Get examples with their metadata for payment calculation
+    examples_with_meta = Example.objects.filter(
+        project=project
+    ).select_related('project').only('id', 'project', 'meta', 'text')
+    
+    # Build mapping of example_id -> (duration, text)
+    example_meta_map = {}
+    for ex in examples_with_meta:
+        duration = 0.0
+        if ex.meta and isinstance(ex.meta, dict):
+            # Try different possible keys for duration
+            duration = ex.meta.get('duration', ex.meta.get('audio_duration', 0.0))
+            if duration and isinstance(duration, (int, float)):
+                duration = float(duration) / 60.0  # Convert seconds to minutes
+        example_meta_map[ex.id] = {
+            'duration_minutes': duration,
+            'text': ex.text or ''
+        }
+    
+    # Calculate payment per approver (grouped by project)
+    # Payment is based on REVIEWED examples (approved status in ApproverCompletionStatus)
+    approver_payment_data = {}  # approver_id -> {audio_minutes, reviewed_segments, reviewed_syllables}
+    
+    # Process ApproverCompletionStatus for payment calculation
+    # Only include approvers who are CURRENT project members
+    for ap_completion in approver_completions:
+        if not ap_completion.approver or ap_completion.status != 'approved':
+            continue  # Only count approved reviews for payment
+        
+        # Only include if approver is still a project member
+        if ap_completion.approver.id not in current_member_user_ids and not ap_completion.approver.is_superuser:
+            continue  # Skip approvers who are no longer project members
+        
+        approver_id = ap_completion.approver.id
+        example_id = ap_completion.example_id
+        
+        if example_id not in example_meta_map:
+            continue
+        
+        ex_meta = example_meta_map[example_id]
+        duration = ex_meta['duration_minutes']
+        text = ex_meta['text']
+        
+        if approver_id not in approver_payment_data:
+            approver_payment_data[approver_id] = {
+                'audio_minutes': 0.0,
+                'reviewed_segments': 0,  # Each reviewed example counts as a segment
+                'reviewed_syllables': 0
+            }
+        
+        approver_payment_data[approver_id]['audio_minutes'] += duration
+        approver_payment_data[approver_id]['reviewed_segments'] += 1
+        # Count syllables from the annotation text
+        syllables = count_tibetan_syllables(text)
+        approver_payment_data[approver_id]['reviewed_syllables'] += syllables
+    
+    # Add payment metrics to approver stats
+    total_audio_minutes_all = 0.0
+    total_syllables_all = 0
+    total_payment_all = 0.0
+    
+    for approver_stat in approver_stats:
+        approver_id = approver_stat['reviewed_by__id']
+        
+        # Initialize payment fields
+        approver_stat['total_audio_minutes'] = 0.0
+        approver_stat['total_syllables'] = 0
+        approver_stat['total_rupees'] = 0.0
+        
+        if approver_id in approver_payment_data:
+            data = approver_payment_data[approver_id]
+            
+            # Calculate payment using same logic as analytics dashboard
+            payment = calculate_payment(
+                project_name=project.name,
+                total_audio_minutes=data['audio_minutes'],
+                approved_segments=data['reviewed_segments'],  # Use reviewed_segments for segment rate
+                reviewed_syllables=data['reviewed_syllables'],  # Use reviewed_syllables for syllable rate
+                is_reviewer=False  # Same calculation as annotators (reviewers get same rates)
+            )
+            
+            approver_stat['total_audio_minutes'] = round(data['audio_minutes'], 2)
+            approver_stat['total_syllables'] = data['reviewed_syllables']
+            approver_stat['total_rupees'] = round(payment['total_rupees'], 2)
+            
+            # Add to totals
+            total_audio_minutes_all += data['audio_minutes']
+            total_syllables_all += data['reviewed_syllables']
+            total_payment_all += payment['total_rupees']
+    
+    # Round totals
+    total_audio_minutes_all = round(total_audio_minutes_all, 2)
+    total_payment_all = round(total_payment_all, 2)
+    
     # Debug: Log what we're returning
     print(f'[Completion Stats] Found {len(approver_stats)} approvers: {[a["reviewed_by__username"] for a in approver_stats]}')
     for a in approver_stats:
-        print(f'  - {a["reviewed_by__username"]}: total_reviewed={a["total_reviewed"]}, approved={a["approved"]}, final_approved={a["final_approved"]}, rejected={a["rejected"]}')
+        print(f'  - {a["reviewed_by__username"]}: total_reviewed={a["total_reviewed"]}, approved={a["approved"]}, final_approved={a["final_approved"]}, rejected={a["rejected"]}, audio_min={a.get("total_audio_minutes", 0)}, syllables={a.get("total_syllables", 0)}, payment=Rs.{a.get("total_rupees", 0)}')
     
     return JsonResponse({
         'summary': {
@@ -888,6 +1017,10 @@ def api_completion_stats(request, project_id):
             'approved': approved_count,  # All approvals
             'final_approved': final_approved_count,  # Final approvals by project_admin ONLY (always project_admin role) (sum from approver_stats)
             'rejected': rejected_count,
+            # Add approver totals
+            'total_audio_minutes': total_audio_minutes_all,
+            'total_syllables': total_syllables_all,
+            'total_payment_rupees': total_payment_all,
         },
         'annotators': annotator_stats,
         'approvers': approver_stats,

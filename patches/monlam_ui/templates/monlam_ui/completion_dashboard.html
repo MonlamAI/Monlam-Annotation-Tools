@@ -112,6 +112,50 @@
                     </v-col>
                 </v-row>
                 
+                <!-- Approver Summary Metrics (Audio Minutes, Syllables, Payment) -->
+                <!-- Only visible to reviewers/approvers, not annotators -->
+                <v-row v-if="!loading && !error && stats.summary.total_payment_rupees !== undefined && canSeePaymentMetrics" class="mt-4">
+                    <v-col cols="12">
+                        <v-card elevation="2" style="border-left: 4px solid #4CAF50;">
+                            <v-card-title class="green darken-1 white--text">
+                                <v-icon left dark>mdi-chart-box</v-icon>
+                                Approver Review Metrics
+                            </v-card-title>
+                            <v-card-text class="pa-4">
+                                <v-row>
+                                    <v-col cols="12" sm="6" md="4" v-if="stats.summary.total_audio_minutes > 0">
+                                        <v-card color="blue lighten-5" elevation="1">
+                                            <v-card-text class="text-center">
+                                                <v-icon size="40" color="blue darken-2">mdi-waveform</v-icon>
+                                                <div class="text-h4 mt-2">[[ stats.summary.total_audio_minutes.toFixed(2) ]]</div>
+                                                <div class="text--secondary">Total Audio Minutes</div>
+                                            </v-card-text>
+                                        </v-card>
+                                    </v-col>
+                                    <v-col cols="12" sm="6" md="4" v-if="stats.summary.total_syllables > 0">
+                                        <v-card color="orange lighten-5" elevation="1">
+                                            <v-card-text class="text-center">
+                                                <v-icon size="40" color="orange darken-2">mdi-text</v-icon>
+                                                <div class="text-h4 mt-2">[[ stats.summary.total_syllables.toLocaleString() ]]</div>
+                                                <div class="text--secondary">Total Syllables Reviewed</div>
+                                            </v-card-text>
+                                        </v-card>
+                                    </v-col>
+                                    <v-col cols="12" sm="6" md="4" v-if="stats.summary.total_payment_rupees > 0">
+                                        <v-card color="green lighten-5" elevation="1">
+                                            <v-card-text class="text-center">
+                                                <v-icon size="40" color="green darken-2">mdi-currency-inr</v-icon>
+                                                <div class="text-h4 mt-2">Rs. [[ stats.summary.total_payment_rupees.toFixed(2) ]]</div>
+                                                <div class="text--secondary">Total Payment</div>
+                                            </v-card-text>
+                                        </v-card>
+                                    </v-col>
+                                </v-row>
+                            </v-card-text>
+                        </v-card>
+                    </v-col>
+                </v-row>
+                
                 <!-- Loading State -->
                 <v-row v-if="loading">
                     <v-col cols="12" class="text-center">
@@ -237,6 +281,35 @@
                                         ✗ [[ item.rejected ]]
                                     </v-chip>
                                 </template>
+                                
+                                <!-- Payment metrics templates - only rendered if canSeePaymentMetrics is true -->
+                                <template v-if="canSeePaymentMetrics" v-slot:item.total_audio_minutes="{ item }">
+                                    <span v-if="item.total_audio_minutes > 0">
+                                        [[ item.total_audio_minutes.toFixed(2) ]] min
+                                    </span>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                                
+                                <template v-if="canSeePaymentMetrics" v-slot:item.total_syllables="{ item }">
+                                    <span v-if="item.total_syllables > 0">
+                                        [[ item.total_syllables.toLocaleString() ]]
+                                    </span>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
+                                
+                                <template v-if="canSeePaymentMetrics" v-slot:item.total_rupees="{ item }">
+                                    <v-chip 
+                                        v-if="item.total_rupees > 0"
+                                        small 
+                                        color="success" 
+                                        dark
+                                        class="font-weight-bold"
+                                    >
+                                        <v-icon small left>mdi-currency-inr</v-icon>
+                                        [[ item.total_rupees.toFixed(2) ]]
+                                    </v-chip>
+                                    <span v-else class="text--disabled">-</span>
+                                </template>
                             </v-data-table>
                         </v-card>
                     </v-col>
@@ -303,17 +376,13 @@
                 { text: 'Rejected', value: 'rejected', sortable: true },
                 { text: 'Approval Rate', value: 'progress', sortable: false },
             ],
-            approverHeaders: [
-                { text: 'Approver', value: 'reviewed_by__username', sortable: true },
-                { text: 'Role', value: 'role', sortable: true },
-                { text: 'Total Reviewed', value: 'total_reviewed', sortable: true },
-                { text: 'Approved', value: 'approved', sortable: true },
-                { text: 'Final Approved', value: 'final_approved', sortable: true },
-                { text: 'Rejected', value: 'rejected', sortable: true },
-            ],
+            canSeePaymentMetrics: {{ can_see_payment_metrics|yesno:"true,false" }},
+            approverHeaders: [],
         },
         mounted() {
             console.log('✅ Completion Dashboard mounted!');
+            // Build approver headers based on permissions
+            this.buildApproverHeaders();
             this.loadData();
         },
         methods: {
@@ -338,6 +407,26 @@
             calculatePercentage(value, total) {
                 if (!total || total === 0) return 0;
                 return Math.round((value / total) * 100);
+            },
+            buildApproverHeaders() {
+                // Base headers (always visible)
+                this.approverHeaders = [
+                    { text: 'Approver', value: 'reviewed_by__username', sortable: true },
+                    { text: 'Role', value: 'role', sortable: true },
+                    { text: 'Total Reviewed', value: 'total_reviewed', sortable: true },
+                    { text: 'Approved', value: 'approved', sortable: true },
+                    { text: 'Final Approved', value: 'final_approved', sortable: true },
+                    { text: 'Rejected', value: 'rejected', sortable: true },
+                ];
+                
+                // Payment metrics columns - only shown to reviewers/approvers
+                if (this.canSeePaymentMetrics) {
+                    this.approverHeaders.push(
+                        { text: 'Audio Minutes', value: 'total_audio_minutes', sortable: true },
+                        { text: 'Syllables', value: 'total_syllables', sortable: true },
+                        { text: 'Payment (Rs.)', value: 'total_rupees', sortable: true }
+                    );
+                }
             },
         },
     });
