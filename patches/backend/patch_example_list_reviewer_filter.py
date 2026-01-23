@@ -106,21 +106,27 @@ def patch_example_list_get_queryset(file_path):
                 # If filtering fails, return empty queryset (fail secure for annotators)
                 queryset = queryset.none()
         
-        # For reviewers: Filter to show only examples that need review
-        # UNLESS all_examples=true parameter is present (from dataset table or direct API access)
-        # When clicking "Annotate" button from dataset, show ALL examples (and navigate to specific example)
+        # For reviewers: Show ALL examples by default (dataset table access)
+        # Only filter when explicitly in annotation workflow (no all_examples param AND specific conditions)
         # When accessing dataset table via API, show ALL examples (for project admins to see complete status)
         # When clicking "Start Annotation" button, show only submitted examples
         if is_reviewer:
             # Check if all_examples parameter is present (from dataset table or API call)
             all_examples_param = self.request.GET.get('all_examples', '').lower() == 'true'
             
-            if all_examples_param:
+            # Check if this is an annotation workflow request (has page parameter, indicating navigation to specific example)
+            # Dataset table API calls typically don't have page parameter
+            is_annotation_workflow = 'page' in self.request.GET
+            
+            # Show ALL examples if:
+            # 1. all_examples=true is explicitly set, OR
+            # 2. This is NOT an annotation workflow (dataset table access)
+            if all_examples_param or not is_annotation_workflow:
                 # User accessing from dataset table or API - show ALL examples
                 # This allows project admins to see complete dataset and navigate to any example
-                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing ALL examples (all_examples=true parameter)')
+                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing ALL examples (dataset table access)')
             else:
-                # User clicked "Start Annotation" - show only submitted examples
+                # User clicked "Start Annotation" and navigating to annotation - show only submitted examples
                 try:
                     from assignment.simple_tracking import AnnotationTracking
                     
@@ -277,21 +283,27 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('                # If filtering fails, return empty queryset (fail secure for annotators)')
                     new_lines.append('                queryset = queryset.none()')
                     new_lines.append('')
-                    new_lines.append('        # For reviewers: Filter to show only examples that need review')
-                    new_lines.append('        # UNLESS all_examples=true parameter is present (from dataset table or direct API access)')
-                    new_lines.append('        # When clicking "Annotate" button from dataset, show ALL examples (and navigate to specific example)')
+                    new_lines.append('        # For reviewers: Show ALL examples by default (dataset table access)')
+                    new_lines.append('        # Only filter when explicitly in annotation workflow (has page parameter)')
                     new_lines.append('        # When accessing dataset table via API, show ALL examples (for project admins to see complete status)')
                     new_lines.append('        # When clicking "Start Annotation" button, show only submitted examples')
                     new_lines.append('        if is_reviewer:')
                     new_lines.append('            # Check if all_examples parameter is present (from dataset table or API call)')
                     new_lines.append("            all_examples_param = self.request.GET.get('all_examples', '').lower() == 'true'")
                     new_lines.append('')
-                    new_lines.append('            if all_examples_param:')
+                    new_lines.append('            # Check if this is an annotation workflow request (has page parameter)')
+                    new_lines.append('            # Dataset table API calls typically don\'t have page parameter')
+                    new_lines.append("            is_annotation_workflow = 'page' in self.request.GET")
+                    new_lines.append('')
+                    new_lines.append('            # Show ALL examples if:')
+                    new_lines.append('            # 1. all_examples=true is explicitly set, OR')
+                    new_lines.append('            # 2. This is NOT an annotation workflow (dataset table access)')
+                    new_lines.append('            if all_examples_param or not is_annotation_workflow:')
                     new_lines.append('                # User accessing from dataset table or API - show ALL examples')
                     new_lines.append('                # This allows project admins to see complete dataset and navigate to any example')
-                    new_lines.append(f"                print(f'[Monlam ExampleList] Reviewer {{user.username}}: Showing ALL examples (all_examples=true parameter)')")
+                    new_lines.append(f"                print(f'[Monlam ExampleList] Reviewer {{user.username}}: Showing ALL examples (dataset table access)')")
                     new_lines.append('            else:')
-                    new_lines.append('                # User clicked "Start Annotation" - show only submitted examples')
+                    new_lines.append('                # User clicked "Start Annotation" and navigating to annotation - show only submitted examples')
                     new_lines.append('                try:')
                     new_lines.append('                    from assignment.simple_tracking import AnnotationTracking')
                     new_lines.append('')
