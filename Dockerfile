@@ -82,6 +82,12 @@ RUN python3 /tmp/patch_example_delete.py /doccano/backend/examples/views/example
     rm /tmp/patch_example_delete.py && \
     echo "✅ Patched example delete endpoint to prevent accidental deletion"
 
+# Fix: Filter examples for reviewers - show only examples needing review (including skipped ones)
+COPY patches/backend/patch_example_list_reviewer_filter.py /tmp/patch_example_list_reviewer_filter.py
+RUN python3 /tmp/patch_example_list_reviewer_filter.py /doccano/backend/examples/views/example.py && \
+    rm /tmp/patch_example_list_reviewer_filter.py && \
+    echo "✅ Patched example list to filter for reviewers (show skipped examples)"
+
 # Example JSONL files (required for import options to appear)
 COPY patches/examples/speech_to_text/example.jsonl /doccano/backend/data_import/pipeline/examples/speech_to_text/example.jsonl
 COPY patches/examples/image_classification/example.jsonl /doccano/backend/data_import/pipeline/examples/image_classification/example.jsonl
