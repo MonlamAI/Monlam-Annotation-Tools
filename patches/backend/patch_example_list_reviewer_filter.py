@@ -32,6 +32,7 @@ def patch_example_list_get_queryset(file_path):
             
             # New implementation with reviewer filtering
             new_method = '''    def get_queryset(self):
+        from django.db.models import Q
         queryset = self.model.objects.filter(project=self.project)
         
         # MONLAM: Filter examples for reviewers
@@ -55,23 +56,55 @@ def patch_example_list_get_queryset(file_path):
                 # If we can't determine role, use original behavior
                 is_reviewer = False
         
-        # For annotators: Filter out permanently skipped examples
+        # For annotators: Show only assigned examples, excluding skipped and submitted
         if not is_reviewer:
             try:
-                from assignment.simple_tracking import SkippedExample
-                # Get example IDs that this annotator has permanently skipped
+                from assignment.models_separate import Assignment
+                from assignment.simple_tracking import SkippedExample, AnnotationTracking
+                
+                # Get example IDs assigned to this annotator (or unassigned)
+                assigned_example_ids = Assignment.objects.filter(
+                    project=project,
+                    is_active=True
+                ).filter(
+                    Q(assigned_to=user) | Q(assigned_to__isnull=True)
+                ).values_list('example_id', flat=True)
+                
+                # Filter queryset to only show assigned (or unassigned) examples
+                if assigned_example_ids:
+                    queryset = queryset.filter(id__in=assigned_example_ids)
+                    print(f'[Monlam ExampleList] Annotator {user.username}: Showing {len(assigned_example_ids)} assigned examples')
+                else:
+                    # No assignments = no examples to show
+                    queryset = queryset.none()
+                    print(f'[Monlam ExampleList] Annotator {user.username}: No assigned examples')
+                
+                # Exclude permanently skipped examples
                 skipped_example_ids = SkippedExample.objects.filter(
                     project=project,
                     skipped_by=user
                 ).values_list('example_id', flat=True)
                 
-                # Exclude skipped examples from queryset
                 if skipped_example_ids:
                     queryset = queryset.exclude(id__in=skipped_example_ids)
                     print(f'[Monlam ExampleList] Annotator {user.username}: Excluded {len(skipped_example_ids)} skipped examples')
+                
+                # Exclude submitted examples
+                submitted_example_ids = AnnotationTracking.objects.filter(
+                    project=project,
+                    status='submitted'
+                ).values_list('example_id', flat=True)
+                
+                if submitted_example_ids:
+                    queryset = queryset.exclude(id__in=submitted_example_ids)
+                    print(f'[Monlam ExampleList] Annotator {user.username}: Excluded {len(submitted_example_ids)} submitted examples')
+                    
             except Exception as e:
-                print(f'[Monlam ExampleList] Error filtering skipped examples for annotator: {e}')
-                # If filtering fails, continue with original queryset
+                print(f'[Monlam ExampleList] Error filtering examples for annotator: {e}')
+                import traceback
+                traceback.print_exc()
+                # If filtering fails, return empty queryset (fail secure for annotators)
+                queryset = queryset.none()
         
         # For reviewers: Filter to show only examples that need review
         # UNLESS all_examples=true parameter is present (from dataset table or direct API access)
@@ -170,6 +203,7 @@ def patch_example_list_get_queryset(file_path):
                     
                     # Add the new method implementation
                     new_lines.append('    def get_queryset(self):')
+                    new_lines.append('        from django.db.models import Q')
                     new_lines.append('        queryset = self.model.objects.filter(project=self.project)')
                     new_lines.append('')
                     new_lines.append('        # MONLAM: Filter examples for reviewers')
@@ -193,23 +227,55 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('                # If we can\'t determine role, use original behavior')
                     new_lines.append('                is_reviewer = False')
                     new_lines.append('')
-                    new_lines.append('        # For annotators: Filter out permanently skipped examples')
+                    new_lines.append('        # For annotators: Show only assigned examples, excluding skipped and submitted')
                     new_lines.append('        if not is_reviewer:')
                     new_lines.append('            try:')
-                    new_lines.append('                from assignment.simple_tracking import SkippedExample')
-                    new_lines.append('                # Get example IDs that this annotator has permanently skipped')
+                    new_lines.append('                from assignment.models_separate import Assignment')
+                    new_lines.append('                from assignment.simple_tracking import SkippedExample, AnnotationTracking')
+                    new_lines.append('')
+                    new_lines.append('                # Get example IDs assigned to this annotator (or unassigned)')
+                    new_lines.append('                assigned_example_ids = Assignment.objects.filter(')
+                    new_lines.append('                    project=project,')
+                    new_lines.append('                    is_active=True')
+                    new_lines.append('                ).filter(')
+                    new_lines.append('                    Q(assigned_to=user) | Q(assigned_to__isnull=True)')
+                    new_lines.append('                ).values_list(\'example_id\', flat=True)')
+                    new_lines.append('')
+                    new_lines.append('                # Filter queryset to only show assigned (or unassigned) examples')
+                    new_lines.append('                if assigned_example_ids:')
+                    new_lines.append('                    queryset = queryset.filter(id__in=assigned_example_ids)')
+                    new_lines.append(f"                    print(f'[Monlam ExampleList] Annotator {{user.username}}: Showing {{len(assigned_example_ids)}} assigned examples')")
+                    new_lines.append('                else:')
+                    new_lines.append('                    # No assignments = no examples to show')
+                    new_lines.append('                    queryset = queryset.none()')
+                    new_lines.append(f"                    print(f'[Monlam ExampleList] Annotator {{user.username}}: No assigned examples')")
+                    new_lines.append('')
+                    new_lines.append('                # Exclude permanently skipped examples')
                     new_lines.append('                skipped_example_ids = SkippedExample.objects.filter(')
                     new_lines.append('                    project=project,')
                     new_lines.append('                    skipped_by=user')
                     new_lines.append('                ).values_list(\'example_id\', flat=True)')
                     new_lines.append('')
-                    new_lines.append('                # Exclude skipped examples from queryset')
                     new_lines.append('                if skipped_example_ids:')
                     new_lines.append('                    queryset = queryset.exclude(id__in=skipped_example_ids)')
-                    new_lines.append("                    print(f'[Monlam ExampleList] Annotator {user.username}: Excluded {len(skipped_example_ids)} skipped examples')")
+                    new_lines.append(f"                    print(f'[Monlam ExampleList] Annotator {{user.username}}: Excluded {{len(skipped_example_ids)}} skipped examples')")
+                    new_lines.append('')
+                    new_lines.append('                # Exclude submitted examples')
+                    new_lines.append('                submitted_example_ids = AnnotationTracking.objects.filter(')
+                    new_lines.append('                    project=project,')
+                    new_lines.append("                    status='submitted'")
+                    new_lines.append('                ).values_list(\'example_id\', flat=True)')
+                    new_lines.append('')
+                    new_lines.append('                if submitted_example_ids:')
+                    new_lines.append('                    queryset = queryset.exclude(id__in=submitted_example_ids)')
+                    new_lines.append(f"                    print(f'[Monlam ExampleList] Annotator {{user.username}}: Excluded {{len(submitted_example_ids)}} submitted examples')")
+                    new_lines.append('                    ')
                     new_lines.append('            except Exception as e:')
-                    new_lines.append("                print(f'[Monlam ExampleList] Error filtering skipped examples for annotator: {e}')")
-                    new_lines.append('                # If filtering fails, continue with original queryset')
+                    new_lines.append("                print(f'[Monlam ExampleList] Error filtering examples for annotator: {e}')")
+                    new_lines.append('                import traceback')
+                    new_lines.append('                traceback.print_exc()')
+                    new_lines.append('                # If filtering fails, return empty queryset (fail secure for annotators)')
+                    new_lines.append('                queryset = queryset.none()')
                     new_lines.append('')
                     new_lines.append('        # For reviewers: Filter to show only examples that need review')
                     new_lines.append('        # UNLESS all_examples=true parameter is present (from dataset table or direct API access)')
