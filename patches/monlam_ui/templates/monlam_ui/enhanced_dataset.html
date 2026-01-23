@@ -135,6 +135,7 @@
                                 :loading="loading"
                                 :items-per-page="25"
                                 :footer-props="{ 'items-per-page-options': [10, 25, 50, 100] }"
+                                :no-data-text="error || 'No examples found. Please check if examples exist in this project.'"
                                 class="elevation-1"
                             >
                                 <!-- ID Column -->
@@ -268,31 +269,82 @@
             async loadData() {
                 this.loading = true;
                 this.error = null;
-                console.log('📥 Loading data...');
+                console.log('📥 Loading data for project {{ project_id }}...');
                 
                 try {
-                    const examplesResp = await axios.get('/v1/projects/{{ project_id }}/examples?limit=1000');
-                    const examples = examplesResp.data.results || [];
-                    console.log('✅ Loaded', examples.length, 'examples');
+                    // Check user role to determine if we should fetch all examples
+                    // Privileged users (admins, managers, approvers) should see ALL examples in dataset table
+                    // Annotators should see filtered results (only their assigned examples)
+                    let isPrivileged = false;
+                    try {
+                        const roleResp = await axios.get(`/v1/projects/{{ project_id }}/my-role`);
+                        if (roleResp.data) {
+                            const roleName = (roleResp.data.rolename || roleResp.data.role || '').toLowerCase();
+                            isPrivileged = roleName.includes('admin') || 
+                                          roleName.includes('manager') || 
+                                          roleName.includes('approver');
+                            console.log('📋 User role:', roleName, 'isPrivileged:', isPrivileged);
+                        }
+                    } catch (roleError) {
+                        console.warn('⚠️ Could not check user role:', roleError);
+                    }
                     
-                    const assignmentsResp = await axios.get('/monlam/{{ project_id }}/api/dataset-assignments/');
-                    const assignments = assignmentsResp.data.results || [];
-                    console.log('✅ Loaded', assignments.length, 'assignments');
+                    // Build API URL - add all_examples=true for privileged users only
+                    // This ensures project admins/managers/approvers see ALL examples in dataset table
+                    // Annotators will see filtered results (only their assigned examples)
+                    const examplesUrl = `/v1/projects/{{ project_id }}/examples?limit=1000${isPrivileged ? '&all_examples=true' : ''}`;
+                    console.log('📡 Fetching examples from:', examplesUrl);
+                    const examplesResp = await axios.get(examplesUrl);
+                    
+                    if (!examplesResp.data) {
+                        console.error('❌ Examples API returned no data');
+                        this.error = 'Examples API returned no data';
+                        return;
+                    }
+                    
+                    const examples = examplesResp.data.results || [];
+                    console.log('✅ Loaded', examples.length, 'examples from API');
+                    
+                    if (examples.length === 0) {
+                        console.warn('⚠️ No examples returned from API. This might indicate a filtering issue.');
+                        this.error = 'No examples found. Please check if examples exist in this project.';
+                    }
+                    
+                    const assignmentsUrl = '/monlam/{{ project_id }}/api/dataset-assignments/';
+                    console.log('📡 Fetching assignments from:', assignmentsUrl);
+                    const assignmentsResp = await axios.get(assignmentsUrl);
+                    
+                    if (!assignmentsResp.data) {
+                        console.error('❌ Assignments API returned no data');
+                        // Continue anyway - examples can show without assignments
+                    }
+                    
+                    const assignments = assignmentsResp.data?.results || [];
+                    console.log('✅ Loaded', assignments.length, 'assignments from API');
                     
                     const assignmentMap = {};
                     assignments.forEach(a => {
                         assignmentMap[a.example_id] = a;
                     });
                     
+                    // Merge examples with assignments
+                    // Examples without assignments will have assignment: null (still visible)
                     this.examples = examples.map(ex => ({
                         ...ex,
                         assignment: assignmentMap[ex.id] || null
                     }));
                     
-                    console.log('✅ Merged data, total:', this.examples.length);
+                    console.log('✅ Merged data, total examples:', this.examples.length);
+                    console.log('   Examples with assignments:', this.examples.filter(ex => ex.assignment).length);
+                    console.log('   Examples without assignments:', this.examples.filter(ex => !ex.assignment).length);
+                    
+                    if (this.examples.length === 0) {
+                        this.error = 'No examples to display. Please check server logs for filtering issues.';
+                    }
                 } catch (err) {
                     console.error('❌ Failed to load:', err);
-                    this.error = 'Failed to load data: ' + err.message;
+                    console.error('Error details:', err.response?.data || err.message);
+                    this.error = 'Failed to load data: ' + (err.response?.data?.error || err.message);
                 } finally {
                     this.loading = false;
                 }

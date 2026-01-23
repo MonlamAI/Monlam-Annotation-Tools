@@ -126,17 +126,28 @@
                 const roleData = await response.json();
                 const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
                 
+                // DEBUG: Log role check details
+                console.log('[Monlam Defect] Role check - Full data:', JSON.stringify(roleData));
+                console.log('[Monlam Defect] Role check - Role name:', roleName);
+                
                 // User is annotator if role includes 'annotator' but not admin/manager/approver
-                return roleName.includes('annotator') && 
-                       !roleName.includes('admin') && 
-                       !roleName.includes('manager') && 
-                       !roleName.includes('approver');
+                const isAnnotator = roleName.includes('annotator') && 
+                                   !roleName.includes('admin') && 
+                                   !roleName.includes('manager') && 
+                                   !roleName.includes('approver');
+                
+                console.log('[Monlam Defect] Role check - Is annotator:', isAnnotator);
+                return isAnnotator;
+            } else {
+                console.warn('[Monlam Defect] Role API returned non-ok status:', response.status);
+                // If API fails, default to showing button (backend will validate)
+                return true;
             }
         } catch (error) {
             console.error('[Monlam Defect] Error checking role:', error);
+            // If error, default to showing button (backend will validate)
+            return true;
         }
-        // Default to showing button, backend will validate
-        return true;
     }
     
     function showNotification(message, type = 'success') {
@@ -192,7 +203,10 @@
     }
     
     async function addDefectButton() {
-        if (!isAnnotationPage()) return;
+        if (!isAnnotationPage()) {
+            console.log('[Monlam Defect] Not on annotation page');
+            return;
+        }
         
         const projectId = getProjectId();
         if (!projectId) {
@@ -200,6 +214,13 @@
             return;
         }
         
+        // Check if button already exists
+        if (document.querySelector('.monlam-defect-button')) {
+            console.log('[Monlam Defect] Button already exists');
+            return;
+        }
+        
+        console.log('[Monlam Defect] Checking user role for project', projectId);
         // Check if user is annotator (defect button only for annotators)
         const isAnnotator = await checkUserRole(projectId);
         if (!isAnnotator) {
@@ -207,11 +228,12 @@
             return;
         }
         
+        console.log('[Monlam Defect] User is annotator, proceeding to add button');
         console.log('[Monlam Defect] Waiting for example to load...');
         const exampleId = await getCurrentExampleId();
         
         if (!exampleId) {
-            console.log('[Monlam Defect] Could not get example ID');
+            console.log('[Monlam Defect] Could not get example ID, will retry');
             // Retry after a delay
             setTimeout(addDefectButton, 2000);
             return;
@@ -221,14 +243,11 @@
         
         // Wait for toolbar to appear
         try {
-            await waitForElement('.v-toolbar, .toolbar-control, [role="toolbar"]', 5000);
+            await waitForElement('.v-toolbar, .toolbar-control, [role="toolbar"], .v-btn-toggle', 10000);
+            console.log('[Monlam Defect] Toolbar found');
         } catch (e) {
-            console.log('[Monlam Defect] Toolbar not found, trying alternative locations...');
-        }
-        
-        // Check if button already added
-        if (document.querySelector('.monlam-defect-button')) {
-            console.log('[Monlam Defect] Button already added');
+            console.log('[Monlam Defect] Toolbar not found yet, will retry...');
+            setTimeout(addDefectButton, 2000);
             return;
         }
         
@@ -246,10 +265,12 @@
         });
         
         if (!keyboardShortcutBtn) {
-            console.log('[Monlam Defect] Could not find keyboard shortcut button, retrying...');
-            setTimeout(addDefectButton, 1000);
+            console.log('[Monlam Defect] Could not find keyboard shortcut button, will retry...');
+            setTimeout(addDefectButton, 2000);
             return;
         }
+        
+        console.log('[Monlam Defect] Keyboard shortcut button found, creating defect button');
         
         // Find the parent container (v-btn-toggle or toolbar)
         const toolbar = keyboardShortcutBtn.closest('.v-btn-toggle') || 
@@ -368,29 +389,70 @@
         console.log('[Monlam Defect] ✅ Defect button added to toolbar');
     }
     
-    // Run on page load
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(addDefectButton, 1000);
+    // Initialize defect button with multiple strategies
+    function initializeDefectButton() {
+        // Strategy 1: Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(addDefectButton, 1500);
+            });
+        } else {
+            setTimeout(addDefectButton, 1500);
+        }
+        
+        // Strategy 2: Watch for Vue app initialization
+        if (window.$nuxt) {
+            setTimeout(addDefectButton, 2000);
+        } else {
+            // Wait for Vue to initialize
+            const vueObserver = new MutationObserver(() => {
+                if (window.$nuxt || document.querySelector('.v-application')) {
+                    vueObserver.disconnect();
+                    setTimeout(addDefectButton, 2000);
+                }
+            });
+            vueObserver.observe(document.body, { childList: true, subtree: true });
+            // Stop watching after 10 seconds
+            setTimeout(() => vueObserver.disconnect(), 10000);
+        }
+        
+        // Strategy 3: Watch for URL changes (SPA navigation)
+        let lastUrl = location.href;
+        const urlObserver = new MutationObserver(() => {
+            const url = location.href;
+            if (url !== lastUrl) {
+                lastUrl = url;
+                // Remove old button if exists
+                const oldButton = document.querySelector('.monlam-defect-button');
+                if (oldButton) {
+                    oldButton.remove();
+                }
+                setTimeout(addDefectButton, 2000);
+            }
         });
-    } else {
-        setTimeout(addDefectButton, 1000);
+        urlObserver.observe(document, { subtree: true, childList: true });
+        
+        // Strategy 4: Periodic retry (fallback)
+        let retryCount = 0;
+        const maxRetries = 10;
+        const retryInterval = setInterval(() => {
+            retryCount++;
+            if (document.querySelector('.monlam-defect-button')) {
+                clearInterval(retryInterval);
+                return;
+            }
+            if (retryCount >= maxRetries) {
+                clearInterval(retryInterval);
+                return;
+            }
+            if (isAnnotationPage() && getProjectId()) {
+                addDefectButton();
+            }
+        }, 3000);
     }
     
-    // Also run when navigating (for SPA)
-    let lastUrl = location.href;
-    new MutationObserver(() => {
-        const url = location.href;
-        if (url !== lastUrl) {
-            lastUrl = url;
-            // Remove old button if exists
-            const oldButton = document.querySelector('.monlam-defect-button');
-            if (oldButton) {
-                oldButton.remove();
-            }
-            setTimeout(addDefectButton, 1000);
-        }
-    }).observe(document, { subtree: true, childList: true });
+    // Start initialization
+    initializeDefectButton();
     
 })();
 

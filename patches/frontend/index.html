@@ -1733,9 +1733,32 @@
         console.log('[Monlam Dataset] ✨ Starting table enhancement for project', projectId);
         
         try {
+            // Check user role to determine if we should fetch all examples
+            // Privileged users (admins, managers, approvers) should see ALL examples in dataset table
+            let isPrivileged = false;
+            try {
+                const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
+                if (roleResp.ok) {
+                    const roleData = await roleResp.json();
+                    const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
+                    isPrivileged = roleName.includes('admin') || 
+                                   roleName.includes('manager') || 
+                                   roleName.includes('approver');
+                    console.log('[Monlam Dataset] User role:', roleName, 'isPrivileged:', isPrivileged);
+                }
+            } catch (roleError) {
+                console.warn('[Monlam Dataset] Could not check user role:', roleError);
+            }
+            
+            // Build API URL - add all_examples=true for privileged users
+            // This ensures project admins/managers/approvers see ALL examples in dataset table
+            // Annotators will see filtered results (only their assigned examples)
+            const examplesUrl = `/v1/projects/${projectId}/examples?limit=1000${isPrivileged ? '&all_examples=true' : ''}`;
+            console.log('[Monlam Dataset] Fetching examples from:', examplesUrl);
+            
             // Fetch examples with embedded tracking data from SERIALIZER
             // The serializer adds: annotated_by_username, reviewed_by_username, tracking_status
-            const examplesResp = await fetch(`/v1/projects/${projectId}/examples?limit=1000`);
+            const examplesResp = await fetch(examplesUrl);
             if (!examplesResp.ok) {
                 console.error('[Monlam Dataset] Failed to fetch examples:', examplesResp.status);
                 return;
@@ -2479,15 +2502,29 @@
                 if (response.ok) {
                     const roleData = await response.json();
                     const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
-                    return roleName.includes('annotator') && 
-                           !roleName.includes('admin') && 
-                           !roleName.includes('manager') && 
-                           !roleName.includes('approver');
+                    
+                    // DEBUG: Log role check details
+                    console.log('[Monlam Defect] Role check - Full data:', JSON.stringify(roleData));
+                    console.log('[Monlam Defect] Role check - Role name:', roleName);
+                    
+                    // User is annotator if role includes 'annotator' but not admin/manager/approver
+                    const isAnnotator = roleName.includes('annotator') && 
+                                       !roleName.includes('admin') && 
+                                       !roleName.includes('manager') && 
+                                       !roleName.includes('approver');
+                    
+                    console.log('[Monlam Defect] Role check - Is annotator:', isAnnotator);
+                    return isAnnotator;
+                } else {
+                    console.warn('[Monlam Defect] Role API returned non-ok status:', response.status);
+                    // If API fails, default to showing button (backend will validate)
+                    return true;
                 }
             } catch (error) {
                 console.error('[Monlam Defect] Error checking role:', error);
+                // If error, default to showing button (backend will validate)
+                return true;
             }
-            return true;
         }
         
         function showNotification(message, type = 'success') {
@@ -2540,7 +2577,10 @@
         }
         
         async function addDefectButton() {
-            if (!isAnnotationPage()) return;
+            if (!isAnnotationPage()) {
+                console.log('[Monlam Defect] Not on annotation page');
+                return;
+            }
             
             const projectId = getProjectId();
             if (!projectId) {
@@ -2548,42 +2588,60 @@
                 return;
             }
             
+            console.log('[Monlam Defect] Checking user role for project', projectId);
             const isAnnotator = await checkUserRole(projectId);
             if (!isAnnotator) {
                 console.log('[Monlam Defect] User is not an annotator, skipping button');
                 return;
             }
             
+            console.log('[Monlam Defect] User is annotator, proceeding to add button');
+            
+            // Check if button already exists
+            if (document.querySelector('.monlam-defect-button')) {
+                console.log('[Monlam Defect] Button already exists');
+                return;
+            }
+            
             const exampleId = await getCurrentExampleId();
             if (!exampleId) {
+                console.log('[Monlam Defect] Could not get example ID, will retry');
                 setTimeout(addDefectButton, 2000);
                 return;
             }
             
-            try {
-                await waitForElement('.v-toolbar, .toolbar-control', 5000);
-            } catch (e) {
-                console.log('[Monlam Defect] Toolbar not found yet...');
-            }
+            console.log('[Monlam Defect] Example ID found:', exampleId);
             
-            if (document.querySelector('.monlam-defect-button')) {
+            // Wait for toolbar to appear
+            try {
+                await waitForElement('.v-toolbar, .toolbar-control, [role="toolbar"], .v-btn-toggle', 10000);
+                console.log('[Monlam Defect] Toolbar found');
+            } catch (e) {
+                console.log('[Monlam Defect] Toolbar not found yet, will retry...');
+                setTimeout(addDefectButton, 2000);
                 return;
             }
             
+            // Find keyboard shortcut button to insert defect button next to it
             const keyboardShortcutBtn = Array.from(document.querySelectorAll('button, .v-btn')).find(btn => {
                 const icon = btn.querySelector('i, .v-icon');
                 if (!icon) return false;
                 const iconClass = icon.className || '';
                 const ariaLabel = btn.getAttribute('aria-label') || '';
+                const title = btn.getAttribute('title') || '';
                 return iconClass.includes('keyboard') || 
                        iconClass.includes('mdi-keyboard') ||
-                       ariaLabel.toLowerCase().includes('keyboard');
+                       ariaLabel.toLowerCase().includes('keyboard') ||
+                       title.toLowerCase().includes('keyboard');
             });
             
             if (!keyboardShortcutBtn) {
-                setTimeout(addDefectButton, 1000);
+                console.log('[Monlam Defect] Could not find keyboard shortcut button, will retry...');
+                setTimeout(addDefectButton, 2000);
                 return;
             }
+            
+            console.log('[Monlam Defect] Keyboard shortcut button found, creating defect button');
             
             const toolbar = keyboardShortcutBtn.closest('.v-btn-toggle') || 
                            keyboardShortcutBtn.closest('.v-toolbar') ||
@@ -2688,26 +2746,70 @@
             console.log('[Monlam Defect] ✅ Defect button added to toolbar');
         }
         
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(addDefectButton, 1000);
+        // Initialize defect button with multiple strategies
+        function initializeDefectButton() {
+            // Strategy 1: Wait for DOM to be ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(addDefectButton, 1500);
+                });
+            } else {
+                setTimeout(addDefectButton, 1500);
+            }
+            
+            // Strategy 2: Watch for Vue app initialization
+            if (window.$nuxt) {
+                setTimeout(addDefectButton, 2000);
+            } else {
+                // Wait for Vue to initialize
+                const vueObserver = new MutationObserver(() => {
+                    if (window.$nuxt || document.querySelector('.v-application')) {
+                        vueObserver.disconnect();
+                        setTimeout(addDefectButton, 2000);
+                    }
+                });
+                vueObserver.observe(document.body, { childList: true, subtree: true });
+                // Stop watching after 10 seconds
+                setTimeout(() => vueObserver.disconnect(), 10000);
+            }
+            
+            // Strategy 3: Watch for URL changes (SPA navigation)
+            let lastUrl = location.href;
+            const urlObserver = new MutationObserver(() => {
+                const url = location.href;
+                if (url !== lastUrl) {
+                    lastUrl = url;
+                    // Remove old button if exists
+                    const oldButton = document.querySelector('.monlam-defect-button');
+                    if (oldButton) {
+                        oldButton.remove();
+                    }
+                    setTimeout(addDefectButton, 2000);
+                }
             });
-        } else {
-            setTimeout(addDefectButton, 1000);
+            urlObserver.observe(document, { subtree: true, childList: true });
+            
+            // Strategy 4: Periodic retry (fallback)
+            let retryCount = 0;
+            const maxRetries = 10;
+            const retryInterval = setInterval(() => {
+                retryCount++;
+                if (document.querySelector('.monlam-defect-button')) {
+                    clearInterval(retryInterval);
+                    return;
+                }
+                if (retryCount >= maxRetries) {
+                    clearInterval(retryInterval);
+                    return;
+                }
+                if (isAnnotationPage() && getProjectId()) {
+                    addDefectButton();
+                }
+            }, 3000);
         }
         
-        let lastUrl = location.href;
-        new MutationObserver(() => {
-            const url = location.href;
-            if (url !== lastUrl) {
-                lastUrl = url;
-                const oldButton = document.querySelector('.monlam-defect-button');
-                if (oldButton) {
-                    oldButton.remove();
-                }
-                setTimeout(addDefectButton, 1000);
-            }
-        }).observe(document, { subtree: true, childList: true });
+        // Start initialization
+        initializeDefectButton();
         
     })();
   </script>
