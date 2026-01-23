@@ -71,47 +71,59 @@ def patch_example_list_get_queryset(file_path):
                 # If filtering fails, continue with original queryset
         
         # For reviewers: Filter to show only examples that need review
+        # UNLESS they came from dataset table (all_examples=true parameter)
+        # When clicking "Annotate" button from dataset, show ALL examples (and navigate to specific example)
+        # When clicking "Start Annotation" button, show only submitted examples
         if is_reviewer:
-            try:
-                from assignment.simple_tracking import AnnotationTracking
-                
-                # Get examples that have been reviewed by this user
-                reviewed_example_ids = AnnotationTracking.objects.filter(
-                    project=project,
-                    reviewed_by=user
-                ).exclude(
-                    status='rejected'  # Don't exclude rejected examples (they need re-review)
-                ).values_list('example_id', flat=True)
-                
-                # Get submitted example IDs that haven't been reviewed by this user
-                submitted_tracking = AnnotationTracking.objects.filter(
-                    project=project,
-                    status='submitted'
-                ).exclude(
-                    example_id__in=reviewed_example_ids
-                ).values_list('example_id', flat=True)
-                
-                # Get rejected example IDs (always show these for re-review)
-                rejected_example_ids = AnnotationTracking.objects.filter(
-                    project=project,
-                    status='rejected'
-                ).values_list('example_id', flat=True)
-                
-                # Combine: submitted (not reviewed by this user) + rejected
-                example_ids_to_show = list(set(list(submitted_tracking) + list(rejected_example_ids)))
-                
-                # Filter queryset to only show these examples
-                if example_ids_to_show:
-                    queryset = queryset.filter(id__in=example_ids_to_show)
-                else:
-                    # If no examples need review, return empty queryset
-                    queryset = queryset.none()
-                
-                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing {len(example_ids_to_show)} examples needing review')
-                
-            except Exception as e:
-                print(f'[Monlam ExampleList] Error filtering for reviewer: {e}')
-                # If filtering fails, continue with original queryset
+            # Check if user came from dataset table (clicked "Annotate" button)
+            all_examples_param = self.request.GET.get('all_examples', '').lower() == 'true'
+            
+            if all_examples_param:
+                # User clicked "Annotate" from dataset table - show ALL examples
+                # This allows them to navigate to the specific example they clicked
+                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing ALL examples (from dataset table - direct example access)')
+            else:
+                # User clicked "Start Annotation" - show only submitted examples
+                try:
+                    from assignment.simple_tracking import AnnotationTracking
+                    
+                    # Get examples that have been reviewed by this user
+                    reviewed_example_ids = AnnotationTracking.objects.filter(
+                        project=project,
+                        reviewed_by=user
+                    ).exclude(
+                        status='rejected'  # Don't exclude rejected examples (they need re-review)
+                    ).values_list('example_id', flat=True)
+                    
+                    # Get submitted example IDs that haven't been reviewed by this user
+                    submitted_tracking = AnnotationTracking.objects.filter(
+                        project=project,
+                        status='submitted'
+                    ).exclude(
+                        example_id__in=reviewed_example_ids
+                    ).values_list('example_id', flat=True)
+                    
+                    # Get rejected example IDs (always show these for re-review)
+                    rejected_example_ids = AnnotationTracking.objects.filter(
+                        project=project,
+                        status='rejected'
+                    ).values_list('example_id', flat=True)
+                    
+                    # Combine: submitted (not reviewed by this user) + rejected
+                    example_ids_to_show = list(set(list(submitted_tracking) + list(rejected_example_ids)))
+                    
+                    # Filter queryset to only show these examples
+                    if example_ids_to_show:
+                        queryset = queryset.filter(id__in=example_ids_to_show)
+                    else:
+                        # If no examples need review, return empty queryset
+                        queryset = queryset.none()
+                    
+                    print(f'[Monlam ExampleList] Reviewer {user.username}: Showing {len(example_ids_to_show)} examples needing review (from Start Annotation)')
+                    
+                except Exception as e:
+                    print(f'[Monlam ExampleList] Error filtering for reviewer: {e}')
+                    # If filtering fails, continue with original queryset
         
         # Original ordering logic
         if self.project.random_order:
@@ -193,47 +205,59 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('                # If filtering fails, continue with original queryset')
                     new_lines.append('')
                     new_lines.append('        # For reviewers: Filter to show only examples that need review')
+                    new_lines.append('        # UNLESS they came from dataset table (all_examples=true parameter)')
+                    new_lines.append('        # When clicking "Annotate" button from dataset, show ALL examples (and navigate to specific example)')
+                    new_lines.append('        # When clicking "Start Annotation" button, show only submitted examples')
                     new_lines.append('        if is_reviewer:')
-                    new_lines.append('            try:')
-                    new_lines.append('                from assignment.simple_tracking import AnnotationTracking')
+                    new_lines.append('            # Check if user came from dataset table (clicked "Annotate" button)')
+                    new_lines.append("            all_examples_param = self.request.GET.get('all_examples', '').lower() == 'true'")
                     new_lines.append('')
-                    new_lines.append('                # Get examples that have been reviewed by this user')
-                    new_lines.append('                reviewed_example_ids = AnnotationTracking.objects.filter(')
-                    new_lines.append('                    project=project,')
-                    new_lines.append('                    reviewed_by=user')
-                    new_lines.append('                ).exclude(')
-                    new_lines.append("                    status='rejected'  # Don't exclude rejected examples (they need re-review)")
-                    new_lines.append('                ).values_list(\'example_id\', flat=True)')
+                    new_lines.append('            if all_examples_param:')
+                    new_lines.append('                # User clicked "Annotate" from dataset table - show ALL examples')
+                    new_lines.append('                # This allows them to navigate to the specific example they clicked')
+                    new_lines.append(f"                print(f'[Monlam ExampleList] Reviewer {{user.username}}: Showing ALL examples (from dataset table - direct example access)')")
+                    new_lines.append('            else:')
+                    new_lines.append('                # User clicked "Start Annotation" - show only submitted examples')
+                    new_lines.append('                try:')
+                    new_lines.append('                    from assignment.simple_tracking import AnnotationTracking')
                     new_lines.append('')
-                    new_lines.append('                # Get submitted example IDs that haven\'t been reviewed by this user')
-                    new_lines.append('                submitted_tracking = AnnotationTracking.objects.filter(')
-                    new_lines.append('                    project=project,')
-                    new_lines.append("                    status='submitted'")
-                    new_lines.append('                ).exclude(')
-                    new_lines.append('                    example_id__in=reviewed_example_ids')
-                    new_lines.append('                ).values_list(\'example_id\', flat=True)')
+                    new_lines.append('                    # Get examples that have been reviewed by this user')
+                    new_lines.append('                    reviewed_example_ids = AnnotationTracking.objects.filter(')
+                    new_lines.append('                        project=project,')
+                    new_lines.append('                        reviewed_by=user')
+                    new_lines.append('                    ).exclude(')
+                    new_lines.append("                        status='rejected'  # Don't exclude rejected examples (they need re-review)")
+                    new_lines.append('                    ).values_list(\'example_id\', flat=True)')
                     new_lines.append('')
-                    new_lines.append('                # Get rejected example IDs (always show these for re-review)')
-                    new_lines.append('                rejected_example_ids = AnnotationTracking.objects.filter(')
-                    new_lines.append('                    project=project,')
-                    new_lines.append("                    status='rejected'")
-                    new_lines.append('                ).values_list(\'example_id\', flat=True)')
+                    new_lines.append('                    # Get submitted example IDs that haven\'t been reviewed by this user')
+                    new_lines.append('                    submitted_tracking = AnnotationTracking.objects.filter(')
+                    new_lines.append('                        project=project,')
+                    new_lines.append("                        status='submitted'")
+                    new_lines.append('                    ).exclude(')
+                    new_lines.append('                        example_id__in=reviewed_example_ids')
+                    new_lines.append('                    ).values_list(\'example_id\', flat=True)')
                     new_lines.append('')
-                    new_lines.append('                # Combine: submitted (not reviewed by this user) + rejected')
-                    new_lines.append('                example_ids_to_show = list(set(list(submitted_tracking) + list(rejected_example_ids)))')
+                    new_lines.append('                    # Get rejected example IDs (always show these for re-review)')
+                    new_lines.append('                    rejected_example_ids = AnnotationTracking.objects.filter(')
+                    new_lines.append('                        project=project,')
+                    new_lines.append("                        status='rejected'")
+                    new_lines.append('                    ).values_list(\'example_id\', flat=True)')
                     new_lines.append('')
-                    new_lines.append('                # Filter queryset to only show these examples')
-                    new_lines.append('                if example_ids_to_show:')
-                    new_lines.append('                    queryset = queryset.filter(id__in=example_ids_to_show)')
-                    new_lines.append('                else:')
-                    new_lines.append('                    # If no examples need review, return empty queryset')
-                    new_lines.append('                    queryset = queryset.none()')
+                    new_lines.append('                    # Combine: submitted (not reviewed by this user) + rejected')
+                    new_lines.append('                    example_ids_to_show = list(set(list(submitted_tracking) + list(rejected_example_ids)))')
                     new_lines.append('')
-                    new_lines.append("                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing {len(example_ids_to_show)} examples needing review')")
+                    new_lines.append('                    # Filter queryset to only show these examples')
+                    new_lines.append('                    if example_ids_to_show:')
+                    new_lines.append('                        queryset = queryset.filter(id__in=example_ids_to_show)')
+                    new_lines.append('                    else:')
+                    new_lines.append('                        # If no examples need review, return empty queryset')
+                    new_lines.append('                        queryset = queryset.none()')
                     new_lines.append('')
-                    new_lines.append('            except Exception as e:')
-                    new_lines.append("                print(f'[Monlam ExampleList] Error filtering for reviewer: {e}')")
-                    new_lines.append('                # If filtering fails, continue with original queryset')
+                    new_lines.append("                    print(f'[Monlam ExampleList] Reviewer {user.username}: Showing {len(example_ids_to_show)} examples needing review (from Start Annotation)')")
+                    new_lines.append('')
+                    new_lines.append('                except Exception as e:')
+                    new_lines.append("                    print(f'[Monlam ExampleList] Error filtering for reviewer: {e}')")
+                    new_lines.append('                    # If filtering fails, continue with original queryset')
                     new_lines.append('')
                     new_lines.append('        # Original ordering logic')
                     new_lines.append('        if self.project.random_order:')

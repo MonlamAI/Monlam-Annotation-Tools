@@ -302,18 +302,21 @@
                 // Enhanced dataset = Django view (current tab)
                 // Annotation = Doccano Vue SPA (new tab with fresh context)
                 
-                const exampleIndex = this.filteredExamples.findIndex(ex => ex.id === item.id);
-                const pageNumber = Math.floor(exampleIndex / 10);
+                // Navigate directly to the specific example by ID
+                // The 'page' parameter can be the example ID directly
+                const exampleId = item.id;
                 
-                console.log(`📍 Opening annotation for example ${item.id}`);
-                console.log(`   Index: ${exampleIndex}, Page: ${pageNumber}`);
+                console.log(`📍 Opening annotation for example ${exampleId}`);
                 
                 // Open annotation interface in NEW TAB
                 // New tab = fresh page load = Vue initializes correctly
-                const url = `/projects/{{ project_id }}/{{ project_type }}?page=${pageNumber}&q=&isChecked=`;
+                // Use example ID as page parameter to navigate directly to that example
+                // Add all_examples=true parameter to indicate user clicked from dataset table
+                // This allows project admins/reviewers to see ALL examples, not just submitted
+                const url = `/projects/{{ project_id }}/{{ project_type }}?page=${exampleId}&q=&isChecked=&all_examples=true`;
                 
                 console.log(`   URL: ${url}`);
-                console.log(`   Opening in new tab...`);
+                console.log(`   Opening example ${exampleId} directly...`);
                 
                 window.open(url, '_blank');
             },

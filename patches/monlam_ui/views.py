@@ -548,6 +548,70 @@ def api_dataset_assignments(request, project_id):
                     assignment.submitted_at = example_state.confirmed_at or timezone.now()
                 assignment.save(update_fields=['status', 'submitted_at'])
     
+    # Check user role BEFORE filtering
+    from assignment.permissions import get_user_role
+    role_name, is_privileged = get_user_role(request.user, project.id)
+    
+    # For privileged users (admins, managers, approvers): Ensure ALL examples have assignment records
+    # This allows them to see the complete status breakdown in the dataset table
+    if is_privileged:
+        # Get all example IDs that have assignments
+        assigned_example_ids = set(assignment_map.keys())
+        
+        # Get all example IDs in the project
+        all_example_ids = set(all_examples.values_list('id', flat=True))
+        
+        # Find examples without assignments
+        unassigned_example_ids = all_example_ids - assigned_example_ids
+        
+        # Create assignment records for unassigned examples (so privileged users can see them)
+        for example_id in unassigned_example_ids:
+            try:
+                example = Example.objects.get(id=example_id, project=project)
+                # Check if there's tracking data to determine status
+                tracking = tracking_map.get(example_id)
+                example_state = all_states_map.get(example_id)
+                
+                # Determine status and assigned_to
+                if tracking:
+                    # Use tracking status, but map to assignment status values
+                    tracking_status = tracking.status
+                    if tracking_status == 'submitted':
+                        status = 'submitted'
+                    elif tracking_status == 'approved':
+                        status = 'approved'
+                    elif tracking_status == 'rejected':
+                        status = 'rejected'
+                    elif tracking_status == 'pending':
+                        # Check if example is confirmed (finished)
+                        if example_state and example_state.confirmed_by:
+                            status = 'submitted'  # Confirmed = submitted
+                        else:
+                            status = 'in_progress'  # Pending but not confirmed = in progress
+                    else:
+                        status = 'assigned'
+                    assigned_to = tracking.annotated_by
+                elif example_state and example_state.confirmed_by:
+                    # Example is confirmed but no tracking - should be submitted
+                    status = 'submitted'
+                    assigned_to = example_state.confirmed_by
+                else:
+                    # No tracking, no state = truly unassigned
+                    status = 'assigned'
+                    assigned_to = None
+                
+                assignment = Assignment.objects.create(
+                    project=project,
+                    example=example,
+                    assigned_to=assigned_to,
+                    status=status,
+                    is_active=True
+                )
+                assignment_map[example_id] = assignment
+                print(f'[Dataset API] ✅ Created Assignment for example {example_id} (status={status}, for privileged user view)')
+            except Exception as e:
+                print(f'[Dataset API] ⚠️ Could not create Assignment for example {example_id}: {e}')
+    
     # Refresh assignments after syncing
     assignments = Assignment.objects.filter(
         project=project,
@@ -556,9 +620,6 @@ def api_dataset_assignments(request, project_id):
     
     # CRITICAL: Filter approved examples for annotators
     # Only privileged users (admins, managers, approvers) can see approved examples
-    from assignment.permissions import get_user_role
-    role_name, is_privileged = get_user_role(request.user, project.id)
-    
     if not is_privileged:
         # Annotator - filter out approved examples
         # BUT keep rejected examples visible (annotator needs to fix them)
