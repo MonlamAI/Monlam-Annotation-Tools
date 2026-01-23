@@ -1859,9 +1859,12 @@
                 
                 // Wait a bit for Vue to render rows, then add data cells
                 // Vue might re-render after we add the header, so we need to wait
-                setTimeout(() => {
-                    enhanceDataRows(trackingMap);
-                }, 100);
+                // Use requestAnimationFrame for smoother DOM updates
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        enhanceDataRows(trackingMap);
+                    }, 50);  // Reduced from 100ms for faster loading
+                });
                 
                 // Set up MutationObserver immediately to watch for new rows (e.g., pagination)
                 const tbody = document.querySelector('tbody');
@@ -1986,10 +1989,10 @@
             }
             
             // Try to enhance once Vue has rendered the table
-            // Use exponential backoff to avoid hammering the DOM
+            // Optimized for faster loading with fewer retries
             let attempt = 0;
-            const maxAttempts = 5;
-            const baseDelay = 100; // Reduced from 500ms for faster initial load
+            const maxAttempts = 3;  // Reduced from 5 for faster failure detection
+            const baseDelay = 50;  // Reduced from 100ms for faster initial load
             
             function tryEnhance() {
                 attempt++;
@@ -1998,13 +2001,19 @@
                 if (success) {
                     console.log('[Monlam Dataset] ✅ Enhancement complete after', attempt, 'attempts');
                 } else if (attempt < maxAttempts) {
-                    const delay = baseDelay * Math.pow(1.5, attempt);
-                    setTimeout(tryEnhance, delay);
+                    // Use requestAnimationFrame for smoother DOM updates
+                    requestAnimationFrame(() => {
+                        setTimeout(tryEnhance, baseDelay * attempt);  // Linear backoff instead of exponential
+                    });
+                } else {
+                    console.warn('[Monlam Dataset] ⚠️ Enhancement failed after', maxAttempts, 'attempts - table may not be ready yet');
                 }
             }
             
-            // Start enhancement immediately (reduced delay for faster loading)
-            setTimeout(tryEnhance, 100);
+            // Start enhancement immediately using requestAnimationFrame for better timing
+            requestAnimationFrame(() => {
+                setTimeout(tryEnhance, 50);  // Reduced from 100ms
+            });
             
         } catch (error) {
             console.error('[Monlam Dataset] ❌ Error enhancing table:', error);
@@ -2312,10 +2321,10 @@
         // Initialize features after a short delay (let Vue render)
         setTimeout(() => {
             enableAudioLoop();  // Only loops on annotation pages (not dataset)
-            // DISABLED: enhanceDatasetTable() - May interfere with Vue rendering, dataset table should work without it
+            enhanceDatasetTable();  // Add status column to dataset table
             addApproveRejectButtons();
             // REMOVED: handleExampleLocking() - No longer needed with single annotator per project
-        }, 1000);
+        }, 500);  // Reduced delay for faster loading
         
         // Monitor SPA navigation and re-initialize on route change
         let lastPath = window.location.pathname;
@@ -2337,10 +2346,10 @@
                 
                 setTimeout(() => {
                     enableAudioLoop();  // Only loops on annotation pages (not dataset)
-                    // DISABLED: enhanceDatasetTable() - May interfere with Vue rendering, dataset table should work without it
+                    enhanceDatasetTable();  // Add status column to dataset table
                     addApproveRejectButtons();
                     // REMOVED: handleExampleLocking() - No longer needed with single annotator per project
-                }, 500);
+                }, 300);  // Reduced delay for faster loading
             }
         }, 500);
         
