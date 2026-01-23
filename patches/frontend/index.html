@@ -1778,11 +1778,29 @@
             // The serializer adds: annotated_by_username, reviewed_by_username, tracking_status
             const examplesResp = await fetch(examplesUrl);
             if (!examplesResp.ok) {
-                console.error('[Monlam Dataset] Failed to fetch examples:', examplesResp.status);
+                const errorText = await examplesResp.text();
+                console.error('[Monlam Dataset] ❌ Failed to fetch examples:', examplesResp.status, errorText);
+                console.error('[Monlam Dataset] URL was:', examplesUrl);
                 return;
             }
             
             const examplesData = await examplesResp.json();
+            console.log('[Monlam Dataset] 📊 API Response:', {
+                count: examplesData.count,
+                resultsLength: examplesData.results?.length || 0,
+                hasResults: !!examplesData.results,
+                firstExample: examplesData.results?.[0] || null
+            });
+            
+            // Check if results array exists and has data
+            if (!examplesData.results || examplesData.results.length === 0) {
+                console.warn('[Monlam Dataset] ⚠️ No examples returned from API. This might indicate:');
+                console.warn('  1. Project has no examples');
+                console.warn('  2. Backend filtering is excluding all examples');
+                console.warn('  3. API returned empty results');
+                console.warn('[Monlam Dataset] Project ID:', projectId, 'isPrivileged:', isPrivileged);
+                // Don't return - let the table render empty so user can see there's no data
+            }
             
             // Build a map of example_id -> tracking data
             // IMPORTANT: Use CORRECT field names from serializer

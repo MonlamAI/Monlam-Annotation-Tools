@@ -309,7 +309,18 @@
                     // Annotators will see filtered results (only their assigned examples)
                     const examplesUrl = `/v1/projects/{{ project_id }}/examples?limit=1000${isPrivileged ? '&all_examples=true' : ''}`;
                     console.log('📡 Fetching examples from:', examplesUrl);
-                    const examplesResp = await axios.get(examplesUrl);
+                    console.log('📋 isPrivileged:', isPrivileged, 'Project ID:', {{ project_id }});
+                    
+                    let examplesResp;
+                    try {
+                        examplesResp = await axios.get(examplesUrl);
+                    } catch (error) {
+                        console.error('❌ Error fetching examples:', error);
+                        console.error('   Response:', error.response?.data);
+                        console.error('   Status:', error.response?.status);
+                        this.error = `Failed to load examples: ${error.response?.status || error.message}`;
+                        return;
+                    }
                     
                     if (!examplesResp.data) {
                         console.error('❌ Examples API returned no data');
@@ -317,12 +328,23 @@
                         return;
                     }
                     
+                    console.log('📊 API Response:', {
+                        count: examplesResp.data.count,
+                        resultsLength: examplesResp.data.results?.length || 0,
+                        hasResults: !!examplesResp.data.results
+                    });
+                    
                     const examples = examplesResp.data.results || [];
                     console.log('✅ Loaded', examples.length, 'examples from API');
                     
                     if (examples.length === 0) {
-                        console.warn('⚠️ No examples returned from API. This might indicate a filtering issue.');
-                        this.error = 'No examples found. Please check if examples exist in this project.';
+                        console.warn('⚠️ No examples returned from API. This might indicate:');
+                        console.warn('  1. Project has no examples');
+                        console.warn('  2. Backend filtering is excluding all examples');
+                        console.warn('  3. API returned empty results');
+                        console.warn('  Project ID:', {{ project_id }}, 'isPrivileged:', isPrivileged);
+                        // Don't set error - let table show empty state
+                        this.error = null; // Clear error so empty state shows
                     }
                     
                     const assignmentsUrl = '/monlam/{{ project_id }}/api/dataset-assignments/';
