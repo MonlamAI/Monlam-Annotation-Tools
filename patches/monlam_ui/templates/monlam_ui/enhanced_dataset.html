@@ -272,44 +272,11 @@
                 console.log('📥 Loading data for project {{ project_id }}...');
                 
                 try {
-                    // Check user role to determine if we should fetch all examples
-                    // Privileged users (superusers, admins, managers, approvers) should see ALL examples in dataset table
-                    // Annotators should see filtered results (only their assigned examples)
-                    let isPrivileged = false;
-                    
-                    // First check if user is superuser (superusers should always see all examples)
-                    try {
-                        const userResp = await axios.get('/v1/me');
-                        if (userResp.data && userResp.data.is_superuser) {
-                            isPrivileged = true;
-                            console.log('📋 User is superuser, showing all examples');
-                        }
-                    } catch (userError) {
-                        console.warn('⚠️ Could not check if user is superuser:', userError);
-                    }
-                    
-                    // If not superuser, check project role
-                    if (!isPrivileged) {
-                        try {
-                            const roleResp = await axios.get(`/v1/projects/{{ project_id }}/my-role`);
-                            if (roleResp.data) {
-                                const roleName = (roleResp.data.rolename || roleResp.data.role || '').toLowerCase();
-                                isPrivileged = roleName.includes('admin') || 
-                                              roleName.includes('manager') || 
-                                              roleName.includes('approver');
-                                console.log('📋 User role:', roleName, 'isPrivileged:', isPrivileged);
-                            }
-                        } catch (roleError) {
-                            console.warn('⚠️ Could not check user role:', roleError);
-                        }
-                    }
-                    
-                    // Build API URL - add all_examples=true for privileged users only
-                    // This ensures project admins/managers/approvers see ALL examples in dataset table
-                    // Annotators will see filtered results (only their assigned examples)
-                    const examplesUrl = `/v1/projects/{{ project_id }}/examples?limit=1000${isPrivileged ? '&all_examples=true' : ''}`;
-                    console.log('📡 Fetching examples from:', examplesUrl);
-                    console.log('📋 isPrivileged:', isPrivileged, 'Project ID:', {{ project_id }});
+                    // Dataset table should show ALL examples for everyone - NO filtering
+                    // Visibility logic only applies when clicking "Start Annotation" (handled by backend)
+                    const examplesUrl = `/v1/projects/{{ project_id }}/examples?limit=1000&all_examples=true`;
+                    console.log('📡 Fetching ALL examples from:', examplesUrl);
+                    console.log('📋 Dataset table shows ALL examples for everyone - no filtering');
                     
                     let examplesResp;
                     try {
