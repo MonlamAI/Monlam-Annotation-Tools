@@ -756,4 +756,148 @@ class ApproverCompletionViewSet(viewsets.ViewSet):
             'approver_role': user_role,
             'reviewed_at': approval.reviewed_at
         })
+    
+    @action(detail=False, methods=['get'], url_path='next-for-review')
+    def next_for_review(self, request, project_id):
+        """
+        Get the next example that needs review by the current user.
+        
+        Priority order:
+        1. Submitted examples that haven't been reviewed by current user
+        2. If current_example_id provided, get next after that
+        3. If no more submitted, cycle back to first submitted
+        
+        Query params:
+        - current_example_id: Current example ID (optional, for "next" navigation)
+        - direction: 'next' or 'prev' (default: 'next')
+        """
+        from examples.models import Example
+        from .simple_tracking import AnnotationTracking
+        from examples.models import ExampleState
+        from projects.models import Member
+        
+        project = self.get_project(project_id)
+        user = request.user
+        
+        # Check if user has permission to review
+        can_review = ProjectManagerMixin.is_approver_or_higher(user, project)
+        if not can_review:
+            return Response(
+                {'error': 'You do not have permission to review examples'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get user's role
+        user_role = self._get_user_role(user, project)
+        
+        # Get current example ID (if provided)
+        current_example_id = request.query_params.get('current_example_id')
+        try:
+            current_example_id = int(current_example_id) if current_example_id else None
+        except (ValueError, TypeError):
+            current_example_id = None
+        
+        direction = request.query_params.get('direction', 'next')
+        
+        # Get all submitted examples (status='submitted' in AnnotationTracking or ExampleState exists)
+        # Get examples with ExampleState (confirmed/submitted)
+        confirmed_examples = ExampleState.objects.filter(
+            example__project=project,
+            confirmed_by__isnull=False
+        ).select_related('example').values_list('example_id', flat=True)
+        
+        # Get tracking records for submitted examples
+        submitted_tracking = AnnotationTracking.objects.filter(
+            project=project,
+            status='submitted'
+        ).values_list('example_id', flat=True)
+        
+        # Combine: submitted = confirmed OR tracking status='submitted'
+        all_submitted_ids = set(confirmed_examples) | set(submitted_tracking)
+        
+        # Filter based on role requirements
+        if user_role == ROLE_PROJECT_ADMIN:
+            # Project admin can only review if annotation_approver has approved
+            # Get all annotation_approvers in the project
+            approver_members = Member.objects.filter(
+                project=project
+            ).select_related('role', 'user').filter(
+                role__name__iexact=ROLE_ANNOTATION_APPROVER
+            )
+            approver_users = [m.user for m in approver_members]
+            
+            # Get examples approved by annotation_approvers
+            approver_approved_ids = ApproverCompletionStatus.objects.filter(
+                project=project,
+                approver__in=approver_users,
+                status='approved'
+            ).values_list('example_id', flat=True).distinct()
+            
+            submitted_examples = list(all_submitted_ids & set(approver_approved_ids))
+        elif user_role == ROLE_ANNOTATION_APPROVER:
+            # Annotation approver can review any submitted example
+            submitted_examples = list(all_submitted_ids)
+        elif user_role == ROLE_PROJECT_MANAGER:
+            # Project manager can review any submitted example
+            submitted_examples = list(all_submitted_ids)
+        else:
+            # Other roles - return empty
+            submitted_examples = []
+        
+        if not submitted_examples:
+            return Response({
+                'next_example_id': None,
+                'message': 'No examples available for review'
+            })
+        
+        # Get examples that current user hasn't reviewed yet
+        reviewed_by_user = ApproverCompletionStatus.objects.filter(
+            project=project,
+            approver=user,
+            example_id__in=submitted_examples
+        ).values_list('example_id', flat=True)
+        
+        unreviewed_examples = [eid for eid in submitted_examples if eid not in reviewed_by_user]
+        
+        # If all submitted examples have been reviewed, show all submitted (for re-review)
+        if not unreviewed_examples:
+            unreviewed_examples = submitted_examples
+        
+        # Sort by example ID
+        unreviewed_examples = sorted(unreviewed_examples)
+        
+        if not unreviewed_examples:
+            return Response({
+                'next_example_id': None,
+                'message': 'No examples available for review'
+            })
+        
+        # Find next example
+        if current_example_id:
+            if direction == 'next':
+                # Find next example after current
+                next_examples = [eid for eid in unreviewed_examples if eid > current_example_id]
+                if next_examples:
+                    next_example_id = next_examples[0]
+                else:
+                    # Cycle back to first
+                    next_example_id = unreviewed_examples[0]
+            else:  # prev
+                # Find previous example before current
+                prev_examples = [eid for eid in unreviewed_examples if eid < current_example_id]
+                if prev_examples:
+                    next_example_id = prev_examples[-1]
+                else:
+                    # Cycle to last
+                    next_example_id = unreviewed_examples[-1]
+        else:
+            # No current example - return first unreviewed
+            next_example_id = unreviewed_examples[0]
+        
+        return Response({
+            'next_example_id': next_example_id,
+            'total_unreviewed': len(unreviewed_examples),
+            'total_submitted': len(submitted_examples),
+            'current_index': unreviewed_examples.index(next_example_id) + 1 if next_example_id in unreviewed_examples else None
+        })
 

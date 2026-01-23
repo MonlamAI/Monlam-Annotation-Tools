@@ -21,8 +21,8 @@
             <div class="mt-2">
               <span class="text-body-2">by <strong style="font-size: 15px;">{{ submittedBy }}</strong></span>
               <span v-if="annotatedAt" class="text-body-2 ml-3 text--secondary">
-                at {{ formatDate(annotatedAt) }}
-              </span>
+              at {{ formatDate(annotatedAt) }}
+            </span>
             </div>
           </div>
           <div v-else-if="isSubmitted" class="mb-3">
@@ -32,8 +32,8 @@
             </v-chip>
             <div class="mt-2" v-if="annotatedAt">
               <span class="text-body-2 text--secondary">
-                at {{ formatDate(annotatedAt) }}
-              </span>
+              at {{ formatDate(annotatedAt) }}
+            </span>
             </div>
           </div>
           
@@ -48,8 +48,8 @@
               <div class="mt-2">
                 <span class="text-body-2">by <strong style="font-size: 15px;">{{ reviewedBy }}</strong></span>
                 <span v-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
-                  at {{ formatDate(reviewedAt) }}
-                </span>
+                at {{ formatDate(reviewedAt) }}
+              </span>
               </div>
             </div>
             <!-- Show approvedBy if available (from approval chain) and reviewedBy is not set -->
@@ -64,8 +64,8 @@
                   at {{ formatDate(approvedAt) }}
                 </span>
                 <span v-else-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
-                  at {{ formatDate(reviewedAt) }}
-                </span>
+                at {{ formatDate(reviewedAt) }}
+              </span>
               </div>
             </div>
             <!-- Show project admin approval status if no specific reviewer info -->
@@ -119,16 +119,16 @@
             <div v-else-if="rejectedBy" class="mb-3">
               <v-chip color="error" text-color="white" class="mr-3 mb-2" style="font-size: 14px; height: 32px; padding: 0 12px;">
                 <v-icon left size="18">mdi-close-circle</v-icon>
-                Rejected
-              </v-chip>
+              Rejected
+            </v-chip>
               <div class="mt-2">
                 <span class="text-body-2">by <strong style="font-size: 15px;">{{ rejectedBy }}</strong></span>
                 <span v-if="rejectedAt" class="text-body-2 ml-3 text--secondary">
                   at {{ formatDate(rejectedAt) }}
                 </span>
                 <span v-else-if="reviewedAt" class="text-body-2 ml-3 text--secondary">
-                  at {{ formatDate(reviewedAt) }}
-                </span>
+              at {{ formatDate(reviewedAt) }}
+            </span>
               </div>
             </div>
             <!-- Fallback: show rejection status without specific reviewer -->
@@ -645,7 +645,7 @@ export default Vue.extend({
           this.reviewedAt = data.reviewed_at
         }
         if (data.annotated_by || data.confirmed_by) {
-          this.submittedBy = data.annotated_by || data.confirmed_by || this.submittedBy
+        this.submittedBy = data.annotated_by || data.confirmed_by || this.submittedBy
         }
         // Only overwrite reviewedBy if tracking API has a value
         // This preserves values set from approval chain fallback

@@ -102,6 +102,11 @@ urlpatterns = [
          ApproverCompletionViewSet.as_view({'post': 'reject'}), 
          name='approver-completion-reject'),
     
+    # Next example for review (for navigation)
+    path('approver-completion/next-for-review/', 
+         ApproverCompletionViewSet.as_view({'get': 'next_for_review'}), 
+         name='approver-completion-next'),
+    
     # ===== Comprehensive Example API (All data in one query) =====
     # Get examples with all completion metrics combined
     path('examples-comprehensive/', 

@@ -21,7 +21,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from .simple_tracking import AnnotationTracking
+from .simple_tracking import AnnotationTracking, SkippedExample
 from .completion_tracking import ApproverCompletionStatus
 from .roles import ROLE_PROJECT_ADMIN, ROLE_ANNOTATION_APPROVER, ROLE_PROJECT_MANAGER
 
@@ -669,6 +669,134 @@ class AnnotationTrackingViewSet(viewsets.ViewSet):
                 'annotated_at': tracking.annotated_at,
                 'reviewed_at': tracking.reviewed_at,
                 'review_notes': tracking.review_notes
+            })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], url_path='skip')
+    def skip(self, request, project_id=None, pk=None):
+        """
+        Permanently skip an example (annotator won't see it anymore)
+        
+        POST /v1/projects/{project_id}/tracking/{example_id}/skip/
+        {
+            "reason": "Poor audio quality" (optional)
+        }
+        
+        Rules:
+        - Only annotators can skip examples
+        - Creates a SkippedExample record
+        - Example will be filtered out from annotator's view
+        """
+        from examples.models import Example
+        from projects.models import Project
+        
+        # Get project and example
+        try:
+            project = Project.objects.get(pk=project_id)
+            example = Example.objects.get(pk=pk, project=project)
+        except (Project.DoesNotExist, Example.DoesNotExist):
+            return Response(
+                {'error': 'Project or example not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Only annotators can skip examples
+        # Check if user is an annotator (not approver/admin/manager)
+        if not _is_annotator_only(request.user, project):
+            return Response(
+                {'error': 'Only annotators can skip examples. Reviewers and approvers should use approve/reject instead.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get reason (optional)
+        reason = request.data.get('reason', '').strip()
+        
+        try:
+            with transaction.atomic():
+                # Create or update SkippedExample record
+                skipped, created = SkippedExample.objects.get_or_create(
+                    project=project,
+                    example=example,
+                    skipped_by=request.user,
+                    defaults={
+                        'reason': reason
+                    }
+                )
+                
+                if not created:
+                    # Update reason if it changed
+                    if skipped.reason != reason:
+                        skipped.reason = reason
+                        skipped.save()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Example skipped successfully. You will not see this example anymore.',
+                    'skipped_at': skipped.skipped_at,
+                    'reason': skipped.reason
+                })
+        
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], url_path='unskip')
+    def unskip(self, request, project_id=None, pk=None):
+        """
+        Unskip an example (make it visible again to the annotator)
+        
+        POST /v1/projects/{project_id}/tracking/{example_id}/unskip/
+        
+        Rules:
+        - Only annotators can unskip their own skipped examples
+        - Deletes the SkippedExample record
+        """
+        from examples.models import Example
+        from projects.models import Project
+        
+        # Get project and example
+        try:
+            project = Project.objects.get(pk=project_id)
+            example = Example.objects.get(pk=pk, project=project)
+        except (Project.DoesNotExist, Example.DoesNotExist):
+            return Response(
+                {'error': 'Project or example not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Only annotators can unskip examples
+        if not _is_annotator_only(request.user, project):
+            return Response(
+                {'error': 'Only annotators can unskip examples.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            # Find and delete the SkippedExample record
+            skipped = SkippedExample.objects.filter(
+                project=project,
+                example=example,
+                skipped_by=request.user
+            ).first()
+            
+            if not skipped:
+                return Response(
+                    {'error': 'This example was not skipped by you.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            skipped.delete()
+            
+            return Response({
+                'success': True,
+                'message': 'Example unskipped successfully. You can now see this example again.'
             })
         
         except Exception as e:

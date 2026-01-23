@@ -89,3 +89,50 @@ class AnnotationTracking(models.Model):
     def __str__(self):
         return f"Tracking for Example {self.example_id} in Project {self.project_id} - Status: {self.status}"
 
+
+class SkippedExample(models.Model):
+    """
+    Tracks examples that annotators have permanently skipped (with a reason).
+    These examples will not appear in the annotator's view anymore.
+    
+    Note: This is different from temporary skipping (just navigating away).
+    Permanent skip means the annotator doesn't want to see this example again.
+    """
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.CASCADE,
+        related_name='skipped_examples'
+    )
+    
+    example = models.ForeignKey(
+        'examples.Example',
+        on_delete=models.CASCADE,
+        related_name='skipped_by_annotators'
+    )
+    
+    skipped_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='skipped_examples',
+        help_text='The annotator who skipped this example'
+    )
+    
+    skipped_at = models.DateTimeField(auto_now_add=True)
+    
+    reason = models.TextField(
+        blank=True,
+        default='',
+        help_text='Reason why this example was skipped (e.g., "Poor audio quality", "Not relevant", etc.)'
+    )
+    
+    class Meta:
+        db_table = 'skipped_example'
+        unique_together = [('project', 'example', 'skipped_by')]
+        indexes = [
+            models.Index(fields=['project', 'skipped_by']),
+            models.Index(fields=['example']),
+        ]
+    
+    def __str__(self):
+        return f"Example {self.example_id} skipped by {self.skipped_by.username} in Project {self.project_id}"
+

@@ -85,6 +85,22 @@ class CanAccessExample(permissions.BasePermission):
         if not is_annotator:
             return False
         
+        # CRITICAL: Check if example is permanently skipped by this annotator
+        try:
+            from .simple_tracking import SkippedExample
+            is_skipped = SkippedExample.objects.filter(
+                project=project,
+                example=obj,
+                skipped_by=user
+            ).exists()
+            
+            if is_skipped:
+                # Annotator has permanently skipped this example - deny access
+                return False
+        except Exception as e:
+            print(f'[Monlam Permissions] Error checking skipped examples: {e}')
+            # Continue with other checks if skip check fails
+        
         # Annotator rules - check AnnotationTracking first (primary source of truth)
         try:
             from .simple_tracking import AnnotationTracking

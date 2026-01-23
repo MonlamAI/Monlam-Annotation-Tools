@@ -52,6 +52,24 @@ def patch_example_list_get_queryset(file_path):
             # If we can't determine role, use original behavior
             is_reviewer = False
         
+        # For annotators: Filter out permanently skipped examples
+        if not is_reviewer:
+            try:
+                from assignment.simple_tracking import SkippedExample
+                # Get example IDs that this annotator has permanently skipped
+                skipped_example_ids = SkippedExample.objects.filter(
+                    project=project,
+                    skipped_by=user
+                ).values_list('example_id', flat=True)
+                
+                # Exclude skipped examples from queryset
+                if skipped_example_ids:
+                    queryset = queryset.exclude(id__in=skipped_example_ids)
+                    print(f'[Monlam ExampleList] Annotator {user.username}: Excluded {len(skipped_example_ids)} skipped examples')
+            except Exception as e:
+                print(f'[Monlam ExampleList] Error filtering skipped examples for annotator: {e}')
+                # If filtering fails, continue with original queryset
+        
         # For reviewers: Filter to show only examples that need review
         if is_reviewer:
             try:
@@ -155,6 +173,24 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append("            print(f'[Monlam ExampleList] Error checking user role: {e}')")
                     new_lines.append('            # If we can\'t determine role, use original behavior')
                     new_lines.append('            is_reviewer = False')
+                    new_lines.append('')
+                    new_lines.append('        # For annotators: Filter out permanently skipped examples')
+                    new_lines.append('        if not is_reviewer:')
+                    new_lines.append('            try:')
+                    new_lines.append('                from assignment.simple_tracking import SkippedExample')
+                    new_lines.append('                # Get example IDs that this annotator has permanently skipped')
+                    new_lines.append('                skipped_example_ids = SkippedExample.objects.filter(')
+                    new_lines.append('                    project=project,')
+                    new_lines.append('                    skipped_by=user')
+                    new_lines.append('                ).values_list(\'example_id\', flat=True)')
+                    new_lines.append('')
+                    new_lines.append('                # Exclude skipped examples from queryset')
+                    new_lines.append('                if skipped_example_ids:')
+                    new_lines.append('                    queryset = queryset.exclude(id__in=skipped_example_ids)')
+                    new_lines.append("                    print(f'[Monlam ExampleList] Annotator {user.username}: Excluded {len(skipped_example_ids)} skipped examples')")
+                    new_lines.append('            except Exception as e:')
+                    new_lines.append("                print(f'[Monlam ExampleList] Error filtering skipped examples for annotator: {e}')")
+                    new_lines.append('                # If filtering fails, continue with original queryset')
                     new_lines.append('')
                     new_lines.append('        # For reviewers: Filter to show only examples that need review')
                     new_lines.append('        if is_reviewer:')
