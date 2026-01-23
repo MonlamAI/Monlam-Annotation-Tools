@@ -1734,20 +1734,38 @@
         
         try {
             // Check user role to determine if we should fetch all examples
-            // Privileged users (admins, managers, approvers) should see ALL examples in dataset table
+            // Privileged users (superusers, admins, managers, approvers) should see ALL examples in dataset table
             let isPrivileged = false;
+            
+            // First check if user is superuser (superusers should always see all examples)
             try {
-                const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
-                if (roleResp.ok) {
-                    const roleData = await roleResp.json();
-                    const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
-                    isPrivileged = roleName.includes('admin') || 
-                                   roleName.includes('manager') || 
-                                   roleName.includes('approver');
-                    console.log('[Monlam Dataset] User role:', roleName, 'isPrivileged:', isPrivileged);
+                const userResp = await fetch('/v1/me');
+                if (userResp.ok) {
+                    const userData = await userResp.json();
+                    if (userData.is_superuser) {
+                        isPrivileged = true;
+                        console.log('[Monlam Dataset] User is superuser, showing all examples');
+                    }
                 }
-            } catch (roleError) {
-                console.warn('[Monlam Dataset] Could not check user role:', roleError);
+            } catch (userError) {
+                console.warn('[Monlam Dataset] Could not check if user is superuser:', userError);
+            }
+            
+            // If not superuser, check project role
+            if (!isPrivileged) {
+                try {
+                    const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
+                    if (roleResp.ok) {
+                        const roleData = await roleResp.json();
+                        const roleName = (roleData.rolename || roleData.role || '').toLowerCase();
+                        isPrivileged = roleName.includes('admin') || 
+                                       roleName.includes('manager') || 
+                                       roleName.includes('approver');
+                        console.log('[Monlam Dataset] User role:', roleName, 'isPrivileged:', isPrivileged);
+                    }
+                } catch (roleError) {
+                    console.warn('[Monlam Dataset] Could not check user role:', roleError);
+                }
             }
             
             // Build API URL - add all_examples=true for privileged users
