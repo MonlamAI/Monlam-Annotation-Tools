@@ -139,6 +139,9 @@ def patch_example_list_get_queryset(file_path):
                     ).values_list('example_id', flat=True)
                     
                     # Get submitted example IDs that haven't been reviewed by this user
+                    # NOTE: This includes examples that were skipped during navigation (not reviewed yet)
+                    # Reviewers will continue to see all submitted examples until they review them all
+                    # Skipped examples (navigated past without reviewing) remain in the list
                     submitted_tracking = AnnotationTracking.objects.filter(
                         project=project,
                         status='submitted'
@@ -153,6 +156,8 @@ def patch_example_list_get_queryset(file_path):
                     ).values_list('example_id', flat=True)
                     
                     # Combine: submitted (not reviewed by this user) + rejected
+                    # This ensures reviewers see ALL submitted examples until all are exhausted
+                    # Even if they skip some during navigation, those examples remain accessible
                     example_ids_to_show = list(set(list(submitted_tracking) + list(rejected_example_ids)))
                     
                     # Filter queryset to only show these examples
@@ -316,6 +321,9 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('                    ).values_list(\'example_id\', flat=True)')
                     new_lines.append('')
                     new_lines.append('                    # Get submitted example IDs that haven\'t been reviewed by this user')
+                    new_lines.append('                    # NOTE: This includes examples that were skipped during navigation (not reviewed yet)')
+                    new_lines.append('                    # Reviewers will continue to see all submitted examples until they review them all')
+                    new_lines.append('                    # Skipped examples (navigated past without reviewing) remain in the list')
                     new_lines.append('                    submitted_tracking = AnnotationTracking.objects.filter(')
                     new_lines.append('                        project=project,')
                     new_lines.append("                        status='submitted'")
@@ -330,6 +338,8 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('                    ).values_list(\'example_id\', flat=True)')
                     new_lines.append('')
                     new_lines.append('                    # Combine: submitted (not reviewed by this user) + rejected')
+                    new_lines.append('                    # This ensures reviewers see ALL submitted examples until all are exhausted')
+                    new_lines.append('                    # Even if they skip some during navigation, those examples remain accessible')
                     new_lines.append('                    example_ids_to_show = list(set(list(submitted_tracking) + list(rejected_example_ids)))')
                     new_lines.append('')
                     new_lines.append('                    # Filter queryset to only show these examples')
