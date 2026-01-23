@@ -1773,18 +1773,39 @@
             // Annotators will see filtered results (only their assigned examples)
             const examplesUrl = `/v1/projects/${projectId}/examples?limit=1000${isPrivileged ? '&all_examples=true' : ''}`;
             console.log('[Monlam Dataset] Fetching examples from:', examplesUrl);
+            console.log('[Monlam Dataset] isPrivileged:', isPrivileged, 'Project ID:', projectId);
             
             // Fetch examples with embedded tracking data from SERIALIZER
             // The serializer adds: annotated_by_username, reviewed_by_username, tracking_status
-            const examplesResp = await fetch(examplesUrl);
-            if (!examplesResp.ok) {
-                const errorText = await examplesResp.text();
-                console.error('[Monlam Dataset] ❌ Failed to fetch examples:', examplesResp.status, errorText);
-                console.error('[Monlam Dataset] URL was:', examplesUrl);
+            let examplesResp;
+            let examplesData;
+            
+            try {
+                console.log('[Monlam Dataset] 🔄 Starting fetch...');
+                examplesResp = await fetch(examplesUrl);
+                console.log('[Monlam Dataset] ✅ Fetch completed, status:', examplesResp.status, 'ok:', examplesResp.ok);
+                
+                if (!examplesResp.ok) {
+                    const errorText = await examplesResp.text();
+                    console.error('[Monlam Dataset] ❌ Failed to fetch examples:', examplesResp.status);
+                    console.error('[Monlam Dataset] Error response:', errorText);
+                    console.error('[Monlam Dataset] URL was:', examplesUrl);
+                    return;
+                }
+                
+                console.log('[Monlam Dataset] 🔄 Parsing JSON response...');
+                examplesData = await examplesResp.json();
+                console.log('[Monlam Dataset] ✅ JSON parsed successfully');
+            } catch (fetchError) {
+                console.error('[Monlam Dataset] ❌ Exception during fetch:', fetchError);
+                console.error('[Monlam Dataset] Error details:', {
+                    name: fetchError.name,
+                    message: fetchError.message,
+                    stack: fetchError.stack
+                });
                 return;
             }
             
-            const examplesData = await examplesResp.json();
             console.log('[Monlam Dataset] 📊 API Response:', {
                 count: examplesData.count,
                 resultsLength: examplesData.results?.length || 0,
@@ -1845,8 +1866,11 @@
                 headerRow.appendChild(statusHeader);
                 console.log('[Monlam Dataset] ✅ Status header appended to end');
                 
-                // Add data cells to rows
-                enhanceDataRows(trackingMap);
+                // Wait a bit for Vue to render rows, then add data cells
+                // Vue might re-render after we add the header, so we need to wait
+                setTimeout(() => {
+                    enhanceDataRows(trackingMap);
+                }, 100);
                 
                 // Set up MutationObserver immediately to watch for new rows (e.g., pagination)
                 const tbody = document.querySelector('tbody');
@@ -1864,8 +1888,19 @@
             }
             
             function enhanceDataRows(trackingMap) {
+                const tbody = document.querySelector('tbody');
+                if (!tbody) {
+                    console.log('[Monlam Dataset] No tbody found yet');
+                    return;
+                }
+                
                 const dataRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
-                if (dataRows.length === 0) return;
+                console.log('[Monlam Dataset] Found', dataRows.length, 'rows to enhance');
+                
+                if (dataRows.length === 0) {
+                    console.log('[Monlam Dataset] No rows to enhance (all rows already enhanced or table empty)');
+                    return;
+                }
                 
                 // Status badge colors (moved outside loop for better performance)
                 const statusColors = {
@@ -1893,6 +1928,11 @@
                     const tracking = trackingMap[exampleId];
                     const status = tracking?.status || 'pending';
                     
+                    // Check if status cell already exists (Vue might have re-rendered)
+                    if (row.querySelector('.monlam-status-cell')) {
+                        return; // Skip if already enhanced
+                    }
+                    
                     const color = statusColors[status] || '#e0e0e0';
                     const textColor = (status === 'pending') ? '#666' : 'white';
                     
@@ -1906,6 +1946,7 @@
                     row.appendChild(statusCell);
                 });
                 
+                console.log('[Monlam Dataset] ✅ Enhanced', dataRows.length, 'rows with status cells');
                 return true;
             }
             
