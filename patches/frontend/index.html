@@ -1733,6 +1733,33 @@
             return;
         }
         
+        // DIAGNOSTIC: Check Vue data table pagination settings
+        setTimeout(() => {
+            const vueTable = document.querySelector('.v-data-table');
+            if (vueTable) {
+                // Try to find Vue instance
+                const vueInstance = vueTable.__vue__ || vueTable.__vueParentComponent;
+                if (vueInstance) {
+                    console.log('[Monlam Dataset] 🔍 Vue Table Diagnostics:', {
+                        options: vueInstance.options || vueInstance.$data?.options,
+                        itemsPerPage: vueInstance.$data?.options?.itemsPerPage,
+                        page: vueInstance.$data?.options?.page,
+                        items: vueInstance.$data?.items?.length,
+                        filteredItems: vueInstance.$data?.filteredItems?.length
+                    });
+                }
+                
+                // Check pagination select element
+                const paginationSelect = vueTable.querySelector('select[aria-label*="items per page"], .v-data-footer select');
+                if (paginationSelect) {
+                    console.log('[Monlam Dataset] 🔍 Pagination Select:', {
+                        value: paginationSelect.value,
+                        options: Array.from(paginationSelect.options).map(opt => opt.value)
+                    });
+                }
+            }
+        }, 2000);
+        
         const projectId = getProjectId();
         if (!projectId) {
             console.log('[Monlam Dataset] No project ID found');
@@ -1845,36 +1872,6 @@
                 if (headers.length < 3) {
                     console.log('[Monlam Dataset] Not enough columns yet:', headers.length);
                     return false;
-                }
-                
-                // Check pagination - try to increase items per page if it's set too low
-                const paginationSelect = document.querySelector('.v-data-table__wrapper select, [aria-label*="items per page"], .v-data-footer__select select, .v-data-footer select');
-                if (paginationSelect) {
-                    const currentValue = parseInt(paginationSelect.value) || 0;
-                    console.log('[Monlam Dataset] Current pagination:', currentValue, 'items per page');
-                    
-                    // If pagination is set to 1 or very low, try to increase it
-                    if (currentValue <= 1) {
-                        // Try to find a higher option (10, 25, 50, 100)
-                        const betterOptions = ['100', '50', '25', '10'];
-                        for (const optValue of betterOptions) {
-                            const option = Array.from(paginationSelect.options).find(opt => opt.value === optValue);
-                            if (option) {
-                                console.log('[Monlam Dataset] ⚠️ Pagination was set to', currentValue, '- changing to', optValue);
-                                paginationSelect.value = optValue;
-                                paginationSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                                // Trigger Vue update
-                                const event = new Event('input', { bubbles: true });
-                                paginationSelect.dispatchEvent(event);
-                                // Also try clicking if it's a button-based pagination
-                                const clickEvent = new MouseEvent('click', { bubbles: true });
-                                paginationSelect.dispatchEvent(clickEvent);
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    console.log('[Monlam Dataset] No pagination select found - Vue might be using different pagination');
                 }
                 
                 // Create status header
@@ -2016,43 +2013,25 @@
             }
             
             // Try to enhance once Vue has rendered the table
-            // Vue uses server-side pagination, so we need to wait for it to render rows
+            // Use exponential backoff to avoid hammering the DOM
             let attempt = 0;
-            const maxAttempts = 20; // Increased attempts to wait for Vue pagination
-            const baseDelay = 200;
+            const maxAttempts = 5;
+            const baseDelay = 100; // Reduced from 500ms for faster initial load
             
             function tryEnhance() {
                 attempt++;
-                const tbody = document.querySelector('tbody');
-                const allRows = tbody ? document.querySelectorAll('tbody tr') : [];
-                
-                console.log(`[Monlam Dataset] Attempt ${attempt}: Found ${allRows.length} rows in DOM`);
-                
-                // Check if Vue has rendered enough rows (at least 10, or if pagination shows more)
-                const hasEnoughRows = allRows.length >= 10;
-                
                 const success = enhanceTable();
                 
-                if (success && hasEnoughRows) {
+                if (success) {
                     console.log('[Monlam Dataset] ✅ Enhancement complete after', attempt, 'attempts');
-                    console.log('[Monlam Dataset] Found', allRows.length, 'rows - Vue pagination is working');
                 } else if (attempt < maxAttempts) {
-                    // If we only have 1 row, Vue might still be loading - wait longer
-                    if (allRows.length <= 1) {
-                        console.log('[Monlam Dataset] ⏳ Waiting for Vue to render more rows...');
-                        setTimeout(tryEnhance, baseDelay * 2); // Wait longer if only 1 row
-                    } else {
-                        const delay = baseDelay * Math.pow(1.2, attempt);
-                        setTimeout(tryEnhance, delay);
-                    }
-                } else {
-                    console.warn('[Monlam Dataset] ⚠️ Max attempts reached. Vue may be using pagination with only 1 item per page.');
-                    console.warn('[Monlam Dataset] Check pagination controls - items per page might be set to 1');
+                    const delay = baseDelay * Math.pow(1.5, attempt);
+                    setTimeout(tryEnhance, delay);
                 }
             }
             
-            // Start enhancement after Vue has had time to render
-            setTimeout(tryEnhance, 500);
+            // Start enhancement immediately (reduced delay for faster loading)
+            setTimeout(tryEnhance, 100);
             
         } catch (error) {
             console.error('[Monlam Dataset] ❌ Error enhancing table:', error);
