@@ -39,18 +39,21 @@ def patch_example_list_get_queryset(file_path):
         user = self.request.user
         project = self.project
         
-        is_reviewer = False
-        try:
-            from assignment.permissions import get_user_role
-            role_name, is_privileged = get_user_role(user, project.id)
-            
-            # Check if user is a reviewer/approver (but not annotator)
-            if is_privileged or (role_name and any(r in role_name for r in ['approver', 'manager', 'admin'])):
-                is_reviewer = True
-        except Exception as e:
-            print(f'[Monlam ExampleList] Error checking user role: {e}')
-            # If we can't determine role, use original behavior
-            is_reviewer = False
+        # Superusers are always reviewers (can see all examples)
+        is_reviewer = user.is_superuser
+        
+        if not is_reviewer:
+            try:
+                from assignment.permissions import get_user_role
+                role_name, is_privileged = get_user_role(user, project.id)
+                
+                # Check if user is a reviewer/approver (but not annotator)
+                if is_privileged or (role_name and any(r in role_name for r in ['approver', 'manager', 'admin'])):
+                    is_reviewer = True
+            except Exception as e:
+                print(f'[Monlam ExampleList] Error checking user role: {e}')
+                # If we can't determine role, use original behavior
+                is_reviewer = False
         
         # For annotators: Filter out permanently skipped examples
         if not is_reviewer:
@@ -71,17 +74,18 @@ def patch_example_list_get_queryset(file_path):
                 # If filtering fails, continue with original queryset
         
         # For reviewers: Filter to show only examples that need review
-        # UNLESS they came from dataset table (all_examples=true parameter)
+        # UNLESS all_examples=true parameter is present (from dataset table or direct API access)
         # When clicking "Annotate" button from dataset, show ALL examples (and navigate to specific example)
+        # When accessing dataset table via API, show ALL examples (for project admins to see complete status)
         # When clicking "Start Annotation" button, show only submitted examples
         if is_reviewer:
-            # Check if user came from dataset table (clicked "Annotate" button)
+            # Check if all_examples parameter is present (from dataset table or API call)
             all_examples_param = self.request.GET.get('all_examples', '').lower() == 'true'
             
             if all_examples_param:
-                # User clicked "Annotate" from dataset table - show ALL examples
-                # This allows them to navigate to the specific example they clicked
-                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing ALL examples (from dataset table - direct example access)')
+                # User accessing from dataset table or API - show ALL examples
+                # This allows project admins to see complete dataset and navigate to any example
+                print(f'[Monlam ExampleList] Reviewer {user.username}: Showing ALL examples (all_examples=true parameter)')
             else:
                 # User clicked "Start Annotation" - show only submitted examples
                 try:
@@ -173,18 +177,21 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('        user = self.request.user')
                     new_lines.append('        project = self.project')
                     new_lines.append('')
-                    new_lines.append('        is_reviewer = False')
-                    new_lines.append('        try:')
-                    new_lines.append('            from assignment.permissions import get_user_role')
-                    new_lines.append('            role_name, is_privileged = get_user_role(user, project.id)')
+                    new_lines.append('        # Superusers are always reviewers (can see all examples)')
+                    new_lines.append('        is_reviewer = user.is_superuser')
                     new_lines.append('')
-                    new_lines.append('            # Check if user is a reviewer/approver (but not annotator)')
-                    new_lines.append("            if is_privileged or (role_name and any(r in role_name for r in ['approver', 'manager', 'admin'])):")
-                    new_lines.append('                is_reviewer = True')
-                    new_lines.append('        except Exception as e:')
-                    new_lines.append("            print(f'[Monlam ExampleList] Error checking user role: {e}')")
-                    new_lines.append('            # If we can\'t determine role, use original behavior')
-                    new_lines.append('            is_reviewer = False')
+                    new_lines.append('        if not is_reviewer:')
+                    new_lines.append('            try:')
+                    new_lines.append('                from assignment.permissions import get_user_role')
+                    new_lines.append('                role_name, is_privileged = get_user_role(user, project.id)')
+                    new_lines.append('')
+                    new_lines.append('                # Check if user is a reviewer/approver (but not annotator)')
+                    new_lines.append("                if is_privileged or (role_name and any(r in role_name for r in ['approver', 'manager', 'admin'])):")
+                    new_lines.append('                    is_reviewer = True')
+                    new_lines.append('            except Exception as e:')
+                    new_lines.append("                print(f'[Monlam ExampleList] Error checking user role: {e}')")
+                    new_lines.append('                # If we can\'t determine role, use original behavior')
+                    new_lines.append('                is_reviewer = False')
                     new_lines.append('')
                     new_lines.append('        # For annotators: Filter out permanently skipped examples')
                     new_lines.append('        if not is_reviewer:')
@@ -205,17 +212,18 @@ def patch_example_list_get_queryset(file_path):
                     new_lines.append('                # If filtering fails, continue with original queryset')
                     new_lines.append('')
                     new_lines.append('        # For reviewers: Filter to show only examples that need review')
-                    new_lines.append('        # UNLESS they came from dataset table (all_examples=true parameter)')
+                    new_lines.append('        # UNLESS all_examples=true parameter is present (from dataset table or direct API access)')
                     new_lines.append('        # When clicking "Annotate" button from dataset, show ALL examples (and navigate to specific example)')
+                    new_lines.append('        # When accessing dataset table via API, show ALL examples (for project admins to see complete status)')
                     new_lines.append('        # When clicking "Start Annotation" button, show only submitted examples')
                     new_lines.append('        if is_reviewer:')
-                    new_lines.append('            # Check if user came from dataset table (clicked "Annotate" button)')
+                    new_lines.append('            # Check if all_examples parameter is present (from dataset table or API call)')
                     new_lines.append("            all_examples_param = self.request.GET.get('all_examples', '').lower() == 'true'")
                     new_lines.append('')
                     new_lines.append('            if all_examples_param:')
-                    new_lines.append('                # User clicked "Annotate" from dataset table - show ALL examples')
-                    new_lines.append('                # This allows them to navigate to the specific example they clicked')
-                    new_lines.append(f"                print(f'[Monlam ExampleList] Reviewer {{user.username}}: Showing ALL examples (from dataset table - direct example access)')")
+                    new_lines.append('                # User accessing from dataset table or API - show ALL examples')
+                    new_lines.append('                # This allows project admins to see complete dataset and navigate to any example')
+                    new_lines.append(f"                print(f'[Monlam ExampleList] Reviewer {{user.username}}: Showing ALL examples (all_examples=true parameter)')")
                     new_lines.append('            else:')
                     new_lines.append('                # User clicked "Start Annotation" - show only submitted examples')
                     new_lines.append('                try:')
