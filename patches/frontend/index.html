@@ -1733,33 +1733,6 @@
             return;
         }
         
-        // DIAGNOSTIC: Check Vue data table pagination settings
-        setTimeout(() => {
-            const vueTable = document.querySelector('.v-data-table');
-            if (vueTable) {
-                // Try to find Vue instance
-                const vueInstance = vueTable.__vue__ || vueTable.__vueParentComponent;
-                if (vueInstance) {
-                    console.log('[Monlam Dataset] 🔍 Vue Table Diagnostics:', {
-                        options: vueInstance.options || vueInstance.$data?.options,
-                        itemsPerPage: vueInstance.$data?.options?.itemsPerPage,
-                        page: vueInstance.$data?.options?.page,
-                        items: vueInstance.$data?.items?.length,
-                        filteredItems: vueInstance.$data?.filteredItems?.length
-                    });
-                }
-                
-                // Check pagination select element
-                const paginationSelect = vueTable.querySelector('select[aria-label*="items per page"], .v-data-footer select');
-                if (paginationSelect) {
-                    console.log('[Monlam Dataset] 🔍 Pagination Select:', {
-                        value: paginationSelect.value,
-                        options: Array.from(paginationSelect.options).map(opt => opt.value)
-                    });
-                }
-            }
-        }, 2000);
-        
         const projectId = getProjectId();
         if (!projectId) {
             console.log('[Monlam Dataset] No project ID found');
@@ -2339,7 +2312,7 @@
         // Initialize features after a short delay (let Vue render)
         setTimeout(() => {
             enableAudioLoop();  // Only loops on annotation pages (not dataset)
-            enhanceDatasetTable();
+            // DISABLED: enhanceDatasetTable() - May interfere with Vue rendering, dataset table should work without it
             addApproveRejectButtons();
             // REMOVED: handleExampleLocking() - No longer needed with single annotator per project
         }, 1000);
@@ -2364,7 +2337,7 @@
                 
                 setTimeout(() => {
                     enableAudioLoop();  // Only loops on annotation pages (not dataset)
-                    enhanceDatasetTable();
+                    // DISABLED: enhanceDatasetTable() - May interfere with Vue rendering, dataset table should work without it
                     addApproveRejectButtons();
                     // REMOVED: handleExampleLocking() - No longer needed with single annotator per project
                 }, 500);
