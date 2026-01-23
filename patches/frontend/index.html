@@ -1285,6 +1285,21 @@
             if (!projectMatch) return;
             const projectId = projectMatch[1];
             
+            // First check if user is superuser (superusers should see everything)
+            let isSuperuser = false;
+            try {
+                const userResp = await fetch('/v1/me');
+                if (userResp.ok) {
+                    const userData = await userResp.json();
+                    isSuperuser = userData.is_superuser || false;
+                    if (isSuperuser) {
+                        console.log('[Monlam Filter] 👑 User is superuser, showing all examples');
+                    }
+                }
+            } catch (userError) {
+                console.warn('[Monlam Filter] Could not check if user is superuser:', userError);
+            }
+            
             // Check user role
             const roleResp = await fetch(`/v1/projects/${projectId}/my-role`);
             if (!roleResp.ok) return;
@@ -1294,14 +1309,17 @@
             // DEBUG: Log the full role data
             console.log('[Monlam Filter] 📋 Role data from API:', JSON.stringify(roleData));
             console.log('[Monlam Filter] 📋 Role name detected:', roleName);
+            console.log('[Monlam Filter] 📋 isSuperuser:', isSuperuser);
             
-            const isAnnotator = roleName.includes('annotator') && 
+            const isAnnotator = !isSuperuser && 
+                               roleName.includes('annotator') && 
                                !roleName.includes('admin') && 
                                !roleName.includes('manager') && 
                                !roleName.includes('approver');
             
-            // Also check if we're privileged (manager, admin, approver)
-            const isPrivileged = roleName.includes('admin') || 
+            // Also check if we're privileged (manager, admin, approver, or superuser)
+            const isPrivileged = isSuperuser || 
+                                roleName.includes('admin') || 
                                 roleName.includes('manager') || 
                                 roleName.includes('approver');
             
@@ -1838,6 +1856,17 @@
             
             // Function to enhance table (runs ONCE with Vue reactivity awareness)
             function enhanceTable() {
+                // First, ensure table is visible
+                const table = document.querySelector('table');
+                if (table) {
+                    const tableStyle = window.getComputedStyle(table);
+                    if (tableStyle.display === 'none' || tableStyle.visibility === 'hidden') {
+                        console.warn('[Monlam Dataset] ⚠️ Table is hidden! Making it visible...');
+                        table.style.display = '';
+                        table.style.visibility = '';
+                    }
+                }
+                
                 const headerRow = document.querySelector('thead tr');
                 if (!headerRow) {
                     console.log('[Monlam Dataset] No header row found yet');
@@ -1854,6 +1883,20 @@
                 if (headers.length < 3) {
                     console.log('[Monlam Dataset] Not enough columns yet:', headers.length);
                     return false;
+                }
+                
+                // Check pagination - ensure admins can see all rows
+                if (isPrivileged) {
+                    const paginationSelect = document.querySelector('.v-data-table__wrapper select, [aria-label*="items per page"]');
+                    if (paginationSelect) {
+                        // Try to set to maximum items per page for admins
+                        const maxOption = Array.from(paginationSelect.options).find(opt => opt.value === '100' || opt.value === '1000');
+                        if (maxOption && paginationSelect.value !== maxOption.value) {
+                            console.log('[Monlam Dataset] Setting pagination to max for admin:', maxOption.value);
+                            paginationSelect.value = maxOption.value;
+                            paginationSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
                 }
                 
                 // Create status header
@@ -1894,11 +1937,55 @@
                     return;
                 }
                 
+                // Check if table is visible
+                const table = document.querySelector('table');
+                if (table) {
+                    const tableStyle = window.getComputedStyle(table);
+                    const isVisible = tableStyle.display !== 'none' && tableStyle.visibility !== 'hidden';
+                    console.log('[Monlam Dataset] Table visibility check:', {
+                        display: tableStyle.display,
+                        visibility: tableStyle.visibility,
+                        isVisible: isVisible
+                    });
+                    
+                    if (!isVisible) {
+                        console.warn('[Monlam Dataset] ⚠️ Table is hidden! Making it visible...');
+                        table.style.display = '';
+                        table.style.visibility = '';
+                    }
+                }
+                
+                // Check ALL rows (including already enhanced ones for diagnostics)
+                const allRows = document.querySelectorAll('tbody tr');
                 const dataRows = document.querySelectorAll('tbody tr:not([data-monlam-enhanced])');
-                console.log('[Monlam Dataset] Found', dataRows.length, 'rows to enhance');
+                
+                console.log('[Monlam Dataset] Table diagnostics:', {
+                    totalRowsInDOM: allRows.length,
+                    rowsToEnhance: dataRows.length,
+                    tbodyVisible: window.getComputedStyle(tbody).display !== 'none'
+                });
+                
+                // Check if rows are hidden
+                let hiddenRows = 0;
+                allRows.forEach(row => {
+                    const rowStyle = window.getComputedStyle(row);
+                    if (rowStyle.display === 'none' || rowStyle.visibility === 'hidden') {
+                        hiddenRows++;
+                    }
+                });
+                
+                if (hiddenRows > 0) {
+                    console.warn('[Monlam Dataset] ⚠️ Found', hiddenRows, 'hidden rows out of', allRows.length, 'total rows');
+                }
                 
                 if (dataRows.length === 0) {
                     console.log('[Monlam Dataset] No rows to enhance (all rows already enhanced or table empty)');
+                    if (allRows.length === 0) {
+                        console.warn('[Monlam Dataset] ⚠️ Table has no rows at all! This might indicate:');
+                        console.warn('  1. Vue hasn\'t rendered rows yet');
+                        console.warn('  2. API returned empty results');
+                        console.warn('  3. Rows are being filtered out');
+                    }
                     return;
                 }
                 
